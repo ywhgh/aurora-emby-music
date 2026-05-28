@@ -1241,7 +1241,7 @@ async function testCurrentPlaybackChain(trackOverride) {
     const playbackInfo = await fetchPlaybackInfo(track, mode, fallbackMediaSourceId);
     const mediaSource = selectPlaybackMediaSource(playbackInfo, track, mode, fallbackMediaSourceId);
     const mediaSourceId = mediaSource?.Id || fallbackMediaSourceId;
-    const playSessionId = playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId || createPlaybackSessionId(track);
+    const playSessionId = ensurePlaybackSessionId(track, playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId);
 
     const response = await probeAudioStream(getAudioStreamUrl(track, mode, playSessionId, mediaSourceId));
 
@@ -8470,9 +8470,39 @@ async function playTrack(track, queue, options = {}) {
     });
 }
 
+function normalizePlaybackSessionId(value) {
+  return String(value || "").trim();
+}
+
+function ensurePlaybackSessionId(track, preferredId = "") {
+  const candidate = normalizePlaybackSessionId(preferredId);
+
+  if (candidate) {
+    if (track?.Id && track.Id === state.currentTrack?.Id) {
+      state.currentPlaySessionId = candidate;
+    }
+
+    return candidate;
+  }
+
+  const currentId = normalizePlaybackSessionId(state.currentPlaySessionId);
+
+  if (track?.Id && track.Id === state.currentTrack?.Id && currentId) {
+    return currentId;
+  }
+
+  const generatedId = createPlaybackSessionId(track);
+
+  if (track?.Id && track.Id === state.currentTrack?.Id) {
+    state.currentPlaySessionId = generatedId;
+  }
+
+  return generatedId;
+}
+
 async function preparePlaybackSession(track, mode, requestId) {
   const fallbackMediaSourceId = getTrackDefaultMediaSourceId(track);
-  const fallbackPlaySessionId = createPlaybackSessionId(track);
+  const fallbackPlaySessionId = ensurePlaybackSessionId(track);
   const fallbackSession = {
     mediaSourceId: fallbackMediaSourceId,
     playSessionId: fallbackPlaySessionId,
@@ -8488,7 +8518,7 @@ async function preparePlaybackSession(track, mode, requestId) {
 
     const mediaSource = selectPlaybackMediaSource(playbackInfo, track, mode, fallbackMediaSourceId);
     const mediaSourceId = mediaSource?.Id || fallbackMediaSourceId;
-    const playSessionId = playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId || fallbackPlaySessionId;
+    const playSessionId = ensurePlaybackSessionId(track, playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId || fallbackPlaySessionId);
 
     state.lastPlaybackInfoError = "";
 
@@ -10073,8 +10103,7 @@ function reportPlaybackStarted(track) {
     return;
   }
 
-  const playSessionId = state.currentPlaySessionId || createPlaybackSessionId(track);
-  state.currentPlaySessionId = playSessionId;
+  const playSessionId = ensurePlaybackSessionId(track);
   state.hasReportedPlaybackStart = true;
   state.lastProgressReportAt = Date.now();
   embyPost("/Sessions/Playing", buildPlaybackPayload(track, false, { playSessionId }));
@@ -10089,12 +10118,15 @@ function reportPlaybackProgress(force = false, eventName = "") {
     return;
   }
 
-  if (!state.currentPlaySessionId || !state.hasReportedPlaybackStart) {
+  if (!state.hasReportedPlaybackStart) {
     return;
   }
 
+  const playSessionId = ensurePlaybackSessionId(state.currentTrack);
+
   state.lastProgressReportAt = Date.now();
   embyPost("/Sessions/Playing/Progress", buildPlaybackPayload(state.currentTrack, audioPlayer.paused, {
+    playSessionId,
     eventName: eventName || (audioPlayer.paused ? "Pause" : "TimeUpdate"),
   }));
 }
@@ -10104,7 +10136,7 @@ function reportPlaybackStopped(track = state.currentTrack) {
     return;
   }
 
-  const playSessionId = state.currentPlaySessionId;
+  const playSessionId = state.currentPlaySessionId || (state.hasReportedPlaybackStart ? ensurePlaybackSessionId(track) : "");
 
   if (!playSessionId || !state.hasReportedPlaybackStart) {
     if (!track || track.Id === state.currentTrack?.Id) {
@@ -10123,7 +10155,7 @@ function reportPlaybackStopped(track = state.currentTrack) {
 }
 
 function buildPlaybackPayload(track, isPaused, options = {}) {
-  const playSessionId = options.playSessionId || state.currentPlaySessionId;
+  const playSessionId = normalizePlaybackSessionId(options.playSessionId || state.currentPlaySessionId) || ensurePlaybackSessionId(track);
   const queueIndex = getCurrentQueueIndex();
   const payload = {
     ItemId: track.Id,
