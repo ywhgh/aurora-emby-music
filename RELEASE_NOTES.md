@@ -1,6 +1,6 @@
 # v0.92.83 Release Notes
 
-本版本重点是把正在播放体验和歌词稳定性再往前推进一段，方便后续继续参考 SPlayer、YesPlayMusic、Feishin 等项目做 UI 和播放器体验优化。
+本版本重点优化正在播放体验、双语歌词稳定性和本地检查流程，方便后续持续迭代 UI 与播放器功能。
 
 ## Highlights
 
@@ -19,4 +19,3 @@ node .\scripts\smoke-check.js
 ## GitHub Release
 
 Tag: `v0.92.83`
-
