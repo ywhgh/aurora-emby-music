@@ -22,12 +22,14 @@ function checkVersions() {
   const index = read("index.html");
   const config = read("src/config.js");
   const sw = read("sw.js");
+  const packageJson = JSON.parse(read("package.json"));
   const appVersion = extract(/APP_VERSION:\s*"([^"]+)"/, config, "APP_VERSION");
   const cacheVersion = extract(/CACHE_NAME\s*=\s*"emby-music-web-v([^"]+)"/, sw, "service worker cache version");
   const assetVersion = extract(/ASSET_VERSION\s*=\s*"([^"]+)"/, sw, "service worker asset version");
 
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
+  assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
 
   [
     "styles.css",
