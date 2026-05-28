@@ -1,6 +1,6 @@
 window.EmbyMusicConfig = {
   APP_NAME: "Emby Music Web",
-  APP_VERSION: "0.92.85",
+  APP_VERSION: "0.92.86",
   DEFAULT_SERVER_URL: "",
   LOCK_SERVER_URL: false,
   ACCOUNT_PROFILES_KEY: "emby-music-web/account-profiles",

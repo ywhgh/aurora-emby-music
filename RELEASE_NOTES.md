@@ -1,13 +1,13 @@
-# v0.92.85 Release Notes
+# v0.92.86 Release Notes
 
-本版本重点加固 Emby 播放会话，减少服务器端 400 错误和播放记录异常。
+本版本修复音乐库加载报错，并优化手机端登录页与播放失败后的恢复路径。
 
 ## Highlights
 
-- 播放地址、开始上报、进度上报、停止上报统一使用非空 `PlaySessionId`。
-- 当服务器没有返回播放会话 ID 时，客户端会生成并复用本次播放 ID。
-- 缓存版本已同步，刷新后会加载新的播放逻辑。
-- 继续保留双语歌词与 UI 结构检查流程。
+- 修复 `getAlbumQualityBucket is not defined` 导致音乐库加载失败的问题。
+- 手机端登录页调整为一屏内完成连接操作。
+- 播放失败面板新增稳播方案，可直接切换不同在线音质链路重试。
+- 本地检查脚本新增关键函数存在性校验。
 
 ## Smoke Check
 
@@ -17,4 +17,4 @@ node .\scripts\smoke-check.js
 
 ## GitHub Release
 
-Tag: `v0.92.85`
+Tag: `v0.92.86`

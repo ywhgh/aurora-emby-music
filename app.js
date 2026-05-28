@@ -147,6 +147,12 @@ const AUDIO_QUALITY_METHOD_GROUPS = [
     stability: "带宽更大，不推荐公网",
   },
 ];
+const PLAYBACK_RECOVERY_PROFILE_IDS = [
+  "hls-aac-384",
+  "hls-aac-256",
+  "http-aac-128",
+  "http-mp3-320",
+];
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
 const TRACK_ACCENT_PALETTE = [
   { name: "赤红", color: "#ec4141", deep: "#d93030", rgb: "236, 65, 65" },
@@ -361,6 +367,7 @@ const playbackModeRetryButton = document.querySelector("#playbackModeRetryButton
 const playbackFallbackButton = document.querySelector("#playbackFallbackButton");
 const playbackTestButton = document.querySelector("#playbackTestButton");
 const playbackRecoveryDismiss = document.querySelector("#playbackRecoveryDismiss");
+const playbackRecoveryQuickList = document.querySelector("#playbackRecoveryQuickList");
 const playlistPicker = document.querySelector("#playlistPicker");
 const playlistPickerClose = document.querySelector("#playlistPickerClose");
 const playlistPickerTrack = document.querySelector("#playlistPickerTrack");
@@ -3747,12 +3754,55 @@ function renderPlaybackRecoveryPanel() {
   playbackFallbackButton.disabled = !track || !shouldFallbackToCompatibleQuality();
   playbackTestButton.disabled = !track || state.isTestingPlayback;
   playbackTestButton.textContent = state.isTestingPlayback ? "检测中..." : "测试链路";
+  renderPlaybackRecoveryQuickList(track);
 }
 
 function hidePlaybackRecovery() {
   if (playbackRecoveryPanel) {
     playbackRecoveryPanel.hidden = true;
   }
+}
+
+function renderPlaybackRecoveryQuickList(track) {
+  if (!playbackRecoveryQuickList) {
+    return;
+  }
+
+  playbackRecoveryQuickList.replaceChildren();
+
+  if (!track) {
+    return;
+  }
+
+  PLAYBACK_RECOVERY_PROFILE_IDS
+    .map((profileId) => AUDIO_QUALITY_PROFILES.find((profile) => profile.id === profileId))
+    .filter(Boolean)
+    .forEach((profile) => {
+      const button = document.createElement("button");
+      const isActive = profile.id === state.audioQualityProfileId;
+      button.type = "button";
+      button.className = `playback-recovery-quick ${isActive ? "active" : ""}`.trim();
+      button.disabled = state.isTestingPlayback;
+      button.title = `${profile.label} · ${profile.codec} · ${profile.bitrateLabel || "原码率"} · ${profile.scene}`;
+
+      const icon = document.createElement("span");
+      icon.className = "playback-recovery-quick-icon";
+      icon.append(createActionIcon(getAudioQualityMethodIcon(getAudioQualityMethodGroupId(profile))));
+
+      const copy = document.createElement("span");
+      copy.className = "playback-recovery-quick-copy";
+
+      const name = document.createElement("strong");
+      name.textContent = getRecoveryProfileTitle(profile);
+
+      const meta = document.createElement("small");
+      meta.textContent = getRecoveryProfileMeta(profile);
+
+      copy.append(name, meta);
+      button.append(icon, copy);
+      button.addEventListener("click", () => applyRecoveryQualityProfile(profile.id, track));
+      playbackRecoveryQuickList.append(button);
+    });
 }
 
 function clearPlaybackErrorState() {
@@ -8055,6 +8105,18 @@ function getTrackQualityBucket(track) {
   return summary.isLossless ? "lossless" : "lossy";
 }
 
+function getAlbumQualityBucket(album) {
+  const buckets = getAlbumTracks(album)
+    .map(getTrackQualityBucket)
+    .filter(Boolean);
+
+  if (buckets.includes("lossless")) {
+    return "lossless";
+  }
+
+  return buckets[0] || "";
+}
+
 function getAlbumTracks(album) {
   if (!album) {
     return [];
@@ -9864,33 +9926,77 @@ function shouldFallbackToCompatibleQuality() {
 }
 
 function fallbackToCompatibleQuality(track) {
-  const fallbackProfile = AUDIO_QUALITY_PROFILES.find((profile) => profile.id === "http-mp3-320") || DEFAULT_AUDIO_QUALITY_PROFILE;
-  const previousProfileId = state.audioQualityProfileId;
+  applyRecoveryQualityProfile("http-mp3-320", track, { automatic: true });
+}
 
-  state.audioQualityProfileId = fallbackProfile.id;
-  state.playbackStreamPolicy = "transcode";
-  state.transcodeBitrate = fallbackProfile.bitrate || state.transcodeBitrate;
-  storage.saveAudioQualityProfile(fallbackProfile.id);
+function applyRecoveryQualityProfile(profileId, track = state.currentTrack, options = {}) {
+  const profile = AUDIO_QUALITY_PROFILES.find((item) => item.id === profileId) || DEFAULT_AUDIO_QUALITY_PROFILE;
+  const previousProfileId = state.audioQualityProfileId;
+  const resumePosition = getRetryPositionSeconds();
+
+  state.audioQualityProfileId = profile.id;
+  state.playbackStreamPolicy = profile.mode === "direct" ? "direct" : "transcode";
+  state.transcodeBitrate = profile.bitrate > 0 ? profile.bitrate : state.transcodeBitrate;
+  storage.saveAudioQualityProfile(profile.id);
   storage.savePlaybackStreamPolicy(state.playbackStreamPolicy);
   storage.saveTranscodeBitrate(state.transcodeBitrate);
   clearPreload();
   renderAudioQualityButton();
   renderAudioQualityOptions();
+  renderPlayerPlaybackMeta(state.currentTrack);
+  renderNowPlayingPlaybackMeta(state.currentTrack);
+  renderImmersivePlaybackMeta(state.currentTrack);
   renderSettings();
-  setLibraryStatus(`当前音质播放失败，正在尝试兼容兜底：${fallbackProfile.codec} ${fallbackProfile.bitrateLabel}...`);
-  showNotice(`当前音质播放失败，已临时切到兼容兜底：${fallbackProfile.codec} ${fallbackProfile.bitrateLabel}。`, {
+  renderPlaybackRecoveryQuickList(track);
+
+  const statusText = `${profile.codec} ${profile.bitrateLabel || "原码率"}`.trim();
+  const prefix = options.automatic ? "当前音质播放失败，正在尝试兼容方案" : "正在切换稳播方案";
+  setLibraryStatus(`${prefix}：${statusText}...`);
+  showNotice(`${prefix}：${profile.label} · ${statusText}。`, {
     type: "warning",
     actions: [
-      { label: "恢复原音质", handler: () => selectAudioQualityProfile(previousProfileId) },
+      previousProfileId !== profile.id
+        ? { label: "恢复原音质", handler: () => selectAudioQualityProfile(previousProfileId) }
+        : null,
       { label: "选择音质", handler: openAudioQualityModal },
       { label: "复制诊断", handler: copyDiagnostics, dismiss: false },
-    ],
+    ].filter(Boolean),
   });
-  playTrack(track, getPlaybackRetryQueue(track), {
-    mode: "universal",
-    positionSeconds: getRetryPositionSeconds(),
-    qualityFallbackAttempted: true,
-  });
+
+  if (track?.Id) {
+    playTrack(track, getPlaybackRetryQueue(track), {
+      mode: profile.mode === "direct" ? "direct" : "universal",
+      positionSeconds: resumePosition,
+      qualityFallbackAttempted: Boolean(options.automatic || profile.id === "http-mp3-320"),
+    });
+  }
+}
+
+function getRecoveryProfileTitle(profile) {
+  if (profile.id === "hls-aac-384") {
+    return "推荐稳播";
+  }
+
+  if (profile.id === "hls-aac-256") {
+    return "平衡网络";
+  }
+
+  if (profile.id === "http-aac-128") {
+    return "弱网省流";
+  }
+
+  if (profile.id === "http-mp3-320") {
+    return "兼容兜底";
+  }
+
+  return profile.label;
+}
+
+function getRecoveryProfileMeta(profile) {
+  const method = getTranscodeMethodLabel(profile);
+  const bitrate = profile.bitrateLabel || "原码率";
+
+  return `${method} · ${profile.codec} ${bitrate}`.trim();
 }
 
 function getOppositePlaybackActionLabel() {

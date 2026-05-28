@@ -105,10 +105,23 @@ function checkLyrics() {
   assert(app.includes("immersive-lyric-translated"), "Immersive lyric renderer does not render translated text");
 }
 
+function checkAppFunctionReferences() {
+  const app = read("app.js");
+  [
+    "getAlbumQualityBucket",
+    "getTrackQualityBucket",
+    "renderPlaybackRecoveryQuickList",
+    "applyRecoveryQualityProfile",
+  ].forEach((name) => {
+    assert(app.includes(`function ${name}`), `Missing app function ${name}`);
+  });
+}
+
 function main() {
   checkVersions();
   checkCss();
   checkLyrics();
+  checkAppFunctionReferences();
 
   if (errors.length) {
     console.error(errors.map((error) => `- ${error}`).join("\n"));
