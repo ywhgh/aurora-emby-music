@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Emby Music Web">
+  <rect width="512" height="512" rx="112" fill="#ffffff"/>
+  <rect x="56" y="56" width="400" height="400" rx="88" fill="#ec4141"/>
+  <circle cx="256" cy="256" r="146" fill="#ffffff" opacity="0.96"/>
+  <circle cx="256" cy="256" r="44" fill="#ec4141"/>
+  <path d="M304 162v118c0 45-33 77-82 77-40 0-69-22-69-53 0-32 30-54 72-54 17 0 32 4 44 12v-72l106-24v43l-71 16z" fill="#232329"/>
+</svg>

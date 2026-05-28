@@ -1,0 +1,37 @@
+{
+  "name": "Emby Music Web",
+  "short_name": "Emby Music",
+  "description": "A responsive web music player for your Emby server.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "any",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Library",
+      "short_name": "Library",
+      "url": "./index.html#library"
+    },
+    {
+      "name": "Now Playing",
+      "short_name": "Playing",
+      "url": "./index.html#nowPlaying"
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "url": "./index.html#settings"
+    }
+  ]
+}
