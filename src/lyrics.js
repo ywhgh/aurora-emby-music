@@ -61,9 +61,10 @@ function parseLyrics(text) {
 
     const matches = [...line.matchAll(timePattern)];
     const textPart = line.replace(timePattern, "").trim();
+    const lyricText = parseLyricTextPart(textPart);
 
     if (!matches.length) {
-      plainLines.push({ time: null, text: line });
+      plainLines.push({ time: null, ...parseLyricTextPart(line) });
       return;
     }
 
@@ -74,7 +75,7 @@ function parseLyrics(text) {
       const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
       timedLines.push({
         time: hours * 3600 + minutes * 60 + seconds + fraction,
-        text: textPart,
+        ...lyricText,
       });
     });
   });
@@ -89,6 +90,61 @@ function parseLyrics(text) {
   return {
     isSynced: false,
     lines: plainLines,
+  };
+}
+
+function parseLyricTextPart(text) {
+  return splitInlineBilingualText(text) || { text: String(text || "").trim() };
+}
+
+function splitInlineBilingualText(text) {
+  const value = String(text || "").trim();
+
+  if (!value) {
+    return null;
+  }
+
+  const separators = [
+    /\s*\/\/\s*/,
+    /\s*[|｜]\s*/,
+    /\s+\/\s+/,
+  ];
+
+  for (const separator of separators) {
+    const parts = value.split(separator).map((part) => part.trim()).filter(Boolean);
+
+    if (parts.length === 2) {
+      const result = buildBilingualLine(parts);
+
+      if (result) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildBilingualLine(parts) {
+  const hasChineseTranslation = parts.some((part) => isLikelyChineseText(part));
+  const allChinese = parts.every((part) => isLikelyChineseText(part));
+
+  if (!hasChineseTranslation || allChinese) {
+    return null;
+  }
+
+  const translatedText = findTranslatedText(parts);
+  const originalText = parts
+    .filter((part) => part !== translatedText)
+    .join(" / ");
+
+  if (!translatedText || !originalText) {
+    return null;
+  }
+
+  return {
+    text: translatedText,
+    originalText,
   };
 }
 
@@ -109,9 +165,8 @@ function mergeBilingualTimedLines(lines) {
     const texts = [];
 
     group.forEach((line) => {
-      if (!texts.includes(line.text)) {
-        texts.push(line.text);
-      }
+      appendUniqueText(texts, line.originalText);
+      appendUniqueText(texts, line.text);
     });
 
     if (texts.length <= 1) {
@@ -129,6 +184,14 @@ function mergeBilingualTimedLines(lines) {
       originalText,
     };
   }).filter((line) => line.text);
+}
+
+function appendUniqueText(texts, value) {
+  const text = String(value || "").trim();
+
+  if (text && !texts.includes(text)) {
+    texts.push(text);
+  }
 }
 
 function hasCjkText(value) {

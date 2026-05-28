@@ -89,6 +89,8 @@ function checkLyrics() {
     ["english", "[00:01.00]Hello world\n[00:01.00]你好世界", "Hello world", "你好世界"],
     ["japanese", "[00:02.00]君の名は\n[00:02.00]你的名字", "君の名は", "你的名字"],
     ["korean", "[00:03.00]사랑해\n[00:03.00]我爱你", "사랑해", "我爱你"],
+    ["inline slash", "[00:04.00]Hello world // 你好世界", "Hello world", "你好世界"],
+    ["inline single slash", "[00:05.00]君の名は / 你的名字", "君の名は", "你的名字"],
   ].forEach(([name, input, originalText, text]) => {
     const line = parseLyrics(input).lines[0];
     assert(line?.originalText === originalText, `${name} originalText expected ${originalText}, got ${line?.originalText}`);
