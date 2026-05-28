@@ -11,10 +11,5 @@
 ### 验证
 
 ```powershell
-node .\scripts\smoke-check.js
-node --check .\app.js
-node --check .\src\lyrics.js
-node --check .\src\config.js
-node --check .\sw.js
+npm run check
 ```
-

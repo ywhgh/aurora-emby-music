@@ -118,6 +118,16 @@ python -m http.server 5173
 http://localhost:5173
 ```
 
+## 本地检查
+
+项目不需要安装运行依赖；需要 Node.js 来执行本地检查脚本：
+
+```powershell
+npm run check
+```
+
+该命令会检查应用版本和静态资源版本是否一致、CSS 结构是否完整、双语歌词关键解析是否正确，并对主要 JavaScript 文件做语法检查。
+
 ## 部署配置
 
 如果这个网页只给一个固定 Emby 服务器使用，可以在 `src/config.js` 中配置：
