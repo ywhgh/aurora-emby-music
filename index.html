@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.92.87" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.87" />
-    <link rel="stylesheet" href="./styles.css?v=0.92.87" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.92.88" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.88" />
+    <link rel="stylesheet" href="./styles.css?v=0.92.88" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -132,7 +132,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.92.87</span>
+            <span id="loginVersion">v0.92.88</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1785,6 +1785,13 @@
         </div>
 
         <div class="mobile-player-actions" aria-label="移动端播放快捷操作">
+          <button id="mobilePlayerMoreButton" class="mobile-player-button" type="button" aria-label="更多播放操作" disabled>
+            <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5" cy="12" r="1.2"></circle>
+              <circle cx="12" cy="12" r="1.2"></circle>
+              <circle cx="19" cy="12" r="1.2"></circle>
+            </svg>
+          </button>
           <button id="mobilePlayerQueueButton" class="mobile-player-button" type="button" aria-label="打开播放队列" aria-controls="quickQueuePopover" aria-expanded="false" disabled>
             <svg class="line-icon action-icon-queueAdd" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 6h10"></path>
@@ -1936,7 +1943,7 @@
 
     <script>
       (() => {
-        const version = "0.92.87";
+        const version = "0.92.88";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2293,11 +2300,11 @@
       })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" defer></script>
-    <script src="./src/config.js?v=0.92.87" defer></script>
-    <script src="./src/format.js?v=0.92.87" defer></script>
-    <script src="./src/lyrics.js?v=0.92.87" defer></script>
-    <script src="./src/emby-api.js?v=0.92.87" defer></script>
-    <script src="./src/storage.js?v=0.92.87" defer></script>
-    <script src="./app.js?v=0.92.87" defer></script>
+    <script src="./src/config.js?v=0.92.88" defer></script>
+    <script src="./src/format.js?v=0.92.88" defer></script>
+    <script src="./src/lyrics.js?v=0.92.88" defer></script>
+    <script src="./src/emby-api.js?v=0.92.88" defer></script>
+    <script src="./src/storage.js?v=0.92.88" defer></script>
+    <script src="./app.js?v=0.92.88" defer></script>
   </body>
 </html>

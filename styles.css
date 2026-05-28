@@ -7984,6 +7984,10 @@ select:focus-visible {
     gap: 0.35rem;
   }
 
+  .mobile-player-actions .mobile-player-button:not(#mobilePlayerMoreButton) {
+    display: none;
+  }
+
   .mobile-player-button {
     width: 2.28rem;
     height: 2.28rem;

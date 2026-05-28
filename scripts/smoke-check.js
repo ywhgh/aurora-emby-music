@@ -112,9 +112,13 @@ function checkAppFunctionReferences() {
     "getTrackQualityBucket",
     "renderPlaybackRecoveryQuickList",
     "applyRecoveryQualityProfile",
+    "openMobilePlayerActions",
   ].forEach((name) => {
     assert(app.includes(`function ${name}`), `Missing app function ${name}`);
   });
+
+  const index = read("index.html");
+  assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
 }
 
 function main() {

@@ -495,6 +495,7 @@ const mobilePlayerQualityButton = document.querySelector("#mobilePlayerQualityBu
 const mobilePlayerQualityLabel = document.querySelector("#mobilePlayerQualityLabel");
 const mobilePlayerLyricsButton = document.querySelector("#mobilePlayerLyricsButton");
 const mobilePlayerImmersiveButton = document.querySelector("#mobilePlayerImmersiveButton");
+const mobilePlayerMoreButton = document.querySelector("#mobilePlayerMoreButton");
 const queueCount = document.querySelector("#queueCount");
 const nowFavoriteButton = document.querySelector("#nowFavoriteButton");
 const muteButton = document.querySelector("#muteButton");
@@ -919,6 +920,7 @@ function init() {
   desktopImmersiveButton.addEventListener("click", openMobileImmersivePlayer);
   queueButton.addEventListener("click", toggleQuickQueue);
   nowQueueButton.addEventListener("click", () => switchView("queue"));
+  mobilePlayerMoreButton.addEventListener("click", openMobilePlayerActions);
   mobilePlayerQueueButton.addEventListener("click", toggleQuickQueue);
   mobilePlayerQualityButton.addEventListener("click", openAudioQualityModal);
   mobilePlayerLyricsButton.addEventListener("click", () => switchView("nowPlaying"));
@@ -2907,6 +2909,45 @@ function openMobileNavigationSheet() {
   state.trackActionSheetTrack = null;
 }
 
+function openMobilePlayerActions() {
+  openTrackActionSheet(
+    state.currentTrack,
+    [
+      {
+        icon: "queueAdd",
+        label: state.queue.length ? `播放队列（${state.queue.length}）` : "播放队列",
+        handler: toggleQuickQueue,
+        disabled: !state.queue.length,
+      },
+      {
+        icon: "shield",
+        label: `音质：${getAudioQualityButtonLabel()}`,
+        handler: openAudioQualityModal,
+      },
+      {
+        icon: "search",
+        label: "歌词 / 正在播放",
+        handler: () => switchView("nowPlaying"),
+        disabled: !state.currentTrack,
+      },
+      {
+        icon: "nowPlaying",
+        label: "沉浸播放",
+        handler: openMobileImmersivePlayer,
+        disabled: !state.currentTrack,
+      },
+    ],
+    {
+      title: "播放操作",
+      subtitle: state.currentTrack
+        ? `${state.currentTrack.Name || "当前歌曲"} · ${getArtists(state.currentTrack) || "未知艺人"}`
+        : "选择歌曲后可使用更多播放操作",
+      emptyMessage: "暂无播放操作。",
+    },
+  );
+  state.trackActionSheetTrack = null;
+}
+
 function renderSavedAccounts() {
   if (!savedAccountsSection || !savedAccountList) {
     return;
@@ -3304,6 +3345,7 @@ function renderQueue() {
   nowQueueButton.disabled = !state.queue.length;
   mobilePlayerQueueButton.disabled = !state.queue.length;
   mobilePlayerImmersiveButton.disabled = !state.currentTrack;
+  mobilePlayerMoreButton.disabled = !state.session;
   immersiveQueueButton.disabled = !state.queue.length;
   locateTrackButton.disabled = !state.session;
   shuffleQueueButton.disabled = getShuffleableQueueRange().length < 2;
@@ -10521,6 +10563,7 @@ function setPlayerEnabled(isEnabled) {
   mobilePlayerQueueButton.disabled = !isEnabled || !state.queue.length;
   mobilePlayerLyricsButton.disabled = !isEnabled || !state.currentTrack;
   mobilePlayerImmersiveButton.disabled = !isEnabled || !state.currentTrack;
+  mobilePlayerMoreButton.disabled = !state.session;
   immersiveQueueButton.disabled = !isEnabled || !state.queue.length;
   immersiveQueueLocateButton.disabled = !isEnabled || !state.currentTrack || !state.queue.length;
   immersiveQueueShuffleButton.disabled = !isEnabled || getShuffleableQueueRange().length < 2;
