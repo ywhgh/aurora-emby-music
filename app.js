@@ -176,6 +176,7 @@ const ACTION_ICON_PATHS = {
   playlists: '<path d="M5 6h11"></path><path d="M5 12h14"></path><path d="M5 18h8"></path><path d="m17 16 3 2-3 2Z"></path>',
   recent: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 5v5h5"></path><path d="M12 7v5l3 2"></path>',
   nowPlaying: '<path d="M7 18V6"></path><path d="M12 18V6"></path><path d="M17 18V6"></path>',
+  repeat: '<path d="M17 2.8 21 7l-4 4.2"></path><path d="M3 11V9a2 2 0 0 1 2-2h16"></path><path d="M7 21.2 3 17l4-4.2"></path><path d="M21 13v2a2 2 0 0 1-2 2H3"></path>',
   more: '<circle cx="5" cy="12" r="1.4"></circle><circle cx="12" cy="12" r="1.4"></circle><circle cx="19" cy="12" r="1.4"></circle>',
   search: '<circle cx="11" cy="11" r="7"></circle><path d="m16.2 16.2 4.1 4.1"></path>',
   check: '<path d="m5 12 4.4 4.4L19 7"></path>',
@@ -2923,6 +2924,11 @@ function openMobilePlayerActions() {
         icon: "shield",
         label: `音质：${getAudioQualityButtonLabel()}`,
         handler: openAudioQualityModal,
+      },
+      {
+        icon: "repeat",
+        label: `播放模式：${PLAY_MODE_LABELS[state.playMode] || PLAY_MODE_LABELS.order}`,
+        handler: cyclePlayMode,
       },
       {
         icon: "search",

@@ -34,6 +34,7 @@
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: var(--page);
   color: var(--text);
@@ -784,7 +785,9 @@ input:disabled {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   border: 0;
   background: var(--page);
@@ -8104,5 +8107,561 @@ select:focus-visible {
   .login-view .feature-icon {
     max-width: 62%;
     max-height: 62%;
+  }
+}
+
+@media (max-width: 620px) {
+  .login-view {
+    justify-items: stretch;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding: 0.55rem;
+  }
+
+  .login-view .login-shell {
+    grid-template-rows: auto auto;
+    align-content: center;
+    gap: 0.42rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: calc(100dvh - 1.1rem);
+    max-height: calc(100dvh - 1.1rem);
+  }
+
+  .login-view .login-intro {
+    align-content: center;
+    gap: 0.44rem;
+    padding: 0.58rem;
+  }
+
+  .login-view .brand-row {
+    justify-content: center;
+  }
+
+  .login-view .cover-showcase {
+    gap: 0.32rem;
+    align-items: center;
+  }
+
+  .login-view .showcase-card {
+    display: grid;
+    height: clamp(3.2rem, 18vw, 4rem);
+    place-items: center;
+    padding: 0.34rem;
+    border-radius: 12px;
+  }
+
+  .login-view .feature-icon {
+    width: clamp(2.6rem, 15vw, 3.35rem);
+    height: clamp(2.6rem, 15vw, 3.35rem);
+    max-width: none;
+    max-height: none;
+  }
+
+  .login-view .login-feature-card > span:last-child {
+    display: none;
+  }
+
+  .login-view .login-card {
+    align-self: start;
+    padding: 0.72rem;
+    max-height: 100%;
+  }
+
+  .login-view .form-heading h2 {
+    font-size: 1.22rem;
+  }
+
+  .login-view .field {
+    margin-top: 0.42rem;
+  }
+
+  .login-view .field span {
+    font-size: 0.74rem;
+  }
+
+  .login-view .field input {
+    height: 2.28rem;
+  }
+
+  .login-view .saved-accounts {
+    max-height: 4.35rem;
+    margin-top: 0.42rem;
+    padding: 0.42rem;
+  }
+
+  .login-view .login-device-options {
+    margin-top: 0.42rem;
+  }
+
+  .login-view .login-actions {
+    margin-top: 0.52rem;
+  }
+
+  .login-view .primary-button,
+  .login-view .secondary-login-button {
+    min-height: 2.32rem;
+  }
+
+  .login-view .message {
+    min-height: 1rem;
+    margin-top: 0.34rem;
+    font-size: 0.76rem;
+  }
+
+  .topbar {
+    min-height: 3.32rem;
+    padding: 0.55rem 0.68rem;
+    gap: 0.45rem;
+  }
+
+  .top-actions {
+    grid-template-columns: minmax(0, 1fr) 2.18rem 2.18rem;
+  }
+
+  .search-pill {
+    min-height: 2.18rem;
+    padding: 0 0.68rem;
+  }
+
+  .account-menu-card {
+    top: 4rem;
+    right: 0.58rem;
+    width: min(19rem, calc(100vw - 1.16rem));
+  }
+
+  .content {
+    padding: 0.68rem 0.68rem 0.82rem;
+    scroll-padding-bottom: 1rem;
+  }
+
+  #homePanel.view-panel.active {
+    gap: 0.74rem;
+  }
+
+  .hero {
+    min-height: 0;
+    gap: 0.72rem;
+    padding: 0.86rem;
+    border-radius: 10px;
+  }
+
+  .hero h2,
+  .page-heading h2 {
+    margin-top: 0.2rem;
+    font-size: 1.46rem;
+    line-height: 1.14;
+  }
+
+  .hero p:not(.kicker) {
+    display: -webkit-box;
+    max-width: 100%;
+    margin-top: 0.34rem;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .hero-actions {
+    gap: 0.42rem;
+    margin-top: 0.62rem;
+  }
+
+  .server-summary {
+    justify-self: stretch;
+    width: 100%;
+    padding: 0.62rem;
+    gap: 0.58rem;
+  }
+
+  .server-summary .disc {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+
+  .server-summary strong {
+    font-size: 1rem;
+  }
+
+  .server-summary span {
+    margin-top: 0.12rem;
+    font-size: 0.78rem;
+  }
+
+  .status-grid {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    scrollbar-width: none;
+  }
+
+  .status-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .info-card {
+    flex: 0 0 calc((100% - 1rem) / 3);
+    min-width: 6.65rem;
+    min-height: 4.45rem;
+    padding: 0.72rem;
+    border: 1px solid rgba(31, 31, 36, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: var(--card-shadow);
+  }
+
+  .info-card strong {
+    font-size: 1.06rem;
+  }
+
+  .home-start-panel {
+    grid-template-columns: 3.65rem minmax(0, 1fr);
+    gap: 0.68rem;
+    padding: 0.78rem;
+    border-radius: 10px;
+  }
+
+  .home-start-art {
+    width: 3.65rem;
+    border-radius: 14px;
+  }
+
+  .home-start-copy h3 {
+    font-size: 1.04rem;
+    line-height: 1.2;
+  }
+
+  .home-start-copy p:not(.kicker) {
+    margin-top: 0.22rem;
+    font-size: 0.8rem;
+  }
+
+  .home-start-stats {
+    flex-wrap: nowrap;
+    gap: 0.32rem;
+    margin-top: 0.46rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .home-start-stats::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-start-stats span {
+    min-height: 1.48rem;
+    max-width: 8.2rem;
+    flex: 0 0 auto;
+    padding: 0 0.48rem;
+    font-size: 0.68rem;
+    line-height: 1.48rem;
+  }
+
+  .home-start-actions {
+    grid-column: 1 / -1;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.08rem;
+    scrollbar-width: none;
+  }
+
+  .home-start-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-start-actions > button {
+    flex: 0 0 auto;
+    min-height: 2.14rem;
+    padding: 0 0.76rem;
+  }
+
+  .section-heading,
+  .page-heading {
+    display: grid;
+    gap: 0.5rem;
+    align-items: start;
+  }
+
+  .section-actions,
+  .heading-actions {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    margin-top: 0;
+    overflow-x: auto;
+    padding-bottom: 0.08rem;
+    scrollbar-width: none;
+  }
+
+  .section-actions::-webkit-scrollbar,
+  .heading-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .section-actions .text-button,
+  .heading-actions .text-button {
+    flex: 0 0 auto;
+  }
+
+  .section-heading h3 {
+    margin-top: 0;
+    font-size: 1rem;
+  }
+
+  .preview-section .section-heading .kicker {
+    display: none;
+  }
+
+  .track-list {
+    margin-top: 0.55rem;
+    border-radius: 10px;
+  }
+
+  .track-row {
+    min-height: 3.45rem;
+    gap: 0.45rem;
+    padding: 0.46rem 0.52rem;
+  }
+
+  .track-play-area {
+    min-height: 2.75rem;
+    gap: 0.48rem;
+  }
+
+  .track-main {
+    gap: 0.56rem;
+  }
+
+  .track-cover {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 7px;
+  }
+
+  .track-title {
+    font-size: 0.92rem;
+  }
+
+  .track-subtitle-wrap {
+    gap: 0.28rem;
+    margin-top: 0.12rem;
+  }
+
+  .track-subtitle-wrap .track-link-button {
+    font-size: 0.76rem;
+  }
+
+  .track-quality-badge {
+    max-width: 4.7rem;
+    height: 1rem;
+    padding: 0 0.3rem;
+    font-size: 0.61rem;
+  }
+
+  .track-duration {
+    font-size: 0.76rem;
+  }
+
+  .favorite-button,
+  .track-action-button {
+    width: 2.05rem;
+    height: 2.05rem;
+  }
+
+  .quick-queue-card {
+    bottom: 8rem;
+  }
+
+  .playerbar {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto;
+    align-items: center;
+    min-height: 4.65rem;
+    padding: 0.96rem 0.7rem 0.58rem;
+    gap: 0.45rem;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .track-meta {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 3rem;
+    gap: 0.58rem;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .mini-cover {
+    width: 2.78rem;
+    height: 2.78rem;
+    border-radius: 8px;
+  }
+
+  .track-meta strong {
+    font-size: 0.9rem;
+  }
+
+  .track-meta span {
+    margin-top: 0.12rem;
+    font-size: 0.74rem;
+  }
+
+  .track-meta .player-playback-meta {
+    display: none;
+  }
+
+  .player-center {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .player-controls {
+    width: auto;
+    gap: 0.38rem;
+  }
+
+  .player-controls #playModeButton,
+  .player-controls .mirror-mode-button {
+    display: none;
+  }
+
+  .player-controls button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .player-controls .play-button {
+    width: 2.65rem;
+    height: 2.65rem;
+  }
+
+  .progress-wrap {
+    position: absolute;
+    top: 0.28rem;
+    right: 0.74rem;
+    left: 0.74rem;
+    width: auto;
+    height: 0.44rem;
+  }
+
+  .progress-track {
+    height: 0.16rem;
+  }
+
+  .progress-fill::after {
+    width: 0.42rem;
+    height: 0.42rem;
+  }
+
+  .mobile-player-actions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .mobile-player-button {
+    width: 2.18rem;
+    height: 2.18rem;
+    background: rgba(var(--now-accent-rgb), 0.08);
+    color: var(--now-accent);
+  }
+
+  .mobile-bottom-nav {
+    min-height: 3.14rem;
+    padding: 0.26rem 0.36rem max(0.28rem, env(safe-area-inset-bottom));
+  }
+
+  .mobile-nav-item {
+    min-height: 2.72rem;
+    gap: 0.08rem;
+    padding: 0.16rem;
+    font-size: 0.66rem;
+  }
+
+  .mobile-nav-item .nav-line-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .track-duration {
+    display: none;
+  }
+
+  .track-play-area,
+  .density-compact .track-play-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .playerbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.34rem;
+    padding-right: 0.56rem;
+    padding-left: 0.56rem;
+  }
+
+  .player-center {
+    grid-column: 2;
+  }
+
+  .mobile-player-button {
+    width: 2.02rem;
+    height: 2.02rem;
+  }
+
+  .mini-cover {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .player-controls button {
+    width: 1.86rem;
+    height: 1.86rem;
+  }
+
+  .player-controls .play-button {
+    width: 2.42rem;
+    height: 2.42rem;
+  }
+}
+
+@media (max-width: 620px) and (max-height: 700px) {
+  .login-view .login-shell {
+    align-content: start;
+  }
+
+  .login-view .brand-row {
+    display: none;
+  }
+
+  .login-view .login-intro {
+    padding: 0.48rem;
+  }
+
+  .login-view .showcase-card {
+    height: clamp(2.95rem, 16vw, 3.45rem);
+  }
+
+  .login-view .feature-icon {
+    width: clamp(2.35rem, 13vw, 2.9rem);
+    height: clamp(2.35rem, 13vw, 2.9rem);
+  }
+
+  .login-view .saved-accounts {
+    max-height: 3.3rem;
+  }
+
+  .login-view .login-tools {
+    margin-top: 0.3rem;
   }
 }
