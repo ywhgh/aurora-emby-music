@@ -129,10 +129,19 @@ function checkAppFunctionReferences() {
   assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
   assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
+  assert(index.includes("class=\"hero-side\""), "Home dashboard stats should live inside the hero side region");
+  assert(index.includes("server-card stat-connection"), "Home server summary should be merged into the dashboard stats grid");
+  assert(index.includes("stat-playlists"), "Home dashboard stats should expose colored stat icon classes");
 
   const css = read("styles.css");
   assert(css.includes("body.action-sheet-open .content"), "Action sheet should lock background scrolling");
   assert(css.includes(".action-sheet-copy small"), "Action sheet details should have mobile-friendly styling");
+  assert(css.includes("max-height: min(62dvh, calc(100dvh - 10.5rem))"), "Mobile search suggestions should use a bounded viewport panel");
+  assert(css.includes(".search-suggest-action .line-icon"), "Mobile search suggestion actions should remain visible and sized");
+  assert(css.includes(".hero-side"), "Home hero side layout styles are missing");
+  assert(css.includes("grid-template-columns: repeat(4, minmax(5.15rem, 1fr))"), "Home stat cards should use a compact two-row desktop grid");
+  assert(css.includes(".server-card small"), "Home server URL should have compact card text styling");
+  assert(css.includes(".stat-playlists .stat-icon"), "Home stat cards should use colored stat icon variants");
 }
 
 function main() {

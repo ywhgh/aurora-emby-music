@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.92.91" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.91" />
-    <link rel="stylesheet" href="./styles.css?v=0.92.91" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.92.92" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.92" />
+    <link rel="stylesheet" href="./styles.css?v=0.92.92" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -132,7 +132,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.92.91</span>
+            <span id="loginVersion">v0.92.92</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -315,78 +315,93 @@
                   <button class="secondary-mini-button" type="button" data-view="library">查看歌曲</button>
                 </div>
               </div>
-              <div class="server-summary">
-                <div class="disc"><span></span></div>
-                <div>
-                  <strong id="serverName">-</strong>
-                  <span id="currentServer">-</span>
-                </div>
+              <div class="hero-side">
+                <section class="status-grid" aria-label="连接状态">
+                  <article class="info-card server-card stat-connection">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="4" y="5" width="16" height="6" rx="2"></rect>
+                      <rect x="4" y="13" width="16" height="6" rx="2"></rect>
+                      <path d="M8 8h.01"></path>
+                      <path d="M8 16h.01"></path>
+                      <path d="M11 8h5"></path>
+                      <path d="M11 16h5"></path>
+                    </svg>
+                    <span>服务器</span>
+                    <strong id="serverName">-</strong>
+                    <small id="currentServer">-</small>
+                  </article>
+                  <article class="info-card stat-library">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 5.25h8.75a3.25 3.25 0 0 1 3.25 3.25V20H8.25A3.25 3.25 0 0 1 5 16.75V5.25Z"></path>
+                      <path d="M8.25 5.25v11.3A3.45 3.45 0 0 0 11.7 20"></path>
+                      <path d="M10 9h4.2"></path>
+                    </svg>
+                    <span>音乐库</span>
+                    <strong id="libraryName">-</strong>
+                  </article>
+                  <article class="info-card stat-tracks">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 18.25V5.3l10-2.05v12.9"></path>
+                      <path d="M9 8.6 19 6.55"></path>
+                      <circle cx="6.25" cy="18.25" r="2.75"></circle>
+                      <circle cx="16.25" cy="16.15" r="2.75"></circle>
+                    </svg>
+                    <span>歌曲</span>
+                    <strong id="trackCount">-</strong>
+                  </article>
+                  <article class="info-card stat-albums">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="4.3" y="4.3" width="15.4" height="15.4" rx="3.2"></rect>
+                      <circle cx="12" cy="12" r="4.1"></circle>
+                      <circle cx="12" cy="12" r="1.2"></circle>
+                    </svg>
+                    <span>专辑</span>
+                    <strong id="albumCount">-</strong>
+                  </article>
+                  <article class="info-card stat-server">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="4" y="4.5" width="16" height="6" rx="2"></rect>
+                      <rect x="4" y="13.5" width="16" height="6" rx="2"></rect>
+                      <path d="M8 7.5h.01"></path>
+                      <path d="M8 16.5h.01"></path>
+                      <path d="M11 7.5h5"></path>
+                      <path d="M11 16.5h5"></path>
+                    </svg>
+                    <span>服务器版本</span>
+                    <strong id="serverVersion">-</strong>
+                  </article>
+                  <article class="info-card stat-user">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="8.2" r="3.35"></circle>
+                      <path d="M5.45 19.75a6.55 6.55 0 0 1 13.1 0"></path>
+                      <path d="M8.2 19.75h7.6"></path>
+                    </svg>
+                    <span>当前用户</span>
+                    <strong id="currentUser">-</strong>
+                  </article>
+                  <article class="info-card stat-artists">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="8.25" cy="8.4" r="2.9"></circle>
+                      <path d="M3.1 19.25a5.15 5.15 0 0 1 10.3 0"></path>
+                      <path d="M15.6 6.55a2.75 2.75 0 0 1 0 5.2"></path>
+                      <path d="M17.05 15.1a4.85 4.85 0 0 1 4 4.15"></path>
+                    </svg>
+                    <span>艺人</span>
+                    <strong id="artistCount">-</strong>
+                  </article>
+                  <article class="info-card stat-playlists">
+                    <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4.5 6.4h10.8"></path>
+                      <path d="M4.5 11.6h8.5"></path>
+                      <path d="M4.5 16.8h6.6"></path>
+                      <path d="M17.1 13.1v5.85a2.05 2.05 0 1 1-1.25-1.9"></path>
+                      <path d="M17.1 13.1h3"></path>
+                    </svg>
+                    <span>歌单</span>
+                    <strong id="playlistCount">-</strong>
+                  </article>
+                </section>
               </div>
-            </section>
-
-            <section class="status-grid" aria-label="连接状态">
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5 4.5h10a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z"></path>
-                  <path d="M8 4.5V17a3 3 0 0 0 3 3"></path>
-                </svg>
-                <span>音乐库</span>
-                <strong id="libraryName">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M9 18V5l10-2v13"></path>
-                  <circle cx="6" cy="18" r="3"></circle>
-                  <circle cx="16" cy="16" r="3"></circle>
-                </svg>
-                <span>歌曲</span>
-                <strong id="trackCount">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="4.5" y="4.5" width="15" height="15" rx="3"></rect>
-                  <circle cx="12" cy="12" r="3.2"></circle>
-                </svg>
-                <span>专辑</span>
-                <strong id="albumCount">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="4" y="4.5" width="16" height="15" rx="3"></rect>
-                  <path d="M8 9h8"></path>
-                  <path d="M8 14.5h5"></path>
-                </svg>
-                <span>服务器版本</span>
-                <strong id="serverVersion">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="8" r="3.4"></circle>
-                  <path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path>
-                </svg>
-                <span>当前用户</span>
-                <strong id="currentUser">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="8" cy="8" r="3"></circle>
-                  <path d="M2.5 19a5.5 5.5 0 0 1 11 0"></path>
-                  <path d="M16 6.5a2.7 2.7 0 0 1 0 5.4"></path>
-                  <path d="M17.5 15a4.6 4.6 0 0 1 4 4"></path>
-                </svg>
-                <span>艺人</span>
-                <strong id="artistCount">-</strong>
-              </article>
-              <article class="info-card">
-                <svg class="line-icon stat-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4 6h13"></path>
-                  <path d="M4 12h10"></path>
-                  <path d="M4 18h7"></path>
-                  <path d="M17 15v4.4a1.8 1.8 0 1 1-1.1-1.66"></path>
-                </svg>
-                <span>歌单</span>
-                <strong id="playlistCount">-</strong>
-              </article>
             </section>
 
             <section class="home-start-panel" aria-label="今日开播">
@@ -1944,7 +1959,7 @@
 
     <script>
       (() => {
-        const version = "0.92.91";
+        const version = "0.92.92";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2322,11 +2337,11 @@
       })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" defer></script>
-    <script src="./src/config.js?v=0.92.91" defer></script>
-    <script src="./src/format.js?v=0.92.91" defer></script>
-    <script src="./src/lyrics.js?v=0.92.91" defer></script>
-    <script src="./src/emby-api.js?v=0.92.91" defer></script>
-    <script src="./src/storage.js?v=0.92.91" defer></script>
-    <script src="./app.js?v=0.92.91" defer></script>
+    <script src="./src/config.js?v=0.92.92" defer></script>
+    <script src="./src/format.js?v=0.92.92" defer></script>
+    <script src="./src/lyrics.js?v=0.92.92" defer></script>
+    <script src="./src/emby-api.js?v=0.92.92" defer></script>
+    <script src="./src/storage.js?v=0.92.92" defer></script>
+    <script src="./app.js?v=0.92.92" defer></script>
   </body>
 </html>
