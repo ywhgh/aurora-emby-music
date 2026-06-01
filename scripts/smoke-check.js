@@ -134,8 +134,10 @@ function checkAppFunctionReferences() {
   assert(index.includes("stat-playlists"), "Home dashboard stats should expose colored stat icon classes");
   assert(index.includes("class=\"home-start-panel smart-playback-hub\""), "Home start panel should use the fused smart playback hub");
   assert(index.includes("homeStartCover"), "Smart playback hub should render dynamic artwork");
+  assert(index.includes("home-start-tonearm"), "Smart playback hub should render the floating tonearm");
   assert(index.includes("homeStartNextTitle"), "Smart playback hub should render next track preview");
   assert(!index.includes("id=\"homeResumeSection\""), "Old standalone resume queue section should be removed from the home page");
+  assert(!index.includes("home-start-spindle"), "Smart playback hub should not render the old turntable base spindle");
 
   const css = read("styles.css");
   assert(css.includes("body.action-sheet-open .content"), "Action sheet should lock background scrolling");
@@ -150,7 +152,12 @@ function checkAppFunctionReferences() {
   assert(css.includes("grid-template-areas:"), "Smart playback hub should use a compact split grid");
   assert(css.includes("@keyframes hubMarquee"), "Smart playback hub marquee animation is missing");
   assert(css.includes("@keyframes hubRipple"), "Smart playback hub ripple animation is missing");
+  assert(css.includes("@keyframes hubAlbumSpin"), "Smart playback hub album spin animation is missing");
   assert(css.includes(".is-audio-playing .home-start-vinyl::before"), "Smart playback hub vinyl should animate while playing");
+  assert(css.includes(".is-audio-playing .home-start-cover"), "Smart playback hub album artwork should animate while playing");
+  assert(css.includes(".home-start-tonearm"), "Smart playback hub floating tonearm styles are missing");
+  assert(css.includes(".is-audio-playing .home-start-tonearm"), "Smart playback hub tonearm should react to playing state");
+  assert(!css.includes(".home-start-spindle"), "Smart playback hub should not keep old spindle styles");
 }
 
 function main() {
