@@ -4079,6 +4079,10 @@ input:disabled {
   display: none;
 }
 
+body.action-sheet-open .content {
+  overflow: hidden;
+}
+
 .modal-card {
   width: min(26rem, 100%);
   padding: 1.1rem;
@@ -4145,12 +4149,21 @@ input:disabled {
   margin-top: 1rem;
 }
 
+.action-sheet-grabber {
+  display: none;
+  width: 2.8rem;
+  height: 0.28rem;
+  margin: 0 auto 0.82rem;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.13);
+}
+
 .action-sheet-item {
   display: grid;
   grid-template-columns: 2.15rem minmax(0, 1fr);
   align-items: center;
   gap: 0.7rem;
-  min-height: 2.85rem;
+  min-height: 2.95rem;
   padding: 0.35rem 0.45rem;
   border-radius: 12px;
   color: var(--text);
@@ -4160,6 +4173,11 @@ input:disabled {
 
 .action-sheet-item:hover {
   background: rgba(35, 35, 41, 0.055);
+}
+
+.action-sheet-item:focus-visible {
+  outline: 2px solid rgba(var(--now-accent-rgb), 0.28);
+  outline-offset: 2px;
 }
 
 .action-sheet-item:disabled {
@@ -4187,11 +4205,27 @@ input:disabled {
   height: 1.25rem;
 }
 
-.action-sheet-item > span:last-child {
+.action-sheet-copy,
+.action-sheet-copy strong,
+.action-sheet-copy small {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.action-sheet-copy strong {
+  color: inherit;
+  font-size: 0.92rem;
+  font-weight: 840;
+}
+
+.action-sheet-copy small {
+  margin-top: 0.12rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .audio-quality-card {
@@ -7940,14 +7974,48 @@ select:focus-visible {
   .action-sheet-backdrop {
     align-items: end;
     place-items: end stretch;
-    padding: 0.75rem;
+    padding: 0.75rem 0.75rem max(0.75rem, env(safe-area-inset-bottom));
   }
 
   .action-sheet-card {
     width: 100%;
-    max-height: min(78vh, 34rem);
+    max-height: min(82dvh, 34rem);
     overflow: auto;
     border-radius: 18px 18px 14px 14px;
+  }
+
+  .action-sheet-grabber {
+    display: block;
+  }
+
+  .action-sheet-card .modal-heading .kicker {
+    display: none;
+  }
+
+  .action-sheet-card .modal-heading h3 {
+    margin-top: 0;
+    font-size: 1.08rem;
+  }
+
+  .action-sheet-card .modal-subtitle {
+    margin-top: 0.42rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .action-sheet-list {
+    gap: 0.28rem;
+    margin-top: 0.72rem;
+  }
+
+  .action-sheet-item {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    min-height: 3.08rem;
+    padding: 0.36rem 0.4rem;
+  }
+
+  .action-sheet-copy small {
+    max-width: 100%;
   }
 
   .playerbar {

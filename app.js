@@ -2854,7 +2854,15 @@ function openTrackActionSheet(track, items, options = {}) {
     icon.className = "action-sheet-icon";
     icon.append(createActionIcon(item.icon));
     const label = document.createElement("span");
-    label.textContent = item.label;
+    label.className = "action-sheet-copy";
+    const title = document.createElement("strong");
+    title.textContent = item.label;
+    label.append(title);
+    if (item.detail) {
+      const detail = document.createElement("small");
+      detail.textContent = item.detail;
+      label.append(detail);
+    }
     button.append(icon, label);
     button.addEventListener("click", () => {
       if (button.disabled) {
@@ -2868,6 +2876,7 @@ function openTrackActionSheet(track, items, options = {}) {
   });
 
   trackActionSheet.hidden = false;
+  document.body.classList.add("action-sheet-open");
   const firstEnabledButton = trackActionSheetList.querySelector("button:not(:disabled)");
   (firstEnabledButton || trackActionSheetClose).focus();
 }
@@ -2917,28 +2926,33 @@ function openMobilePlayerActions() {
       {
         icon: "queueAdd",
         label: state.queue.length ? `播放队列（${state.queue.length}）` : "播放队列",
+        detail: state.queue.length ? "查看待播、定位当前歌曲" : "队列为空",
         handler: toggleQuickQueue,
         disabled: !state.queue.length,
       },
       {
         icon: "shield",
         label: `音质：${getAudioQualityButtonLabel()}`,
+        detail: "切换直放、HLS 或兼容转码",
         handler: openAudioQualityModal,
       },
       {
         icon: "repeat",
         label: `播放模式：${PLAY_MODE_LABELS[state.playMode] || PLAY_MODE_LABELS.order}`,
+        detail: "顺序、随机、循环或单曲循环",
         handler: cyclePlayMode,
       },
       {
         icon: "search",
         label: "歌词 / 正在播放",
+        detail: "查看封面、同步歌词和播放信息",
         handler: () => switchView("nowPlaying"),
         disabled: !state.currentTrack,
       },
       {
         icon: "nowPlaying",
         label: "沉浸播放",
+        detail: "进入独立全屏播放界面",
         handler: openMobileImmersivePlayer,
         disabled: !state.currentTrack,
       },
@@ -3151,6 +3165,7 @@ function closeAccountMenu() {
 
 function closeTrackActionSheet(options = {}) {
   trackActionSheet.hidden = true;
+  document.body.classList.remove("action-sheet-open");
   state.trackActionSheetTrack = null;
   trackActionSheetTitle.textContent = "歌曲操作";
   trackActionSheetSubtitle.textContent = "";
@@ -3159,6 +3174,35 @@ function closeTrackActionSheet(options = {}) {
     state.trackActionSheetReturnFocus.focus();
   }
   state.trackActionSheetReturnFocus = null;
+}
+
+function getTrackActionSheetFocusableElements() {
+  if (!trackActionSheet || trackActionSheet.hidden) {
+    return [];
+  }
+
+  return [...trackActionSheet.querySelectorAll("button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])")]
+    .filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+}
+
+function trapTrackActionSheetFocus(event) {
+  const focusable = getTrackActionSheetFocusableElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    trackActionSheetClose.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function createTrackQualityBadge(track) {
@@ -8890,7 +8934,12 @@ function handleResumePlayError(error) {
 }
 
 function handleKeyboardShortcut(event) {
-    if (event.key === "Escape") {
+  if (event.key === "Tab" && trackActionSheet && !trackActionSheet.hidden) {
+    trapTrackActionSheetFocus(event);
+    return;
+  }
+
+  if (event.key === "Escape") {
     if (searchSuggestPopover && !searchSuggestPopover.hidden) {
       closeSearchSuggestions();
       return;

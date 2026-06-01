@@ -115,6 +115,8 @@ function checkAppFunctionReferences() {
     "openMobilePlayerActions",
     "getDiagnosticsGuidance",
     "getLoginDiagnosticsGuidance",
+    "trapTrackActionSheetFocus",
+    "getTrackActionSheetFocusableElements",
   ].forEach((name) => {
     assert(app.includes(`function ${name}`), `Missing app function ${name}`);
   });
@@ -124,7 +126,13 @@ function checkAppFunctionReferences() {
 
   const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
+  assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
+  assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
   assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
+
+  const css = read("styles.css");
+  assert(css.includes("body.action-sheet-open .content"), "Action sheet should lock background scrolling");
+  assert(css.includes(".action-sheet-copy small"), "Action sheet details should have mobile-friendly styling");
 }
 
 function main() {
