@@ -9646,9 +9646,12 @@ async function copyDiagnostics() {
 }
 
 function buildDiagnostics() {
+  const guidance = getDiagnosticsGuidance();
+
   return [
     `${APP_NAME} ${APP_VERSION}`,
     `URL: ${location.href}`,
+    `Recommended action: ${guidance}`,
     `Configured server URL: ${getConfiguredServerUrl() || "-"}`,
     `Server URL locked: ${isServerUrlLocked() ? "yes" : "no"}`,
     `Display mode: ${window.matchMedia?.("(display-mode: standalone)")?.matches ? "standalone" : "browser"}`,
@@ -9688,6 +9691,7 @@ function buildDiagnostics() {
     `hls.js: ${window.Hls?.isSupported?.() ? (state.isHlsJsActive ? "active" : "supported") : "unavailable"}`,
     `Player meta target: ${state.playerMetaTarget}`,
     `Current playback source: ${state.currentPlaybackMode}`,
+    `Current playback label: ${getCurrentPlaybackSourceLabel()}`,
     `Audio unlocked: ${state.audioUnlocked ? "yes" : "no"}`,
     `Pending autoplay resume: ${state.pendingAutoplayResume ? "yes" : "no"}`,
     `Testing playback chain: ${state.isTestingPlayback ? "yes" : "no"}`,
@@ -9697,6 +9701,7 @@ function buildDiagnostics() {
     `Current MediaSourceId: ${state.currentMediaSourceId || "-"}`,
     `Current PlaySessionId: ${state.currentPlaySessionId || "-"}`,
     `Last playback probe: ${state.lastPlaybackProbe || "-"}`,
+    `Playback recovery visible: ${playbackRecoveryPanel && !playbackRecoveryPanel.hidden ? "yes" : "no"}`,
     `Transcode bitrate: ${state.transcodeBitrate}`,
     `Track density: ${state.trackDensity}`,
     `Volume: ${Math.round((audioPlayer.muted ? 0 : audioPlayer.volume) * 100)}%`,
@@ -9709,10 +9714,43 @@ function buildDiagnostics() {
   ].join("\n");
 }
 
+function getDiagnosticsGuidance() {
+  if (!state.session) {
+    return "login required; test server first, then clear cache if the main app does not load";
+  }
+
+  if (!state.isLibraryLoaded) {
+    return "reload library; verify the selected Emby music library is accessible";
+  }
+
+  if (state.pendingAutoplayResume) {
+    return "browser blocked autoplay; tap play once inside the page";
+  }
+
+  if (state.lastPlaybackError || state.lastPlaybackInfoError) {
+    if (state.currentPlaybackMode === "direct") {
+      return "direct playback failed; try HLS/AAC 384k or AAC 320k in quality settings";
+    }
+
+    if (!state.qualityFallbackAttempted) {
+      return "transcoded playback failed; use a recovery preset or MP3 compatible fallback";
+    }
+
+    return "compatible fallback also failed; run playback chain test and check server transcoding logs";
+  }
+
+  if (state.lastPlaybackProbe) {
+    return "playback chain test succeeded; retry playback or switch track if the browser is still blocked";
+  }
+
+  return "no obvious error; keep this diagnostics snapshot with the exact failing track";
+}
+
 function buildLoginDiagnostics() {
   return [
     `${APP_NAME} ${APP_VERSION}`,
     `URL: ${location.href}`,
+    `Recommended action: ${getLoginDiagnosticsGuidance()}`,
     `Script version: ${APP_VERSION}`,
     `Window title: ${document.title || "-"}`,
     `Server input: ${serverUrlInput.value || "-"}`,
@@ -9720,11 +9758,32 @@ function buildLoginDiagnostics() {
     `Configured server URL: ${getConfiguredServerUrl() || "-"}`,
     `Server URL locked: ${isServerUrlLocked() ? "yes" : "no"}`,
     `Browser network: ${navigator.onLine === false ? "offline" : "online"}`,
+    `Default device: ${getDefaultDeviceName()}`,
     `Service Worker: ${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "controlled" : "supported") : "unsupported"}`,
     `Cache API: ${"caches" in window ? "supported" : "unsupported"}`,
     `Protocol: ${location.protocol}`,
     `User agent: ${navigator.userAgent}`,
   ].join("\n");
+}
+
+function getLoginDiagnosticsGuidance() {
+  if (!getLoginServerUrl()) {
+    return "enter the Emby server address, then test the server";
+  }
+
+  if (navigator.onLine === false) {
+    return "browser is offline; reconnect the network before logging in";
+  }
+
+  if (location.protocol === "file:") {
+    return "file protocol may be blocked by CORS; use the local dev server or a static web server";
+  }
+
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    return "service worker is active; clear cache and reload if login opens an old page";
+  }
+
+  return "test server first; if it succeeds, connect with username and password";
 }
 
 function applyVolumePreference() {

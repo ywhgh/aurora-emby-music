@@ -113,12 +113,18 @@ function checkAppFunctionReferences() {
     "renderPlaybackRecoveryQuickList",
     "applyRecoveryQualityProfile",
     "openMobilePlayerActions",
+    "getDiagnosticsGuidance",
+    "getLoginDiagnosticsGuidance",
   ].forEach((name) => {
     assert(app.includes(`function ${name}`), `Missing app function ${name}`);
   });
 
+  assert(app.includes("Recommended action:"), "Diagnostics should include a recommended action");
+  assert(app.includes("Playback recovery visible:"), "Diagnostics should include playback recovery visibility");
+
   const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
+  assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
 }
 
 function main() {
