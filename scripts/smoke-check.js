@@ -132,6 +132,10 @@ function checkAppFunctionReferences() {
   assert(index.includes("class=\"hero-side\""), "Home dashboard stats should live inside the hero side region");
   assert(index.includes("server-card stat-connection"), "Home server summary should be merged into the dashboard stats grid");
   assert(index.includes("stat-playlists"), "Home dashboard stats should expose colored stat icon classes");
+  assert(index.includes("class=\"home-start-panel smart-playback-hub\""), "Home start panel should use the fused smart playback hub");
+  assert(index.includes("homeStartCover"), "Smart playback hub should render dynamic artwork");
+  assert(index.includes("homeStartNextTitle"), "Smart playback hub should render next track preview");
+  assert(!index.includes("id=\"homeResumeSection\""), "Old standalone resume queue section should be removed from the home page");
 
   const css = read("styles.css");
   assert(css.includes("body.action-sheet-open .content"), "Action sheet should lock background scrolling");
@@ -142,6 +146,11 @@ function checkAppFunctionReferences() {
   assert(css.includes("grid-template-columns: repeat(4, minmax(5.15rem, 1fr))"), "Home stat cards should use a compact two-row desktop grid");
   assert(css.includes(".server-card small"), "Home server URL should have compact card text styling");
   assert(css.includes(".stat-playlists .stat-icon"), "Home stat cards should use colored stat icon variants");
+  assert(css.includes(".home-start-control"), "Smart playback hub control layout styles are missing");
+  assert(css.includes("grid-template-areas:"), "Smart playback hub should use a compact split grid");
+  assert(css.includes("@keyframes hubMarquee"), "Smart playback hub marquee animation is missing");
+  assert(css.includes("@keyframes hubRipple"), "Smart playback hub ripple animation is missing");
+  assert(css.includes(".is-audio-playing .home-start-vinyl::before"), "Smart playback hub vinyl should animate while playing");
 }
 
 function main() {

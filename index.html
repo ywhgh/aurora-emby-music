@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.92.92" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.92" />
-    <link rel="stylesheet" href="./styles.css?v=0.92.92" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.92.93" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.93" />
+    <link rel="stylesheet" href="./styles.css?v=0.92.93" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -132,7 +132,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.92.92</span>
+            <span id="loginVersion">v0.92.93</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -404,10 +404,11 @@
               </div>
             </section>
 
-            <section class="home-start-panel" aria-label="今日开播">
+            <section class="home-start-panel smart-playback-hub" aria-label="智能播放控制中心">
               <div class="home-start-art" aria-hidden="true">
-                <span></span>
-                <i></i>
+                <span class="home-start-vinyl"></span>
+                <div id="homeStartCover" class="home-start-cover cover-a"></div>
+                <i class="home-start-spindle"></i>
               </div>
               <div class="home-start-copy">
                 <p class="kicker">今日开播</p>
@@ -419,32 +420,37 @@
                   <span id="homeStartQualityStat">-</span>
                 </div>
               </div>
-              <div class="home-start-actions">
-                <button id="homeStartShuffleButton" class="primary-mini-button" type="button" disabled>
-                  随机播放
-                </button>
-                <button id="homeStartResumeButton" class="secondary-mini-button" type="button" disabled>
-                  继续队列
-                </button>
-                <button id="homeStartImmersiveButton" class="secondary-mini-button" type="button" disabled>
-                  沉浸播放
-                </button>
-                <button id="homeStartQualityButton" class="text-button" type="button">
-                  音质
-                </button>
-              </div>
-            </section>
-
-            <section id="homeResumeSection" class="resume-section" aria-label="恢复播放队列" hidden>
-              <div id="homeResumeCover" class="resume-cover cover-a"></div>
-              <div class="resume-copy">
-                <p class="kicker">继续队列</p>
-                <h3 id="homeResumeTitle">继续上次播放</h3>
-                <p id="homeResumeMeta">-</p>
-              </div>
-              <div class="resume-actions">
-                <button id="homeResumePlayButton" class="primary-mini-button" type="button">继续播放</button>
-                <button id="homeResumeQueueButton" class="secondary-mini-button" type="button">打开队列</button>
+              <div class="home-start-control">
+                <div class="home-start-control-head">
+                  <span class="home-start-progress-pill" aria-label="播放进度">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="12" r="8"></circle>
+                      <path class="clock-hand" d="M12 7.5V12l3 2"></path>
+                    </svg>
+                    <span id="homeStartProgressText">已听 0:00</span>
+                  </span>
+                  <button id="homeStartResumeButton" class="secondary-mini-button home-start-resume-button" type="button" disabled>
+                    继续队列
+                  </button>
+                </div>
+                <span class="home-start-energy-line" aria-hidden="true">
+                  <span id="homeStartProgressFill"></span>
+                </span>
+                <div id="homeStartNext" class="home-start-next" aria-label="下一首预告">
+                  <span>下一首</span>
+                  <strong id="homeStartNextTitle" data-text="暂无待播">暂无待播</strong>
+                </div>
+                <div class="home-start-actions">
+                  <button id="homeStartShuffleButton" class="text-button" type="button" disabled>
+                    随机
+                  </button>
+                  <button id="homeStartImmersiveButton" class="text-button" type="button" disabled>
+                    沉浸
+                  </button>
+                  <button id="homeStartQualityButton" class="text-button" type="button">
+                    音质
+                  </button>
+                </div>
               </div>
             </section>
 
@@ -1959,7 +1965,7 @@
 
     <script>
       (() => {
-        const version = "0.92.92";
+        const version = "0.92.93";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2337,11 +2343,11 @@
       })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" defer></script>
-    <script src="./src/config.js?v=0.92.92" defer></script>
-    <script src="./src/format.js?v=0.92.92" defer></script>
-    <script src="./src/lyrics.js?v=0.92.92" defer></script>
-    <script src="./src/emby-api.js?v=0.92.92" defer></script>
-    <script src="./src/storage.js?v=0.92.92" defer></script>
-    <script src="./app.js?v=0.92.92" defer></script>
+    <script src="./src/config.js?v=0.92.93" defer></script>
+    <script src="./src/format.js?v=0.92.93" defer></script>
+    <script src="./src/lyrics.js?v=0.92.93" defer></script>
+    <script src="./src/emby-api.js?v=0.92.93" defer></script>
+    <script src="./src/storage.js?v=0.92.93" defer></script>
+    <script src="./app.js?v=0.92.93" defer></script>
   </body>
 </html>

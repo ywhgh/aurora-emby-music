@@ -407,8 +407,13 @@ const homeResumeTitle = document.querySelector("#homeResumeTitle");
 const homeResumeMeta = document.querySelector("#homeResumeMeta");
 const homeResumePlayButton = document.querySelector("#homeResumePlayButton");
 const homeResumeQueueButton = document.querySelector("#homeResumeQueueButton");
+const homeStartCover = document.querySelector("#homeStartCover");
 const homeStartTitle = document.querySelector("#homeStartTitle");
 const homeStartMeta = document.querySelector("#homeStartMeta");
+const homeStartProgressText = document.querySelector("#homeStartProgressText");
+const homeStartProgressFill = document.querySelector("#homeStartProgressFill");
+const homeStartNext = document.querySelector("#homeStartNext");
+const homeStartNextTitle = document.querySelector("#homeStartNextTitle");
 const homeStartLibraryStat = document.querySelector("#homeStartLibraryStat");
 const homeStartQueueStat = document.querySelector("#homeStartQueueStat");
 const homeStartQualityStat = document.querySelector("#homeStartQualityStat");
@@ -784,8 +789,8 @@ function init() {
   queueFavoritesButton.addEventListener("click", () => queueTrackCollection(state.filteredFavoriteTracks, "收藏歌曲"));
   playRecentButton.addEventListener("click", () => playTrackCollection(getVisibleRecentTracks(), "最近播放"));
   queueRecentButton.addEventListener("click", () => queueTrackCollection(getVisibleRecentTracks(), "最近播放"));
-  homeResumePlayButton.addEventListener("click", resumeSavedQueuePlayback);
-  homeResumeQueueButton.addEventListener("click", () => switchView("queue"));
+  homeResumePlayButton?.addEventListener("click", resumeSavedQueuePlayback);
+  homeResumeQueueButton?.addEventListener("click", () => switchView("queue"));
   homeStartShuffleButton.addEventListener("click", shufflePlay);
   homeStartResumeButton.addEventListener("click", resumeSavedQueuePlayback);
   homeStartImmersiveButton.addEventListener("click", openMobileImmersivePlayer);
@@ -1975,7 +1980,11 @@ function renderHomeStartPanel() {
   const profile = getAudioQualityProfile();
   const nextTrack = getNextPreviewTrack();
   const isPlaying = Boolean(currentTrack && !audioPlayer.paused && !audioPlayer.ended);
+  const nextTitle = nextTrack?.Name || (state.queue.length ? "已到队尾" : "暂无待播");
 
+  renderHomeStartArtwork(currentTrack);
+  renderHomeStartProgress();
+  renderHomeStartNext(nextTitle);
   homeStartTitle.textContent = currentTrack?.Name || "准备播放你的音乐库";
   homeStartMeta.textContent = currentTrack
     ? [
@@ -1996,7 +2005,50 @@ function renderHomeStartPanel() {
   homeStartResumeButton.textContent = isPlaying ? "继续播放" : "继续队列";
 }
 
+function renderHomeStartArtwork(track) {
+  if (!homeStartCover) {
+    return;
+  }
+
+  homeStartCover.replaceChildren();
+  homeStartCover.className = `home-start-cover ${coverClass(state.currentTrackIndex >= 0 ? state.currentTrackIndex : 0)}`;
+
+  if (track) {
+    appendImage(homeStartCover, getTrackImageUrl(track, 240), track.Name);
+  }
+}
+
+function renderHomeStartProgress() {
+  const duration = getAudioDurationSeconds();
+  const current = getAudioCurrentTimeSeconds();
+  const percent = duration ? Math.min((current / duration) * 100, 100) : 0;
+
+  if (homeStartProgressText) {
+    homeStartProgressText.textContent = state.currentTrack
+      ? `已听 ${formatSeconds(current)}`
+      : "已听 0:00";
+  }
+
+  if (homeStartProgressFill) {
+    homeStartProgressFill.style.width = `${percent}%`;
+  }
+}
+
+function renderHomeStartNext(title) {
+  if (!homeStartNextTitle || !homeStartNext) {
+    return;
+  }
+
+  homeStartNextTitle.textContent = title;
+  homeStartNextTitle.dataset.text = title;
+  homeStartNext.classList.toggle("is-marquee", title.length > 16);
+}
+
 function renderHomeResumeQueue() {
+  if (!homeResumeSection) {
+    return;
+  }
+
   const track = state.currentTrack;
   const hasQueue = Boolean(track && state.queue.length);
 
@@ -2141,7 +2193,6 @@ function renderQualityOptions() {
 }
 
 function renderLoadingShell() {
-  homeResumeSection.hidden = !state.currentTrack || !state.queue.length;
   renderHomeResumeQueue();
   homeRecentSection.hidden = !state.recentTracks.length;
   homePlaylistSection.hidden = false;
@@ -2175,7 +2226,6 @@ function renderLoadingShell() {
 
 function renderLibraryError(text) {
   const message = `无法读取音乐库：${text}`;
-  homeResumeSection.hidden = !state.currentTrack || !state.queue.length;
   renderHomeResumeQueue();
   homeRecentSection.hidden = false;
   homePlaylistSection.hidden = false;
@@ -10846,6 +10896,7 @@ function setProgressDisplay(current, duration) {
   durationTime.textContent = formatSeconds(duration);
   nowPlayingDurationTime.textContent = formatSeconds(duration);
   immersiveDurationTime.textContent = formatSeconds(duration);
+  renderHomeStartProgress();
   progressTrack.setAttribute("aria-label", duration
     ? `播放进度：${formatSeconds(current)} / ${formatSeconds(duration)}`
     : "播放进度");
