@@ -1,11 +1,22 @@
 {
   "name": "emby-music-web",
-  "version": "0.92.94",
+  "version": "0.93.85",
   "private": true,
   "description": "Responsive web music player for Emby music libraries.",
   "scripts": {
+    "serve": "python -m http.server 5173",
+    "bridge": "node ./scripts/source-bridge.js",
     "smoke": "node ./scripts/smoke-check.js",
-    "check:js": "node --check ./app.js && node --check ./src/config.js && node --check ./src/lyrics.js && node --check ./src/emby-api.js && node --check ./src/format.js && node --check ./src/storage.js && node --check ./sw.js",
+    "check:js": "node --check ./app.js && node --check ./src/config.js && node --check ./src/lyrics.js && node --check ./src/emby-api.js && node --check ./src/external-source-api.js && node --check ./src/format.js && node --check ./src/storage.js && node --check ./scripts/source-bridge.js && node --check ./sw.js",
     "check": "npm run smoke && npm run check:js"
+  },
+  "dependencies": {
+    "axios": "^1.17.0",
+    "big-integer": "^1.6.52",
+    "cheerio": "^1.0.0",
+    "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.21",
+    "he": "^1.2.0",
+    "qs": "^6.15.2"
   }
 }

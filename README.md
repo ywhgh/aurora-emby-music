@@ -118,6 +118,43 @@ python -m http.server 5173
 http://localhost:5173
 ```
 
+## 音源桥
+
+登录页有两种连接方式：
+
+- `Emby`：连接 Emby 服务器。
+- `音源桥`：可选入口，默认不用填写。它用于接本地音乐索引服务，或你自己实现的其他音源服务。
+
+本地音乐可以启动内置桥接服务：
+
+```powershell
+npm run bridge -- --music-dir "D:\Music"
+```
+
+然后在登录页切到 `音源桥`，填写：
+
+```text
+http://127.0.0.1:5174
+```
+
+桥接服务会提供：
+
+```text
+GET /health
+GET /tracks?offset=0&limit=100
+GET /search?q=keyword&offset=0&limit=100
+GET /media?id=trackId
+GET /lyric?id=trackId
+```
+
+如果你有类似 `https://13413.kstore.vip/yuanli/yuanli.json` 的音源清单链接，不能直接填到网页里。这个链接是插件清单，不是播放器可直接消费的 HTTP API。可以先让桥接服务读取清单：
+
+```powershell
+npm run bridge -- --manifest-url "https://13413.kstore.vip/yuanli/yuanli.json"
+```
+
+再访问 `http://127.0.0.1:5174/sources` 查看识别结果。桥接服务不会直接执行远程插件 JS；如果要让这类清单可播放，需要在后端实现合法的适配器，把它转换成上面的 `/tracks`、`/search`、`/media` 标准接口。
+
 ## 本地检查
 
 项目不需要安装运行依赖；需要 Node.js 来执行本地检查脚本：

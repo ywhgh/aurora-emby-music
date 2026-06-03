@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.92.94" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.92.94" />
-    <link rel="stylesheet" href="./styles.css?v=0.92.94" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.85" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.85" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.85" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -73,7 +73,12 @@
         <form id="connectForm" class="login-card" action="javascript:void(0)" method="post" onsubmit="return false">
           <div class="form-heading">
             <p class="kicker">服务器登录</p>
-            <h2>登录 Emby</h2>
+            <h2 id="loginTitle">登录 Emby</h2>
+          </div>
+
+          <div class="login-source-mode" role="radiogroup" aria-label="音源模式">
+            <button class="active" type="button" data-login-source-mode="emby" aria-pressed="true">Emby</button>
+            <button type="button" data-login-source-mode="external" aria-pressed="false">音源桥</button>
           </div>
 
           <section id="savedAccountsSection" class="saved-accounts" aria-label="已保存账号" hidden>
@@ -84,7 +89,7 @@
             <div id="savedAccountList" class="saved-account-list"></div>
           </section>
 
-          <label class="field">
+          <label class="field" data-emby-login-field>
             <span>服务器地址</span>
             <input
               id="serverUrl"
@@ -98,12 +103,25 @@
             <small id="serverUrlHint" class="field-hint" hidden></small>
           </label>
 
-          <label class="field">
+          <label id="externalSourceApiField" class="field" hidden>
+            <span>音源桥地址</span>
+            <input
+              id="externalSourceApiUrl"
+              name="externalSourceApiUrl"
+              type="text"
+              inputmode="url"
+              placeholder="可选，例：http://127.0.0.1:5174"
+              autocomplete="url"
+            />
+            <small class="field-hint">默认留空。需要接本地音乐或自定义音源时，填音源桥服务地址。</small>
+          </label>
+
+          <label class="field" data-emby-login-field>
             <span>用户名</span>
             <input id="username" name="username" type="text" autocomplete="username" required />
           </label>
 
-          <label class="field">
+          <label class="field" data-emby-login-field>
             <span>密码</span>
             <input
               id="password"
@@ -114,7 +132,7 @@
             />
           </label>
 
-          <details class="login-device-options">
+          <details class="login-device-options" data-emby-login-field>
             <summary>设备选项</summary>
             <label class="field">
               <span>设备名</span>
@@ -132,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.92.94</span>
+            <span id="loginVersion">v0.93.85</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -326,7 +344,7 @@
                       <path d="M11 8h5"></path>
                       <path d="M11 16h5"></path>
                     </svg>
-                    <span>服务器</span>
+                    <span id="serverNameLabel">服务器</span>
                     <strong id="serverName">-</strong>
                     <small id="currentServer">-</small>
                   </article>
@@ -336,7 +354,7 @@
                       <path d="M8.25 5.25v11.3A3.45 3.45 0 0 0 11.7 20"></path>
                       <path d="M10 9h4.2"></path>
                     </svg>
-                    <span>音乐库</span>
+                    <span id="libraryNameLabel">音乐库</span>
                     <strong id="libraryName">-</strong>
                   </article>
                   <article class="info-card stat-tracks">
@@ -367,7 +385,7 @@
                       <path d="M11 7.5h5"></path>
                       <path d="M11 16.5h5"></path>
                     </svg>
-                    <span>服务器版本</span>
+                    <span id="serverVersionLabel">服务器版本</span>
                     <strong id="serverVersion">-</strong>
                   </article>
                   <article class="info-card stat-user">
@@ -376,7 +394,7 @@
                       <path d="M5.45 19.75a6.55 6.55 0 0 1 13.1 0"></path>
                       <path d="M8.2 19.75h7.6"></path>
                     </svg>
-                    <span>当前用户</span>
+                    <span id="currentUserLabel">当前用户</span>
                     <strong id="currentUser">-</strong>
                   </article>
                   <article class="info-card stat-artists">
@@ -405,52 +423,129 @@
             </section>
 
             <section class="home-start-panel smart-playback-hub" aria-label="智能播放控制中心">
-              <div class="home-start-art" aria-hidden="true">
-                <span class="home-start-vinyl"></span>
-                <div id="homeStartCover" class="home-start-cover cover-a"></div>
-                <span class="home-start-tonearm"></span>
-              </div>
-              <div class="home-start-copy">
-                <p class="kicker">今日开播</p>
-                <h3 id="homeStartTitle">准备播放你的音乐库</h3>
-                <p id="homeStartMeta">随机播放、继续队列或进入沉浸播放。</p>
-                <div class="home-start-stats">
-                  <span id="homeStartLibraryStat">-</span>
-                  <span id="homeStartQueueStat">-</span>
-                  <span id="homeStartQualityStat">-</span>
+              <div class="home-start-media">
+                <button id="homeStartArtButton" class="home-start-art" type="button" aria-label="打开沉浸播放" disabled>
+                  <span class="home-start-vinyl"></span>
+                  <span id="homeStartCover" class="home-start-cover cover-a"></span>
+                  <svg class="home-start-tonearm" viewBox="0 0 104 78" aria-hidden="true" focusable="false">
+                    <circle class="tonearm-base-outer" cx="88" cy="18" r="8.5"></circle>
+                    <circle class="tonearm-base-inner" cx="88" cy="18" r="3.4"></circle>
+                    <g class="tonearm-arm">
+                      <path class="tonearm-shadow" d="M84.5 22 C79 30 73.5 43 69 58"></path>
+                      <path class="tonearm-bar" d="M84.5 22 C79 30 73.5 43 69 58"></path>
+                      <path class="tonearm-highlight" d="M83.5 23 C78.4 31 73.6 43 69 56"></path>
+                      <path class="tonearm-head" d="M64 55.5 L73.5 58.5 L70.5 67 L60.5 63.5 Z"></path>
+                      <path class="tonearm-needle" d="M66.8 64.7 L64.6 71.2"></path>
+                    </g>
+                  </svg>
+                </button>
+                <div class="home-start-copy">
+                  <p class="kicker">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 15V9"></path>
+                      <path d="M9.5 18V6"></path>
+                      <path d="M14 15.5v-7"></path>
+                      <path d="M18.5 13v-2"></path>
+                    </svg>
+                    <span>当前播放</span>
+                  </p>
+                  <h3 id="homeStartTitle">准备播放你的音乐库</h3>
+                  <p id="homeStartMeta">随机播放、继续队列或进入沉浸播放。</p>
                 </div>
               </div>
               <div class="home-start-control">
-                <div class="home-start-control-head">
-                  <span class="home-start-progress-pill" aria-label="播放进度">
+                <div class="home-start-timeline-row">
+                  <button id="homeStartResumeButton" class="home-start-action home-start-resume-button" type="button" disabled aria-label="继续播放">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      <circle cx="12" cy="12" r="8"></circle>
-                      <path class="clock-hand" d="M12 7.5V12l3 2"></path>
+                      <path class="home-start-play-icon" d="M8 5v14l11-7Z"></path>
+                      <path class="home-start-pause-icon" d="M9 5.5v13"></path>
+                      <path class="home-start-pause-icon" d="M15 5.5v13"></path>
                     </svg>
-                    <span id="homeStartProgressText">已听 0:00</span>
+                    <span>继续播放</span>
+                  </button>
+                  <span id="homeStartProgressText" class="home-start-current-time">00:00</span>
+                  <span class="home-start-waveform" aria-hidden="true">
+                    <span class="home-start-energy-line">
+                      <span id="homeStartProgressFill"></span>
+                    </span>
                   </span>
-                  <button id="homeStartResumeButton" class="secondary-mini-button home-start-resume-button" type="button" disabled>
-                    继续队列
-                  </button>
+                  <span id="homeStartTimeText" class="home-start-time">00:00</span>
                 </div>
-                <span class="home-start-energy-line" aria-hidden="true">
-                  <span id="homeStartProgressFill"></span>
-                </span>
-                <div id="homeStartNext" class="home-start-next" aria-label="下一首预告">
-                  <span>下一首</span>
+                <div class="home-start-bottom-row">
+                  <div class="home-start-stats">
+                    <span class="home-start-library-pill">
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 5.25h8.75a3.25 3.25 0 0 1 3.25 3.25V20H8.25A3.25 3.25 0 0 1 5 16.75V5.25Z"></path>
+                        <path d="M8.25 5.25v11.3A3.45 3.45 0 0 0 11.7 20"></path>
+                        <path d="M10 9h4.2"></path>
+                      </svg>
+                      <span id="homeStartLibraryStat">-</span>
+                    </span>
+                    <span class="home-start-queue-pill">
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 7h11"></path>
+                        <path d="M5 12h14"></path>
+                        <path d="M5 17h9"></path>
+                      </svg>
+                      <span id="homeStartQueueStat">-</span>
+                    </span>
+                    <span class="home-start-quality-pill">
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 17V7"></path>
+                        <path d="M10 15V9"></path>
+                        <path d="M14 19V5"></path>
+                        <path d="M18 13v-2"></path>
+                      </svg>
+                      <span id="homeStartQualityStat">-</span>
+                    </span>
+                  </div>
+                  <div class="home-start-actions">
+                    <button id="homeStartShuffleButton" class="home-start-action secondary" type="button" disabled>
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M16 3h5v5"></path>
+                        <path d="M4 20 21 3"></path>
+                        <path d="M21 16v5h-5"></path>
+                        <path d="M15 15l6 6"></path>
+                        <path d="M4 4l5 5"></path>
+                      </svg>
+                      <span>随机播放</span>
+                    </button>
+                    <button id="homeStartQueueButton" class="home-start-action secondary" type="button" disabled>
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M17 2.8 21 7l-4 4.2"></path>
+                        <path d="M3 11V9a2 2 0 0 1 2-2h16"></path>
+                        <path d="M7 21.2 3 17l4-4.2"></path>
+                        <path d="M21 13v2a2 2 0 0 1-2 2H3"></path>
+                      </svg>
+                      <span>打开队列</span>
+                    </button>
+                    <button id="homeStartImmersiveButton" class="home-start-action secondary" type="button" disabled>
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="4" y="5" width="16" height="14" rx="3"></rect>
+                        <path d="M8 9h8"></path>
+                        <path d="M8 15h5"></path>
+                      </svg>
+                      <span>沉浸播放</span>
+                    </button>
+                  </div>
+                </div>
+                <span id="homeStartNext" class="home-start-next" aria-label="下一首预告" hidden>
+                  <span>下一首:</span>
                   <strong id="homeStartNextTitle" data-text="暂无待播">暂无待播</strong>
-                </div>
-                <div class="home-start-actions">
-                  <button id="homeStartShuffleButton" class="text-button" type="button" disabled>
-                    随机
-                  </button>
-                  <button id="homeStartImmersiveButton" class="text-button" type="button" disabled>
-                    沉浸
-                  </button>
-                  <button id="homeStartQualityButton" class="text-button" type="button">
-                    音质
-                  </button>
-                </div>
+                </span>
+                <button id="homeStartFavoriteButton" class="favorite-button icon-favorite-button home-start-icon-button" type="button" disabled aria-label="收藏" hidden>
+                  <svg class="line-icon favorite-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 20.5s-7.5-4.7-9.2-9.2C1.6 8.2 3.45 5.5 6.25 5.5c1.62 0 2.86.78 3.68 1.92A4.35 4.35 0 0 1 13.75 5.5c2.8 0 4.65 2.7 3.45 5.8C16.5 15.9 12 20.5 12 20.5Z"></path>
+                  </svg>
+                  <span class="sr-only">收藏</span>
+                </button>
+                <button id="homeStartMoreButton" class="home-start-icon-button" type="button" disabled aria-label="更多播放操作" hidden>
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="5" cy="12" r="1.25"></circle>
+                    <circle cx="12" cy="12" r="1.25"></circle>
+                    <circle cx="19" cy="12" r="1.25"></circle>
+                  </svg>
+                </button>
               </div>
             </section>
 
@@ -517,71 +612,144 @@
                 <p class="kicker">音乐库</p>
                 <h2>我的音乐</h2>
               </div>
-              <div class="heading-actions">
-                <span id="libraryMeta">-</span>
-                <button id="playLibraryButton" class="text-button" type="button" disabled>
+              <div class="heading-actions library-filter-toolbar">
+                <span id="libraryMeta" class="library-filter-meta">-</span>
+                <button id="playLibraryButton" class="library-toolbar-legacy-action" type="button" disabled>
                   播放全部
                 </button>
-                <button id="queueLibraryButton" class="text-button" type="button" disabled>
+                <button id="queueLibraryButton" class="library-toolbar-legacy-action" type="button" disabled>
                   加入队列
                 </button>
-                <label class="select-pill">
-                  <span>音乐库</span>
-                  <select id="libraryViewSelect" disabled>
-                    <option value="">全部音乐</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>排序</span>
-                  <select id="sortSelect">
-                    <option value="recent">最近添加</option>
-                    <option value="title">歌曲名</option>
-                    <option value="artist">艺人</option>
-                    <option value="album">专辑</option>
-                    <option value="duration">时长</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>方向</span>
-                  <select id="sortOrderSelect">
-                    <option value="default">默认</option>
-                    <option value="asc">升序</option>
-                    <option value="desc">降序</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>风格</span>
-                  <select id="genreSelect" disabled>
-                    <option value="">全部</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>年份</span>
-                  <select id="yearSelect" disabled>
-                    <option value="">全部</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>音质</span>
-                  <select id="qualitySelect" disabled>
-                    <option value="">全部</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>收藏</span>
-                  <select id="favoriteFilterSelect">
-                    <option value="">全部</option>
-                    <option value="favorite">已收藏</option>
-                    <option value="unfavorite">未收藏</option>
-                  </select>
-                </label>
-                <label class="select-pill">
-                  <span>密度</span>
-                  <select id="trackDensitySelect">
-                    <option value="comfortable">舒适</option>
-                    <option value="compact">紧凑</option>
-                  </select>
-                </label>
+                <div class="library-filter-controls">
+                  <div class="select-pill library-core-select" data-enhanced-select>
+                    <select id="libraryViewSelect" disabled aria-label="音乐库">
+                      <option value="">全部音乐</option>
+                    </select>
+                    <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                      <span class="select-prefix">音乐库：</span>
+                      <span class="select-value" data-select-value>全部音乐</span>
+                      <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m7 10 5 5 5-5"></path>
+                      </svg>
+                    </button>
+                    <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                  </div>
+                  <div class="select-pill library-core-select" data-enhanced-select>
+                    <select id="sortSelect" aria-label="排序">
+                      <option value="recent">最近添加</option>
+                      <option value="title">歌曲名</option>
+                      <option value="artist">艺人</option>
+                      <option value="album">专辑</option>
+                      <option value="duration">时长</option>
+                    </select>
+                    <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                      <span class="select-prefix">排序：</span>
+                      <span class="select-value" data-select-value>最近添加</span>
+                      <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m7 10 5 5 5-5"></path>
+                      </svg>
+                    </button>
+                    <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                  </div>
+                  <details class="advanced-filter-menu">
+                    <summary class="advanced-filter-toggle" aria-label="展开高级筛选">
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7h10"></path>
+                        <path d="M18 7h2"></path>
+                        <circle cx="16" cy="7" r="2"></circle>
+                        <path d="M4 17h3"></path>
+                        <path d="M11 17h9"></path>
+                        <circle cx="9" cy="17" r="2"></circle>
+                      </svg>
+                      <span>高级筛选</span>
+                    </summary>
+                    <div class="advanced-filter-panel">
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="sortOrderSelect" aria-label="排序方向">
+                          <option value="default">默认</option>
+                          <option value="asc">升序</option>
+                          <option value="desc">降序</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">方向：</span>
+                          <span class="select-value" data-select-value>默认</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="genreSelect" disabled aria-label="风格">
+                          <option value="">全部</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">风格：</span>
+                          <span class="select-value" data-select-value>全部</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="yearSelect" disabled aria-label="年份">
+                          <option value="">全部</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">年份：</span>
+                          <span class="select-value" data-select-value>全部</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="qualitySelect" disabled aria-label="音质">
+                          <option value="">全部</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">音质：</span>
+                          <span class="select-value" data-select-value>全部</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="favoriteFilterSelect" aria-label="收藏">
+                          <option value="">全部</option>
+                          <option value="favorite">已收藏</option>
+                          <option value="unfavorite">未收藏</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">收藏：</span>
+                          <span class="select-value" data-select-value>全部</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                      <div class="select-pill" data-enhanced-select>
+                        <select id="trackDensitySelect" aria-label="列表密度">
+                          <option value="comfortable">舒适</option>
+                          <option value="compact">紧凑</option>
+                        </select>
+                        <button class="enhanced-select-trigger" type="button" data-select-trigger aria-haspopup="listbox" aria-expanded="false">
+                          <span class="select-prefix">密度：</span>
+                          <span class="select-value" data-select-value>舒适</span>
+                          <svg class="line-icon select-chevron" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="m7 10 5 5 5-5"></path>
+                          </svg>
+                        </button>
+                        <div class="enhanced-select-menu" data-select-menu role="listbox"></div>
+                      </div>
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
             <div id="filterBar" class="filter-bar" hidden>
@@ -600,7 +768,7 @@
                 <div>
                   <p class="kicker">快速筛选</p>
                   <strong id="libraryQuickTitle">全部歌曲</strong>
-                  <span id="libraryQuickMeta">-</span>
+                  <span id="libraryQuickMeta" class="library-quick-meta" hidden>-</span>
                 </div>
               </div>
               <div class="library-quick-chips" role="group" aria-label="快捷筛选">
@@ -613,15 +781,25 @@
                 <button id="quickRecentButton" class="quick-filter-chip" type="button" data-tone="orange" aria-pressed="false">
                   最近添加
                 </button>
-                <button id="quickCompactButton" class="quick-filter-chip" type="button" data-tone="blue" aria-pressed="false">
+                <button id="quickCompactButton" class="quick-filter-chip" type="button" data-tone="neutral" aria-pressed="false">
                   紧凑
                 </button>
               </div>
               <div class="library-quick-actions">
                 <button id="quickPlayFilteredButton" class="primary-mini-button" type="button" disabled>
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 5v14l11-7Z"></path>
+                  </svg>
                   播放当前结果
                 </button>
                 <button id="quickQueueFilteredButton" class="secondary-mini-button" type="button" disabled>
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 6h10"></path>
+                    <path d="M4 12h8"></path>
+                    <path d="M4 18h7"></path>
+                    <path d="M17 14v6"></path>
+                    <path d="M14 17h6"></path>
+                  </svg>
                   加入队列
                 </button>
               </div>
@@ -630,6 +808,66 @@
             <button id="loadMoreTracksButton" class="load-more-button" type="button" hidden>
               加载更多歌曲
             </button>
+          </section>
+
+          <section id="searchPanel" class="view-panel search-results-panel" data-panel="search">
+            <div class="page-heading search-results-heading">
+              <div>
+                <p class="kicker">搜索</p>
+                <h2 id="searchResultTitle">搜索结果</h2>
+                <span id="searchResultMeta" class="search-result-meta">输入关键词后按 Enter 查看全部结果</span>
+              </div>
+              <div class="search-result-actions">
+                <button id="playSearchResultsButton" class="primary-mini-button" type="button" disabled>
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 5v14l11-7Z"></path>
+                  </svg>
+                  播放结果
+                </button>
+                <button id="queueSearchResultsButton" class="secondary-mini-button" type="button" disabled>
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 6h10"></path>
+                    <path d="M4 12h8"></path>
+                    <path d="M4 18h7"></path>
+                    <path d="M17 14v6"></path>
+                    <path d="M14 17h6"></path>
+                  </svg>
+                  加入队列
+                </button>
+              </div>
+            </div>
+            <div class="search-source-toolbar" aria-label="搜索来源筛选">
+              <span class="search-source-label">来源</span>
+              <div id="searchSourceFilters" class="search-source-filters" role="list"></div>
+            </div>
+            <div id="searchTrackList" class="track-list large search-track-list" aria-live="polite"></div>
+            <section id="searchAlbumSection" class="search-collection-section" aria-label="搜索到的专辑" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="kicker">专辑</p>
+                  <h3>匹配专辑</h3>
+                </div>
+              </div>
+              <div id="searchAlbumGrid" class="album-grid compact search-collection-grid" aria-live="polite"></div>
+            </section>
+            <section id="searchArtistSection" class="search-collection-section" aria-label="搜索到的艺人" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="kicker">艺人</p>
+                  <h3>匹配艺人</h3>
+                </div>
+              </div>
+              <div id="searchArtistGrid" class="artist-grid compact search-collection-grid" aria-live="polite"></div>
+            </section>
+            <section id="searchPlaylistSection" class="search-collection-section" aria-label="搜索到的歌单" hidden>
+              <div class="section-heading">
+                <div>
+                  <p class="kicker">歌单</p>
+                  <h3>匹配歌单</h3>
+                </div>
+              </div>
+              <div id="searchPlaylistGrid" class="playlist-grid compact search-collection-grid" aria-live="polite"></div>
+            </section>
           </section>
 
           <section id="albumsPanel" class="view-panel" data-panel="albums">
@@ -1282,6 +1520,10 @@
                 <p class="kicker">连接</p>
                 <dl>
                   <div>
+                    <dt>模式</dt>
+                    <dd id="settingsSourceMode">-</dd>
+                  </div>
+                  <div>
                     <dt>服务器</dt>
                     <dd id="settingsServerName">-</dd>
                   </div>
@@ -1411,6 +1653,30 @@
                     </dd>
                   </div>
                   <div>
+                    <dt>歌曲预加载</dt>
+                    <dd>
+                      <label class="settings-toggle">
+                        <input id="playbackPreloadToggle" type="checkbox" />
+                        <span aria-hidden="true"></span>
+                        <strong>预热下一首</strong>
+                      </label>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>无损下载</dt>
+                    <dd>
+                      <label class="settings-toggle">
+                        <input id="playbackLosslessPrecacheToggle" type="checkbox" />
+                        <span aria-hidden="true"></span>
+                        <strong>允许预缓存无损</strong>
+                      </label>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>预加载状态</dt>
+                    <dd id="settingsPlaybackPreload">-</dd>
+                  </div>
+                  <div>
                     <dt>剩余时间</dt>
                     <dd id="settingsSleepTimer">关闭</dd>
                   </div>
@@ -1454,7 +1720,7 @@
                   </div>
                   <div>
                     <dt>缓存策略</dt>
-                    <dd>仅应用外壳</dd>
+                    <dd>应用外壳 + 播放预热</dd>
                   </div>
                 </dl>
               </article>
@@ -1474,6 +1740,7 @@
                 <button id="settingsClearQueueButton" class="text-button" type="button">清空播放队列</button>
                 <button id="settingsResetPreferencesButton" class="text-button" type="button">重置播放器偏好</button>
                 <button id="settingsClearCacheButton" class="text-button" type="button">清除应用缓存</button>
+                <button id="settingsClearPlaybackCacheButton" class="text-button" type="button">清除歌曲缓存</button>
                 <button id="settingsCopyDiagnosticsButton" class="text-button" type="button">复制诊断信息</button>
               </div>
             </section>
@@ -1594,24 +1861,136 @@
           </div>
           <div id="audioQualityModal" class="modal-backdrop" hidden>
             <section class="modal-card audio-quality-card" role="dialog" aria-modal="true" aria-labelledby="audioQualityTitle">
-              <div class="modal-heading">
-                <div>
-                  <p class="kicker">在线播放</p>
+              <div class="audio-quality-modal-heading">
+                <div class="audio-quality-title-stack">
                   <h3 id="audioQualityTitle">选择音质</h3>
+                  <p id="audioQualitySubtitle" class="modal-subtitle">选择后会影响下一次加载的播放地址。</p>
+                  <div id="audioQualityCurrent" class="audio-quality-current" aria-live="polite"></div>
                 </div>
-                <button id="audioQualityClose" class="icon-button close-icon-button" type="button" aria-label="关闭音质选择">
+                <button id="audioQualityClose" class="audio-quality-close-button" type="button" aria-label="关闭音质选择">
                   <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 6l12 12"></path>
                     <path d="M18 6 6 18"></path>
                   </svg>
                 </button>
               </div>
-              <p id="audioQualitySubtitle" class="modal-subtitle">选择后会影响下一次加载的播放地址。</p>
-              <div id="audioQualityCurrent" class="audio-quality-current" aria-live="polite"></div>
               <div id="audioQualityMethodSummary" class="audio-quality-method-summary" aria-label="转码方式对比"></div>
               <div id="audioQualityList" class="audio-quality-list" aria-label="音质档位"></div>
               <div class="audio-quality-actions">
-                <button id="audioQualityTestButton" class="text-button" type="button">测试当前链路</button>
+                <button id="audioQualityTestButton" class="audio-quality-test-button" type="button">
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 12h2.4l1.8-4 3.6 8 2.4-5 1.2 1H20"></path>
+                  </svg>
+                  <span>测试当前链路</span>
+                </button>
+              </div>
+            </section>
+          </div>
+          <div id="sourceBridgeModal" class="modal-backdrop" hidden>
+            <section class="modal-card source-bridge-modal-card" role="dialog" aria-modal="true" aria-labelledby="sourceBridgeModalTitle" aria-describedby="sourceBridgeModalHint">
+              <div class="source-bridge-modal-heading">
+                <div>
+                  <p class="source-bridge-kicker">音乐桥</p>
+                  <h3 id="sourceBridgeModalTitle">来源管理</h3>
+                  <p id="sourceBridgeModalHint">配置本地桥接服务、音乐目录和你自己的音源清单。</p>
+                </div>
+                <div class="source-bridge-heading-actions">
+                  <strong id="sourceBridgeModalStatus" class="source-bridge-status-badge">
+                    <i aria-hidden="true"></i>
+                    <span>未配置</span>
+                  </strong>
+                  <button id="sourceBridgeModalClose" class="source-bridge-close-button" type="button" aria-label="关闭音乐桥来源管理">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M6 6l12 12"></path>
+                      <path d="M18 6 6 18"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="source-bridge-form-stack">
+                <label class="source-bridge-field form-row" data-source-bridge-field="api">
+                  <span class="source-bridge-label">
+                    音乐桥服务地址
+                    <button class="source-bridge-help-dot" type="button" aria-label="音乐桥服务地址说明">
+                      ?
+                      <em role="tooltip">填写桥接服务根地址，例如 http://127.0.0.1:5174。不要填写 .json 清单。</em>
+                    </button>
+                  </span>
+                  <span class="source-bridge-input-shell">
+                    <input id="sourceBridgeApiUrl" type="text" inputmode="url" placeholder="http://127.0.0.1:5174" autocomplete="url" data-source-bridge-url="api" />
+                  </span>
+                  <small>本地音乐扫描或自定义音源服务启动后，把服务地址填在这里。</small>
+                  <small id="sourceBridgeApiUrlWarning" class="source-bridge-warning" hidden>链接需要以 http:// 或 https:// 开头。</small>
+                </label>
+                <label class="source-bridge-field form-row" data-source-bridge-field="music-dir">
+                  <span class="source-bridge-label">
+                    本地音乐目录
+                    <button class="source-bridge-help-dot" type="button" aria-label="本地音乐目录说明">
+                      ?
+                      <em role="tooltip">填写本机绝对路径。浏览器通常不能读取真实路径，手动粘贴最稳定。</em>
+                    </button>
+                  </span>
+                  <span class="source-bridge-input-shell source-bridge-drop-zone">
+                    <input id="sourceBridgeMusicDir" type="text" placeholder="D:\Music" autocomplete="off" />
+                    <button id="sourceBridgeFolderButton" class="source-bridge-input-icon" type="button" aria-label="选择或拖拽本地音乐目录">
+                      <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H10l2 2h5.5A2.5 2.5 0 0 1 20 9.5v6A2.5 2.5 0 0 1 17.5 18h-11A2.5 2.5 0 0 1 4 15.5Z"></path>
+                      </svg>
+                    </button>
+                  </span>
+                  <small>仅本地音乐桥支持。保存后桥接服务会重新扫描。</small>
+                  <small id="sourceBridgeMusicDirWarning" class="source-bridge-warning" hidden>浏览器没有暴露绝对路径，请手动粘贴目录。</small>
+                </label>
+                <label class="source-bridge-field form-row" data-source-bridge-field="manifest">
+                  <span class="source-bridge-label">
+                    音源清单链接
+                    <button class="source-bridge-help-dot" type="button" aria-label="音源清单链接说明">
+                      ?
+                      <em role="tooltip">保存你自己的 .json 清单。清单需要后端桥接服务适配后才能播放。</em>
+                    </button>
+                  </span>
+                  <span class="source-bridge-input-shell">
+                    <input id="sourceBridgeManifestUrl" type="password" inputmode="url" placeholder="https://example.com/source.json" autocomplete="url" data-source-bridge-url="manifest" />
+                    <button id="sourceBridgeManifestMaskButton" class="source-bridge-input-icon" type="button" aria-label="显示音源清单链接" aria-pressed="false">
+                      <svg class="line-icon source-bridge-eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M3.5 12s3.2-5.5 8.5-5.5S20.5 12 20.5 12 17.3 17.5 12 17.5 3.5 12 3.5 12Z"></path>
+                        <circle cx="12" cy="12" r="2.3"></circle>
+                      </svg>
+                      <svg class="line-icon source-bridge-eye-closed" viewBox="0 0 24 24" aria-hidden="true" hidden>
+                        <path d="m4 4 16 16"></path>
+                        <path d="M8.6 8.1A8.8 8.8 0 0 0 3.5 12S6.7 17.5 12 17.5c1.5 0 2.8-.42 4-1.05"></path>
+                        <path d="M14.4 14.1A2.3 2.3 0 0 1 9.9 9.6"></path>
+                        <path d="M12 6.5c5.3 0 8.5 5.5 8.5 5.5a15.1 15.1 0 0 1-2.2 2.75"></path>
+                      </svg>
+                    </button>
+                  </span>
+                  <small>用于保存你自己的清单链接。清单需要后端适配后才能播放。</small>
+                  <small id="sourceBridgeManifestUrlWarning" class="source-bridge-warning" hidden>链接需要以 http:// 或 https:// 开头。</small>
+                </label>
+              </div>
+              <div class="source-bridge-command-card">
+                <div>
+                  <span>本地扫描命令</span>
+                  <code id="sourceBridgeCommandText">npm run bridge -- --music-dir "D:\Music"</code>
+                </div>
+                <button id="sourceBridgeCopyCommandButton" class="source-bridge-copy-button" type="button" aria-label="复制本地扫描命令">
+                  <svg class="line-icon source-bridge-copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+                    <path d="M5 15.5V6.5A1.5 1.5 0 0 1 6.5 5h9"></path>
+                  </svg>
+                  <svg class="line-icon source-bridge-check-icon" viewBox="0 0 24 24" aria-hidden="true" hidden>
+                    <path d="m5 12.5 4.2 4.2L19 7"></path>
+                  </svg>
+                  <span id="sourceBridgeCopyToast" role="status">已复制</span>
+                </button>
+              </div>
+              <div class="modal-actions source-bridge-actions">
+                <button id="sourceBridgeTestButton" class="source-bridge-action secondary" type="button">
+                  <span class="source-bridge-spinner" aria-hidden="true"></span>
+                  <span data-source-bridge-button-label>测试音乐桥</span>
+                </button>
+                <button id="sourceBridgeRefreshButton" class="source-bridge-action secondary" type="button">刷新音乐库</button>
+                <button id="sourceBridgeSaveButton" class="source-bridge-action primary" type="button">保存来源</button>
               </div>
             </section>
           </div>
@@ -1644,21 +2023,22 @@
           <div id="accountMenu" class="account-menu-backdrop" hidden>
             <section class="account-menu-card" role="dialog" aria-modal="true" aria-labelledby="accountMenuTitle">
               <div class="account-menu-heading">
-                <span id="accountMenuAvatar">
-                  <svg class="line-icon icon-user" viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="8" r="4"></circle>
-                    <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
-                  </svg>
-                </span>
-                <div>
-                  <p class="kicker">账号</p>
-                  <h3 id="accountMenuTitle">未连接</h3>
-                  <p id="accountMenuServer">-</p>
+                <div class="account-menu-profile">
+                  <span id="accountMenuAvatar">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="8" r="4"></circle>
+                      <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
+                    </svg>
+                  </span>
+                  <div>
+                    <h3 id="accountMenuTitle">未连接</h3>
+                    <p id="accountMenuServer">-</p>
+                  </div>
                 </div>
-              </div>
-              <div id="connectionBadge" class="status-badge idle">
-                <span></span>
-                <strong>未连接</strong>
+                <div id="connectionBadge" class="status-badge idle">
+                  <span></span>
+                  <strong>未连接</strong>
+                </div>
               </div>
               <section id="accountMenuSavedSection" class="account-menu-saved" aria-label="已保存账号" hidden>
                 <div class="account-menu-section-heading">
@@ -1669,8 +2049,8 @@
               </section>
               <div class="account-menu-actions">
                 <button id="refreshButton" class="action-sheet-item" type="button">
-                  <span class="action-sheet-icon" aria-hidden="true">
-                    <svg class="line-icon icon-refresh" viewBox="0 0 24 24">
+                  <span class="action-sheet-icon icon-refresh" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
                       <path d="M20 11a8 8 0 0 0-14.2-4.9L4 8"></path>
                       <path d="M4 4v4h4"></path>
                       <path d="M4 13a8 8 0 0 0 14.2 4.9L20 16"></path>
@@ -1679,18 +2059,43 @@
                   </span>
                   <span>刷新音乐库</span>
                 </button>
+                <button id="appRefreshButton" class="action-sheet-item" type="button">
+                  <span class="action-sheet-icon icon-app-refresh" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
+                      <rect x="4" y="5" width="16" height="14" rx="2.4"></rect>
+                      <path d="M8 9h6"></path>
+                      <path d="M16.5 11.5a4.5 4.5 0 0 0-8-.9L7 12"></path>
+                      <path d="M7 8v4h4"></path>
+                      <path d="M7.5 14.5a4.5 4.5 0 0 0 8 .9L17 14"></path>
+                      <path d="M17 18v-4h-4"></path>
+                    </svg>
+                  </span>
+                  <span>刷新应用</span>
+                </button>
                 <button id="accountSettingsButton" class="action-sheet-item" type="button">
-                  <span class="action-sheet-icon" aria-hidden="true">
-                    <svg class="line-icon icon-settings" viewBox="0 0 24 24">
+                  <span class="action-sheet-icon icon-settings" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
                       <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"></path>
                       <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.06.06a2.05 2.05 0 0 1-2.9 2.9l-.06-.06a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21.3a2.05 2.05 0 0 1-4.1 0v-.12a1.8 1.8 0 0 0-1.08-1.65 1.8 1.8 0 0 0-1.98.36l-.06.06a2.05 2.05 0 0 1-2.9-2.9l.06-.06A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.08H2.8a2.05 2.05 0 0 1 0-4.1h.15A1.8 1.8 0 0 0 4.6 8.74a1.8 1.8 0 0 0-.36-1.98l-.06-.06a2.05 2.05 0 0 1 2.9-2.9l.06.06a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 10.2 2.57V2.45a2.05 2.05 0 0 1 4.1 0v.12a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.06-.06a2.05 2.05 0 0 1 2.9 2.9l-.06.06a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.08h.15a2.05 2.05 0 0 1 0 4.1h-.15A1.8 1.8 0 0 0 19.4 15Z"></path>
                     </svg>
                   </span>
                   <span>应用设置</span>
                 </button>
+                <button id="accountSourceBridgeButton" class="action-sheet-item" type="button" hidden>
+                  <span class="action-sheet-icon icon-source-bridge" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
+                      <path d="M5 7.2h14"></path>
+                      <path d="M5 12h14"></path>
+                      <path d="M5 16.8h8"></path>
+                      <path d="M17 15.4v4.2"></path>
+                      <path d="M14.9 17.5h4.2"></path>
+                    </svg>
+                  </span>
+                  <span>音乐桥来源</span>
+                </button>
                 <button id="accountTestConnectionButton" class="action-sheet-item" type="button">
-                  <span class="action-sheet-icon" aria-hidden="true">
-                    <svg class="line-icon icon-server" viewBox="0 0 24 24">
+                  <span class="action-sheet-icon icon-server" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
                       <rect x="4" y="4" width="16" height="6" rx="2"></rect>
                       <rect x="4" y="14" width="16" height="6" rx="2"></rect>
                       <path d="M8 7h.01"></path>
@@ -1702,8 +2107,8 @@
                   <span>测试当前连接</span>
                 </button>
                 <button id="accountSwitchButton" class="action-sheet-item" type="button">
-                  <span class="action-sheet-icon" aria-hidden="true">
-                    <svg class="line-icon icon-user" viewBox="0 0 24 24">
+                  <span class="action-sheet-icon icon-user" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
                       <circle cx="12" cy="8" r="4"></circle>
                       <path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path>
                       <path d="M19 5v4h-4"></path>
@@ -1712,8 +2117,8 @@
                   <span>添加 / 管理账号</span>
                 </button>
                 <button id="clearSessionButton" class="action-sheet-item danger" type="button">
-                  <span class="action-sheet-icon" aria-hidden="true">
-                    <svg class="line-icon icon-logout" viewBox="0 0 24 24">
+                  <span class="action-sheet-icon icon-logout" aria-hidden="true">
+                    <svg class="line-icon" viewBox="0 0 24 24">
                       <path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"></path>
                       <path d="M16 17l5-5-5-5"></path>
                       <path d="M21 12H9"></path>
@@ -1729,6 +2134,7 @@
       </div>
 
       <footer class="playerbar" aria-label="播放器">
+        <span id="playerbarSweepLayer" class="playerbar-sweep-layer" aria-hidden="true"></span>
         <button id="playerMetaButton" class="track-meta" type="button" disabled>
           <div id="playerCover" class="mini-cover"></div>
           <div class="track-meta-copy">
@@ -1877,6 +2283,13 @@
             </svg>
           </button>
 
+          <button id="floatingVideoRestoreButton" class="player-icon-button video-restore-button" type="button" aria-label="显示视频窗口" hidden>
+            <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="6" width="16" height="12" rx="2.5"></rect>
+              <path d="m10 10 4 2-4 2v-4Z"></path>
+            </svg>
+          </button>
+
           <button id="queueButton" class="queue-button" type="button" aria-controls="quickQueuePopover" aria-expanded="false" disabled>
             <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M5 6h14"></path>
@@ -1908,8 +2321,8 @@
           <strong id="playerNextTitle">暂无待播</strong>
         </button>
 
-        <audio id="audioPlayer"></audio>
       </footer>
+      <video id="audioPlayer" class="media-player-element" playsinline preload="metadata" controls></video>
       <nav class="mobile-bottom-nav" aria-label="底部导航">
         <button class="mobile-nav-item active" type="button" data-view="home" aria-current="page">
           <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1965,7 +2378,7 @@
 
     <script>
       (() => {
-        const version = "0.92.94";
+        const version = "0.93.85";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2238,6 +2651,7 @@
             `Recommended action: ${getFallbackDiagnosticsGuidance()}`,
             `Fallback ready: yes`,
             `Main app ready: ${window.EmbyMusicAppReady ? "yes" : "no"}`,
+            `Main app error: ${window.EmbyMusicAppError || "-"}`,
             `Server input: ${serverUrlInput?.value || "-"}`,
             `Browser network: ${navigator.onLine === false ? "offline" : "online"}`,
             `Service Worker: ${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "controlled" : "supported") : "unsupported"}`,
@@ -2342,12 +2756,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" defer></script>
-    <script src="./src/config.js?v=0.92.94" defer></script>
-    <script src="./src/format.js?v=0.92.94" defer></script>
-    <script src="./src/lyrics.js?v=0.92.94" defer></script>
-    <script src="./src/emby-api.js?v=0.92.94" defer></script>
-    <script src="./src/storage.js?v=0.92.94" defer></script>
-    <script src="./app.js?v=0.92.94" defer></script>
+    <script src="./src/config.js?v=0.93.85" defer></script>
+    <script src="./src/format.js?v=0.93.85" defer></script>
+    <script src="./src/lyrics.js?v=0.93.85" defer></script>
+    <script src="./src/emby-api.js?v=0.93.85" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.85" defer></script>
+    <script src="./src/storage.js?v=0.93.85" defer></script>
+    <script src="./app.js?v=0.93.85" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>

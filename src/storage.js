@@ -12,6 +12,8 @@ function createEmbyMusicStorage({
   audioQualityProfiles,
   playerMetaTargetKey,
   playerMetaTargets,
+  playbackPreloadKey,
+  playbackLosslessPrecacheKey,
   playbackStreamKey,
   playbackStreamPolicies,
   playModeKey,
@@ -31,6 +33,8 @@ function createEmbyMusicStorage({
 }) {
   const DEVICE_NAME_KEY = "emby-music-web/device-name";
   const ACCOUNT_PROFILES_KEY = accountProfilesKey || "emby-music-web/account-profiles";
+  const PLAYBACK_PRELOAD_KEY = playbackPreloadKey || "emby-music-web/playback-preload";
+  const PLAYBACK_LOSSLESS_PRECACHE_KEY = playbackLosslessPrecacheKey || "emby-music-web/playback-lossless-precache";
   const ACCOUNT_PROFILES_LIMIT = 12;
 
   function saveSession(session) {
@@ -124,16 +128,21 @@ function createEmbyMusicStorage({
   }
 
   function normalizeAccountProfileSession(session) {
-    if (!session?.serverUrl || !session?.userId || !session?.accessToken) {
+    const isExternal = session?.sourceMode === "external";
+    const serverUrl = session?.serverUrl || (isExternal ? "source-bridge://unconfigured" : "");
+
+    if (!serverUrl || !session?.userId || (!session?.accessToken && !isExternal)) {
       return null;
     }
 
     return {
-      serverUrl: String(session.serverUrl),
+      sourceMode: session.sourceMode || "emby",
+      serverUrl: String(serverUrl),
+      externalSourceApiUrl: session.externalSourceApiUrl || "",
       serverId: session.serverId || "",
       serverName: session.serverName || "",
       version: session.version || "-",
-      accessToken: session.accessToken,
+      accessToken: session.accessToken || "",
       userId: session.userId,
       userName: session.userName || "",
       deviceId: session.deviceId || "",
@@ -143,11 +152,14 @@ function createEmbyMusicStorage({
   }
 
   function getAccountProfileKey(session) {
-    if (!session?.serverUrl || !session?.userId) {
+    const isExternal = session?.sourceMode === "external";
+    const serverUrl = session?.serverUrl || (isExternal ? "source-bridge://unconfigured" : "");
+
+    if (!serverUrl || !session?.userId) {
       return "";
     }
 
-    return `${String(session.serverUrl).replace(/\/+$/, "").toLowerCase()}::${session.userId}`;
+    return `${String(serverUrl).replace(/\/+$/, "").toLowerCase()}::${session.userId}`;
   }
 
   function compareProfileDate(left, right) {
@@ -369,11 +381,13 @@ function createEmbyMusicStorage({
   }
 
   function isSameSession(saved, session) {
-    if (!session?.userId || !session?.serverUrl) {
+    const sessionServerUrl = session?.serverUrl || (session?.sourceMode === "external" ? "source-bridge://unconfigured" : "");
+
+    if (!session?.userId || !sessionServerUrl) {
       return false;
     }
 
-    return saved.userId === session.userId && saved.serverUrl === session.serverUrl;
+    return saved.userId === session.userId && saved.serverUrl === sessionServerUrl;
   }
 
   function getScopedSessionKey(baseKey, session) {
@@ -470,6 +484,31 @@ function createEmbyMusicStorage({
     localStorage.removeItem(audioQualityProfileKey);
   }
 
+  function loadPlaybackPreloadEnabled() {
+    const saved = localStorage.getItem(PLAYBACK_PRELOAD_KEY);
+    return saved === null ? true : saved === "true";
+  }
+
+  function savePlaybackPreloadEnabled(isEnabled) {
+    localStorage.setItem(PLAYBACK_PRELOAD_KEY, isEnabled ? "true" : "false");
+  }
+
+  function clearPlaybackPreloadEnabled() {
+    localStorage.removeItem(PLAYBACK_PRELOAD_KEY);
+  }
+
+  function loadPlaybackLosslessPrecacheEnabled() {
+    return localStorage.getItem(PLAYBACK_LOSSLESS_PRECACHE_KEY) === "true";
+  }
+
+  function savePlaybackLosslessPrecacheEnabled(isEnabled) {
+    localStorage.setItem(PLAYBACK_LOSSLESS_PRECACHE_KEY, isEnabled ? "true" : "false");
+  }
+
+  function clearPlaybackLosslessPrecacheEnabled() {
+    localStorage.removeItem(PLAYBACK_LOSSLESS_PRECACHE_KEY);
+  }
+
   function loadTrackDensity() {
     const savedDensity = localStorage.getItem(trackDensityKey);
     return trackDensities.includes(savedDensity) ? savedDensity : "comfortable";
@@ -546,7 +585,9 @@ function createEmbyMusicStorage({
     getAccountProfileKey,
     clearAudioQualityProfile,
     clearFilterState,
+    clearPlaybackLosslessPrecacheEnabled,
     clearPlaybackStreamPolicy,
+    clearPlaybackPreloadEnabled,
     clearPlayerMetaTarget,
     clearLibraryViewId,
     clearPlayMode,
@@ -564,7 +605,9 @@ function createEmbyMusicStorage({
     loadAudioQualityProfile,
     loadFilterState,
     loadLibraryViewId,
+    loadPlaybackLosslessPrecacheEnabled,
     loadPlaybackStreamPolicy,
+    loadPlaybackPreloadEnabled,
     loadPlayerMetaTarget,
     loadPlayMode,
     loadQueueState,
@@ -581,7 +624,9 @@ function createEmbyMusicStorage({
     saveAudioQualityProfile,
     saveFilterState,
     saveLibraryViewId,
+    savePlaybackLosslessPrecacheEnabled,
     savePlaybackStreamPolicy,
+    savePlaybackPreloadEnabled,
     savePlayerMetaTarget,
     savePlayMode,
     saveQueueState,

@@ -1,0 +1,6 @@
+node_modules/
+.chrome-*/
+.server*.log
+*.log
+*.png
+turntable-preview.html

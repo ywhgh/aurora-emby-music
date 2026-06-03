@@ -1,5 +1,5 @@
-const CACHE_NAME = "emby-music-web-v0.92.94";
-const ASSET_VERSION = "0.92.94";
+const CACHE_NAME = "emby-music-web-v0.93.85";
+const ASSET_VERSION = "0.93.85";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   versioned("./src/format.js"),
   versioned("./src/lyrics.js"),
   versioned("./src/emby-api.js"),
+  versioned("./src/external-source-api.js"),
   versioned("./src/storage.js"),
   versioned("./app.js"),
   versioned("./manifest.webmanifest"),
@@ -63,7 +64,6 @@ self.addEventListener("fetch", (event) => {
 function isAppShellRequest(url) {
   return APP_SHELL.some((path) => new URL(path, self.location.href).href === url.href);
 }
-
 async function cacheFirst(request) {
   const cached = await caches.match(request);
 

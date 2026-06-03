@@ -1,0 +1,829 @@
+(() => {
+const TICKS_PER_SECOND = 10000000;
+
+function createExternalSourceApi() {
+  async function fetchHealth(apiUrl) {
+    await assertSupportedApiUrl(apiUrl);
+
+    const url = buildUrl(apiUrl, "/health");
+    return requestJson(url);
+  }
+
+  async function fetchTracks(apiUrl, options = {}) {
+    const query = String(options.query || "").trim();
+    const path = query ? "/search" : "/tracks";
+    const url = buildUrl(apiUrl, path);
+    const startIndex = Math.max(0, Number(options.startIndex) || 0);
+    const limit = Math.max(1, Number(options.limit) || 100);
+
+    url.searchParams.set("offset", String(startIndex));
+    url.searchParams.set("startIndex", String(startIndex));
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("page", String(Math.floor(startIndex / limit) + 1));
+
+    if (query) {
+      url.searchParams.set("q", query);
+      url.searchParams.set("query", query);
+      url.searchParams.set("keyword", query);
+      url.searchParams.set("type", "music");
+    }
+
+    const payload = await requestJson(url);
+    const rawItems = extractItems(payload);
+    const items = rawItems.map((item, index) => normalizeExternalTrack(item, {
+      apiUrl,
+      index: startIndex + index,
+    })).filter(Boolean);
+    const total = extractTotal(payload, items.length, startIndex);
+
+    return {
+      Items: items,
+      TotalRecordCount: total,
+      Raw: payload,
+    };
+  }
+
+  async function configureSourceBridge(apiUrl, options = {}) {
+    const url = buildUrl(apiUrl, "/configure");
+    const payload = {
+      musicDir: String(options.musicDir || "").trim(),
+      manifestUrl: String(options.manifestUrl || "").trim(),
+    };
+
+    return requestJson(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async function rescanSourceBridge(apiUrl) {
+    const url = buildUrl(apiUrl, "/rescan");
+    return requestJson(url);
+  }
+
+  async function fetchMediaSource(apiUrl, track, options = {}) {
+    const inlineUrl = normalizeUrl(track?.ExternalSource?.mediaUrl || track?.ExternalSource?.url || track?.Path, apiUrl);
+
+    if (inlineUrl && !shouldResolveInlineUrlThroughBridge(inlineUrl, track)) {
+      const codec = getExternalTrackCodec(track);
+      const bitrate = getExternalTrackBitrate(track);
+      const sourceQuality = track.ExternalSource?.sourceQuality || "";
+      const qualityLabel = track.ExternalSource?.qualityLabel || "";
+      const resolution = track.ExternalSource?.resolution || "";
+      const qualityVerified = hasResolvedQuality({
+        mediaKind: track.ExternalSource?.mediaKind || "audio",
+        codec,
+        bitrate,
+        sourceQuality,
+        qualityLabel,
+        resolution,
+      });
+      return {
+        streamUrl: inlineUrl,
+        mediaSourceId: track.ExternalSource?.mediaSourceId || track.Id,
+        playSessionId: createExternalPlaySessionId(track),
+        mediaKind: track.ExternalSource?.mediaKind || "audio",
+        codec,
+        bitrate,
+        sourceQuality,
+        qualityLabel,
+        resolution,
+        qualityVerified,
+        qualityState: qualityVerified ? "resolved" : "unknown",
+      };
+    }
+
+    const externalId = track?.ExternalSource?.id || stripExternalTrackPrefix(track?.Id);
+
+    if (!externalId) {
+      throw new Error("外部音源缺少歌曲 ID。");
+    }
+
+    const url = buildUrl(apiUrl, "/media");
+    url.searchParams.set("id", externalId);
+    url.searchParams.set("quality", options.quality || "standard");
+    if (options.videoQuality) {
+      url.searchParams.set("videoQuality", options.videoQuality);
+    }
+    const payload = await requestJson(url);
+    const streamUrl = normalizeUrl(
+      payload?.url
+        || payload?.streamUrl
+        || payload?.src
+        || payload?.data?.url
+        || payload?.data?.streamUrl
+        || payload?.data?.src,
+      apiUrl,
+    );
+
+    if (!streamUrl) {
+      throw new Error("音源桥没有返回可播放地址。");
+    }
+
+    const mediaKind = payload?.mediaKind || payload?.data?.mediaKind || track.ExternalSource?.mediaKind || normalizeExternalMediaKind(payload);
+    const codec = normalizeCodecLabel(
+      payload?.codec
+        || payload?.format
+        || payload?.container
+        || payload?.data?.codec
+        || payload?.data?.format
+        || getUrlCodec(streamUrl)
+        || inferCodecFromQualityPayload(payload),
+    ) || getExternalTrackCodec(track);
+    const bitrate = normalizeBitrate(
+      payload?.bitrate
+        ?? payload?.bitRate
+        ?? payload?.br
+        ?? payload?.maxbr
+        ?? payload?.kbps
+        ?? payload?.data?.bitrate
+        ?? payload?.data?.bitRate
+        ?? payload?.data?.br
+        ?? payload?.data?.maxbr
+        ?? payload?.data?.kbps,
+    ) || inferBitrateFromQualityPayload(payload) || getExternalTrackBitrate(track);
+    const sourceQuality = pickString(payload?.sourceQuality, payload?.quality, payload?.level, payload?.data?.sourceQuality, payload?.data?.quality, payload?.data?.level) || track.ExternalSource?.sourceQuality || "";
+    const qualityLabel = pickString(payload?.qualityLabel, payload?.qualityText, payload?.qualityName, payload?.data?.qualityLabel, payload?.data?.qualityText, payload?.data?.qualityName) || track.ExternalSource?.qualityLabel || "";
+    const resolution = pickString(payload?.resolution, payload?.data?.resolution) || inferExternalResolution(payload) || track.ExternalSource?.resolution || "";
+    const qualityVerified = Boolean(payload?.qualityVerified || payload?.data?.qualityVerified) || hasResolvedQuality({
+      mediaKind,
+      codec,
+      bitrate,
+      sourceQuality,
+      qualityLabel,
+      resolution,
+    });
+
+    return {
+      streamUrl,
+      mediaSourceId: payload?.mediaSourceId || payload?.id || track.Id,
+      playSessionId: payload?.playSessionId || createExternalPlaySessionId(track),
+      mediaKind,
+      codec,
+      bitrate,
+      sourceQuality,
+      qualityLabel,
+      resolution,
+      qualityVerified,
+      qualityState: qualityVerified ? "resolved" : "unknown",
+      contentType: pickString(payload?.contentType, payload?.mimeType, payload?.data?.contentType, payload?.data?.mimeType),
+      dash: payload?.dash || payload?.data?.dash || null,
+      raw: payload,
+    };
+  }
+
+  function shouldResolveInlineUrlThroughBridge(url, track) {
+    if (/\.m4s(?:$|[?#])/i.test(String(url || ""))) {
+      return true;
+    }
+
+    return /bilibili/i.test(`${track?.ExternalSource?.platform || ""} ${track?.ExternalSource?.id || ""}`);
+  }
+
+  async function fetchLyric(apiUrl, track) {
+    const inlineLyric = pickString(
+      track?.ExternalSource?.lyric,
+      track?.ExternalSource?.lyrics,
+      track?.ExternalSource?.raw?.lyric,
+      track?.ExternalSource?.raw?.lyrics,
+      track?.Lyrics,
+      track?.Lyric,
+    );
+
+    if (inlineLyric) {
+      return inlineLyric;
+    }
+
+    const externalId = track?.ExternalSource?.id || stripExternalTrackPrefix(track?.Id);
+
+    if (!externalId) {
+      return "";
+    }
+
+    const url = buildUrl(apiUrl, "/lyric");
+    url.searchParams.set("id", externalId);
+
+    try {
+      const payload = await requestJson(url);
+      return extractLyricText(payload);
+    } catch (error) {
+      if (String(error?.message || "").includes("404")) {
+        return "";
+      }
+
+      throw error;
+    }
+  }
+
+  return {
+    fetchHealth,
+    fetchTracks,
+    configureSourceBridge,
+    fetchMediaSource,
+    fetchLyric,
+    rescanSourceBridge,
+    normalizeApiUrl,
+  };
+}
+
+function normalizeApiUrl(value) {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+  try {
+    const url = new URL(withProtocol);
+    url.hash = "";
+    url.search = "";
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return withProtocol.replace(/\/+$/, "");
+  }
+}
+
+function buildUrl(apiUrl, path) {
+  const base = normalizeApiUrl(apiUrl);
+
+  if (!base) {
+    throw new Error("请填写音源桥地址。");
+  }
+
+  return new URL(`${base.replace(/\/+$/, "")}/${String(path || "").replace(/^\/+/, "")}`);
+}
+
+async function assertSupportedApiUrl(apiUrl) {
+  const normalizedApiUrl = normalizeApiUrl(apiUrl);
+
+  if (!looksLikeJsonManifestUrl(normalizedApiUrl)) {
+    return;
+  }
+
+  let payload = null;
+
+  try {
+    payload = await requestJson(new URL(normalizedApiUrl));
+  } catch {
+    throw new Error("这个地址看起来是 JSON 文件，不是音源桥服务地址。请填写提供 /health、/tracks、/search、/media 的服务地址。");
+  }
+
+  if (isPluginManifest(payload)) {
+    throw new Error("这个地址是音源插件清单 JSON，不是音源桥服务地址。请先用桥接服务把清单转换成 /health、/tracks、/search、/media，再在这里填写桥接服务地址。");
+  }
+
+  throw new Error("这个 JSON 文件不是受支持的音源桥服务地址。请填写服务地址，而不是单个 JSON 文件。");
+}
+
+function looksLikeJsonManifestUrl(value) {
+  return /\.json(?:$|[?#])/i.test(String(value || ""));
+}
+
+function isPluginManifest(payload) {
+  return Array.isArray(payload?.plugins)
+    && payload.plugins.some((plugin) => plugin?.url && /\.js(?:$|[?#])/i.test(String(plugin.url)));
+}
+
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`音源桥返回 ${response.status} ${response.statusText || ""}`.trim());
+  }
+
+  const text = await response.text();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("音源桥没有返回 JSON。");
+  }
+}
+
+function extractItems(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const candidates = [
+    payload?.Items,
+    payload?.items,
+    payload?.tracks,
+    payload?.songs,
+    payload?.musicList,
+    payload?.list,
+    payload?.result,
+    payload?.data,
+    payload?.data?.Items,
+    payload?.data?.items,
+    payload?.data?.tracks,
+    payload?.data?.songs,
+    payload?.data?.musicList,
+    payload?.data?.list,
+    payload?.data?.result,
+  ];
+
+  return candidates.find(Array.isArray) || [];
+}
+
+function extractTotal(payload, itemCount, startIndex) {
+  const total = Number(
+    payload?.TotalRecordCount
+      ?? payload?.total
+      ?? payload?.count
+      ?? payload?.data?.total
+      ?? payload?.data?.count
+      ?? payload?.result?.total,
+  );
+
+  if (Number.isFinite(total) && total >= 0) {
+    return total;
+  }
+
+  return startIndex + itemCount;
+}
+
+function extractLyricText(payload) {
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const direct = pickString(
+    payload.lyric,
+    payload.lyrics,
+    payload.lrc,
+    payload.rawLrc,
+    payload.text,
+    payload.value,
+    payload.data,
+    payload.data?.lyric,
+    payload.data?.lyrics,
+    payload.data?.lrc,
+    payload.data?.rawLrc,
+    payload.data?.text,
+    payload.result,
+    payload.result?.lyric,
+    payload.result?.lyrics,
+    payload.result?.lrc,
+  );
+
+  if (direct) {
+    return direct;
+  }
+
+  const lines = [
+    payload.lines,
+    payload.Lines,
+    payload.data?.lines,
+    payload.data?.Lines,
+  ].find(Array.isArray);
+
+  if (!lines) {
+    return "";
+  }
+
+  return lines.map((line) => {
+    if (typeof line === "string") {
+      return line;
+    }
+
+    if (!line || typeof line !== "object") {
+      return "";
+    }
+
+    const text = pickString(line.text, line.Text, line.line, line.Line, line.value, line.Value);
+    const time = Number(line.time ?? line.Time ?? line.seconds ?? line.StartSeconds);
+
+    if (Number.isFinite(time) && time >= 0) {
+      return `[${formatLrcTimestamp(time)}]${text}`;
+    }
+
+    return text;
+  }).filter(Boolean).join("\n");
+}
+
+function normalizeExternalTrack(item, context = {}) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const sourceId = String(item.id ?? item.Id ?? item.mid ?? item.songmid ?? item.hash ?? item.rid ?? context.index ?? "").trim();
+
+  if (!sourceId) {
+    return null;
+  }
+
+  const title = pickString(item.title, item.name, item.Name, item.songName, item.musicName) || "未命名歌曲";
+  const artistText = pickString(item.artist, item.singer, item.author, item.artistName, item.Artist, item.AlbumArtist) || "未知艺人";
+  const album = pickString(item.album, item.albumName, item.Album) || "";
+  const platform = pickString(item.platform, item.source, item.vendor) || "external";
+  const mediaKind = normalizeExternalMediaKind(item);
+  const maxQuality = inferExternalMaxQuality(item, mediaKind);
+  const sourceQuality = maxQuality.sourceQuality || pickString(item.sourceQuality, item.quality, item.level, item.raw?.sourceQuality, item.raw?.quality) || "";
+  const qualityLabel = maxQuality.qualityLabel || pickString(item.qualityLabel, item.qualityText, item.qualityName, item.raw?.qualityLabel) || sourceQuality;
+  const resolution = maxQuality.resolution || pickString(item.resolution, item.raw?.resolution) || inferExternalResolution(item);
+  const codec = normalizeCodecLabel(pickString(item.codec, item.format, item.container, item.fileType, item.ext));
+  const bitrate = normalizeBitrate(item.bitrate ?? item.bitRate ?? item.br);
+  const qualityVerified = Boolean(item.qualityVerified || item.raw?.qualityVerified);
+  const mediaSourceId = `external-media:${platform}:${sourceId}`;
+  const artists = splitArtists(artistText);
+  const albumId = String(item.albumId || item.AlbumId || (album ? `external-album:${platform}:${album}` : "")).trim();
+
+  return {
+    Id: `external:${platform}:${sourceId}`,
+    Type: mediaKind === "video" ? "Video" : "Audio",
+    MediaType: mediaKind === "video" ? "Video" : "Audio",
+    Name: title,
+    SortName: title,
+    Album: album,
+    AlbumId: albumId,
+    AlbumArtist: artistText,
+    Artists: artists,
+    ArtistItems: artists.map((name) => ({ Name: name, Id: `external-artist:${name}` })),
+    AlbumArtists: artists.map((name) => ({ Name: name, Id: `external-artist:${name}` })),
+    DateCreated: item.date || item.createTime || item.publishTime || new Date().toISOString(),
+    RunTimeTicks: normalizeDurationTicks(item.duration ?? item.durationSeconds ?? item.interval ?? item.time),
+    UserData: { IsFavorite: false },
+    ExternalSource: {
+      apiUrl: normalizeApiUrl(context.apiUrl),
+      id: sourceId,
+      platform,
+      mediaKind,
+      isVideo: mediaKind === "video",
+      sourceQuality,
+      qualityLabel,
+      resolution,
+      qualityVerified,
+      qualityState: qualityVerified ? "resolved" : "",
+      artwork: normalizeUrl(pickString(item.artwork, item.cover, item.pic, item.picture, item.img, item.albumPic), context.apiUrl),
+      mediaUrl: normalizeUrl(pickString(item.url, item.streamUrl, item.src, item.playUrl), context.apiUrl),
+      lyric: pickString(item.lyric, item.lyrics, item.lrc, item.rawLrc),
+      raw: item,
+    },
+    MediaSources: [{
+      Id: mediaSourceId,
+      Container: codec,
+      BitRate: bitrate,
+      SourceQuality: sourceQuality,
+      QualityLabel: qualityLabel,
+      Resolution: resolution,
+      QualityVerified: qualityVerified,
+      MediaKind: mediaKind,
+      SupportsDirectPlay: true,
+      SupportsDirectStream: true,
+      MediaStreams: [{
+        Type: mediaKind === "video" ? "Video" : "Audio",
+        Codec: codec,
+        BitRate: bitrate,
+        Width: resolution ? 0 : undefined,
+      }],
+    }],
+  };
+}
+
+function pickString(...values) {
+  const value = values.find((item) => typeof item === "string" && item.trim());
+  return value ? value.trim() : "";
+}
+
+function splitArtists(value) {
+  return String(value || "")
+    .split(/\s*(?:\/|、|,|，|&)\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeDurationTicks(value) {
+  const duration = Number(value);
+
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  if (duration > 1000000000) {
+    return Math.round(duration);
+  }
+
+  if (duration > 36000) {
+    return Math.round(duration * 10000);
+  }
+
+  return Math.round(duration * TICKS_PER_SECOND);
+}
+
+function normalizeBitrate(value) {
+  const bitrate = Number(value);
+
+  if (!Number.isFinite(bitrate) || bitrate <= 0) {
+    return 0;
+  }
+
+  return bitrate < 10000 ? Math.round(bitrate * 1000) : Math.round(bitrate);
+}
+
+function normalizeCodecLabel(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const labels = {
+    MPEG4: "AAC",
+    MP4A: "AAC",
+    M4A: "AAC",
+    MPEG: "MP3",
+  };
+
+  if (!normalized || /^(AUDIO|MUSIC|SONG|TRACK|MV|VIDEO|EXTERNAL|UNKNOWN)$/.test(normalized)) {
+    return normalized === "VIDEO" || normalized === "MV" ? "VIDEO" : "";
+  }
+
+  return labels[normalized] || normalized;
+}
+
+function getExternalTrackCodec(track) {
+  const source = track?.MediaSources?.[0] || {};
+  const stream = source.MediaStreams?.find((item) => item?.Codec) || {};
+  return normalizeCodecLabel(stream.Codec || source.Container || track?.ExternalSource?.codec);
+}
+
+function getExternalTrackBitrate(track) {
+  const source = track?.MediaSources?.[0] || {};
+  const stream = source.MediaStreams?.find((item) => item?.BitRate || item?.Bitrate) || {};
+  return normalizeBitrate(stream.BitRate ?? stream.Bitrate ?? source.BitRate ?? source.Bitrate ?? track?.ExternalSource?.bitrate);
+}
+
+function normalizeExternalMediaKind(item) {
+  const text = [
+    item?.mediaKind,
+    item?.mediaType,
+    item?.MediaType,
+    item?.kind,
+    item?.type,
+    item?.category,
+    item?.contentType,
+    item?.qualityLabel,
+    item?.quality,
+    item?.title,
+    item?.name,
+    item?.Name,
+    item?.songName,
+    item?.musicName,
+    item?.subtitle,
+    item?.description,
+  ].map((value) => String(value || "").trim().toLowerCase()).filter(Boolean).join(" ");
+  const url = pickString(item?.url, item?.streamUrl, item?.src, item?.playUrl);
+  const hasVideoMarker = Boolean(
+    item?.isVideo
+    || item?.hasVideo
+    || item?.hasMv
+    || item?.mv
+    || item?.mvid
+    || item?.mvId
+    || item?.videoId
+    || item?.vid
+  );
+  const hasExplicitVideoTitle = /(?:\bmv\b\s*(?:版|video|视频|官方|live|1080|720|4k)|(?:mv|music\s*video|video|视频)\s*(?:版|官方|高清|1080|720|4k)|\(\s*mv(?:\s*版)?\s*\)|（\s*mv(?:\s*版)?\s*）)/i.test(text);
+
+  if (hasVideoMarker || hasExplicitVideoTitle || /\b(mv|mvideo|video|movie|vod)\b|视频|音乐视频/.test(text) || /\.(mp4|m4v|mov|webm|mkv|avi|flv|m3u8)(?:$|[?#])/i.test(url)) {
+    return "video";
+  }
+
+  return "audio";
+}
+
+function inferExternalResolution(item) {
+  const text = stringifyExternalQualityFields(item).toLowerCase();
+  const height = Number(item?.height || item?.videoHeight);
+
+  if (Number.isFinite(height) && height > 0) {
+    return `${Math.round(height)}P`;
+  }
+
+  if (/(4k|2160p|uhd)/.test(text)) {
+    return "4K";
+  }
+
+  const match = text.match(/\b(1440|1080|720|540|480|360|240)\s*p?\b/);
+  return match ? `${match[1]}P` : "";
+}
+
+function inferExternalMaxQuality(item, mediaKind) {
+  const text = stringifyExternalQualityFields(item).toLowerCase();
+
+  if (mediaKind === "video") {
+    const resolution = inferExternalResolution(item);
+    const label = ["MV", resolution || (/mv|video|视频|音乐视频/.test(text) ? "视频" : "")].filter(Boolean).join(" ");
+    return {
+      sourceQuality: resolution || "MV",
+      qualityLabel: label || "MV",
+      resolution,
+    };
+  }
+
+  if (/(hi[\s-]?res|hires|24bit|24\s*bit|母带|master)/.test(text)) {
+    return { sourceQuality: "Hi-Res", qualityLabel: "Hi-Res", resolution: "" };
+  }
+
+  if (/(lossless|flac|alac|wav|ape|无损|sq)/.test(text)) {
+    return { sourceQuality: "SQ", qualityLabel: /flac/.test(text) ? "FLAC" : "SQ", resolution: "" };
+  }
+
+  const bitrates = [...text.matchAll(/\b(128|192|256|320|384)\s*k(?:bps)?\b/g)]
+    .map((match) => Number(match[1]))
+    .filter(Number.isFinite);
+  const maxBitrate = bitrates.length ? Math.max(...bitrates) : 0;
+
+  if (maxBitrate > 0) {
+    return {
+      sourceQuality: maxBitrate >= 300 ? "HQ" : "标准",
+      qualityLabel: `${maxBitrate}k`,
+      resolution: "",
+    };
+  }
+
+  if (/(hq|高品|高音质)/.test(text)) {
+    return { sourceQuality: "HQ", qualityLabel: "HQ", resolution: "" };
+  }
+
+  return { sourceQuality: "", qualityLabel: "", resolution: "" };
+}
+
+function inferCodecFromQualityPayload(payload) {
+  const text = stringifyExternalQualityFields(payload).toLowerCase();
+
+  if (/(flac|lossless|无损|sq|hi[\s-]?res|hires)/.test(text)) {
+    return "FLAC";
+  }
+
+  if (/(aac|m4a|mp4a)/.test(text)) {
+    return "AAC";
+  }
+
+  if (/(opus)/.test(text)) {
+    return "OPUS";
+  }
+
+  if (/(mp3|mpeg)/.test(text)) {
+    return "MP3";
+  }
+
+  return "";
+}
+
+function inferBitrateFromQualityPayload(payload) {
+  const text = stringifyExternalQualityFields(payload).toLowerCase();
+  const bitrates = [...text.matchAll(/\b(128|192|256|320|384)\s*k(?:bps)?\b/g)]
+    .map((match) => Number(match[1]))
+    .filter(Number.isFinite);
+
+  return bitrates.length ? Math.max(...bitrates) * 1000 : 0;
+}
+
+function hasResolvedQuality(context = {}) {
+  const mediaKind = String(context.mediaKind || "").toLowerCase() === "video" ? "video" : "audio";
+
+  if (mediaKind === "video") {
+    return Boolean(context.resolution || context.qualityLabel || context.bitrate || (context.codec && context.codec !== "VIDEO"));
+  }
+
+  return Boolean(
+    context.qualityLabel
+      || context.sourceQuality
+      || context.bitrate
+      || (context.codec && !["AUDIO", "MUSIC", "SONG", "TRACK", "UNKNOWN"].includes(String(context.codec).toUpperCase()))
+  );
+}
+
+function stringifyExternalQualityFields(item) {
+  return [
+    item?.resolution,
+    item?.quality,
+    item?.qualityLabel,
+    item?.qualityText,
+    item?.qualityName,
+    item?.sourceQuality,
+    item?.level,
+    item?.bitrate,
+    item?.bitRate,
+    item?.br,
+    item?.maxbr,
+    item?.kbps,
+    item?.codec,
+    item?.format,
+    item?.container,
+    item?.formats,
+    item?.qualities,
+    item?.formatList,
+    item?.files,
+    item?.url,
+    item?.streamUrl,
+    item?.src,
+    item?.playUrl,
+    item?.data?.resolution,
+    item?.data?.quality,
+    item?.data?.qualityLabel,
+    item?.data?.qualityText,
+    item?.data?.qualityName,
+    item?.data?.sourceQuality,
+    item?.data?.level,
+    item?.data?.bitrate,
+    item?.data?.bitRate,
+    item?.data?.br,
+    item?.data?.maxbr,
+    item?.data?.kbps,
+    item?.data?.codec,
+    item?.data?.format,
+    item?.data?.container,
+    item?.data?.formats,
+    item?.data?.qualities,
+  ].map((value) => {
+    if (value == null) {
+      return "";
+    }
+
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }).filter(Boolean).join(" ");
+}
+
+function formatLrcTimestamp(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = total - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${remainingSeconds.toFixed(2).padStart(5, "0")}`;
+}
+
+function normalizeUrl(value, apiUrl) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    return new URL(raw, normalizeApiUrl(apiUrl) || location.href).toString();
+  } catch {
+    return raw;
+  }
+}
+
+function getUrlCodec(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const baseUrl = typeof location !== "undefined" ? location.href : "http://source.local/";
+    const extension = new URL(raw, baseUrl).pathname.split(".").pop() || "";
+    return normalizeCodecLabel(extension);
+  } catch {
+    const match = raw.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i);
+    return normalizeCodecLabel(match?.[1] || "");
+  }
+}
+
+function stripExternalTrackPrefix(id) {
+  const value = String(id || "");
+
+  if (value.startsWith("external:plugin:")) {
+    return value.slice("external:".length);
+  }
+
+  return value.replace(/^external:[^:]+:/, "");
+}
+
+function createExternalPlaySessionId(track) {
+  const id = String(track?.Id || "external").replace(/[^a-z0-9]/gi, "").slice(0, 18) || "external";
+  return `external-${Date.now().toString(36)}-${id}`;
+}
+
+window.EmbyMusicExternalSource = {
+  createExternalSourceApi,
+};
+})();
