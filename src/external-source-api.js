@@ -475,7 +475,34 @@ function normalizeExternalTrack(item, context = {}) {
       resolution,
       qualityVerified,
       qualityState: qualityVerified ? "resolved" : "",
-      artwork: normalizeUrl(pickString(item.artwork, item.cover, item.pic, item.picture, item.img, item.albumPic), context.apiUrl),
+      artwork: normalizeUrl(pickArtworkString(
+        item.artwork,
+        item.cover,
+        item.coverUrl,
+        item.coverURL,
+        item.coverImgUrl,
+        item.pic,
+        item.picUrl,
+        item.picture,
+        item.img,
+        item.image,
+        item.imageUrl,
+        item.thumbnail,
+        item.thumbnailUrl,
+        item.albumPic,
+        item.album?.picUrl,
+        item.album?.pic,
+        item.album?.cover,
+        item.album?.coverUrl,
+        item.al?.picUrl,
+        item.al?.pic_str,
+        item.artists?.[0]?.img1v1Url,
+        item.artist?.picUrl,
+        item.artist?.img1v1Url,
+        item.raw?.artwork,
+        item.raw?.cover,
+        item.raw?.picUrl,
+      ), context.apiUrl),
       mediaUrl: normalizeUrl(pickString(item.url, item.streamUrl, item.src, item.playUrl), context.apiUrl),
       lyric: pickString(item.lyric, item.lyrics, item.lrc, item.rawLrc),
       raw: item,
@@ -503,6 +530,19 @@ function normalizeExternalTrack(item, context = {}) {
 
 function pickString(...values) {
   const value = values.find((item) => typeof item === "string" && item.trim());
+  return value ? value.trim() : "";
+}
+
+function pickArtworkString(...values) {
+  const value = values.find((item) => {
+    if (typeof item !== "string" || !item.trim()) {
+      return false;
+    }
+
+    const normalized = item.trim();
+    return /^https?:\/\//i.test(normalized) || normalized.startsWith("//") || normalized.startsWith("/");
+  });
+
   return value ? value.trim() : "";
 }
 

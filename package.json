@@ -1,14 +1,15 @@
 {
   "name": "emby-music-web",
-  "version": "0.93.85",
+  "version": "0.93.89",
   "private": true,
   "description": "Responsive web music player for Emby music libraries.",
   "scripts": {
     "serve": "python -m http.server 5173",
     "bridge": "node ./scripts/source-bridge.js",
     "smoke": "node ./scripts/smoke-check.js",
+    "smoke:browser": "node ./scripts/browser-smoke.js",
     "check:js": "node --check ./app.js && node --check ./src/config.js && node --check ./src/lyrics.js && node --check ./src/emby-api.js && node --check ./src/external-source-api.js && node --check ./src/format.js && node --check ./src/storage.js && node --check ./scripts/source-bridge.js && node --check ./sw.js",
-    "check": "npm run smoke && npm run check:js"
+    "check": "npm run smoke && npm run smoke:browser && npm run check:js"
   },
   "dependencies": {
     "axios": "^1.17.0",

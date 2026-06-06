@@ -15,6 +15,8 @@ const AUDIO_EXTENSIONS = new Set([".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg
 const VIDEO_EXTENSIONS = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".flv", ".ts"]);
 const LYRIC_EXTENSIONS = [".lrc", ".txt"];
 const BILIBILI_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+const ARTWORK_LOOKUP_TIMEOUT_MS = 6500;
+const ARTWORK_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const COVER_NAMES = [
   "cover.jpg",
   "cover.jpeg",
@@ -93,6 +95,8 @@ async function refreshState() {
   state.pluginRuntimeMap = new Map();
   state.lastScanAt = new Date().toISOString();
 }
+
+const artworkCache = new Map();
 
 async function handleRequest(request, response) {
   if (request.method === "OPTIONS") {
@@ -213,6 +217,18 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (url.pathname === "/artwork") {
+    const track = getTrackFromUrl(url);
+
+    if (!track) {
+      sendAlbumPlaceholderSvg(request, response, null);
+      return;
+    }
+
+    await sendResolvedArtwork(request, response, track);
+    return;
+  }
+
   if (url.pathname === "/lyric") {
     const track = getTrackFromUrl(url);
 
@@ -280,6 +296,7 @@ function sendTrackPage(request, response, url, tracks) {
 function toApiTrack(request, track) {
   const origin = getRequestOrigin(request);
   const isPluginTrack = track.source === "plugin";
+  const artworkUrl = getTrackArtworkUrl(request, track);
 
   return {
     id: track.id,
@@ -296,8 +313,8 @@ function toApiTrack(request, track) {
     qualityVerified: Boolean(track.qualityVerified),
     platform: track.platform || "local",
     source: track.source || "local",
-    cover: isPluginTrack ? (track.cover || "") : (track.coverPath ? `${origin}/cover?id=${encodeURIComponent(track.id)}` : ""),
-    artwork: isPluginTrack ? (track.cover || "") : (track.coverPath ? `${origin}/cover?id=${encodeURIComponent(track.id)}` : ""),
+    cover: artworkUrl,
+    artwork: artworkUrl,
     url: "",
     streamUrl: "",
     lyric: track.lyric || "",
@@ -312,6 +329,20 @@ function toApiTrack(request, track) {
       qualityVerified: Boolean(track.qualityVerified),
     } : undefined,
   };
+}
+
+function getTrackArtworkUrl(request, track) {
+  const origin = getRequestOrigin(request);
+
+  if (track.source === "plugin") {
+    return track.cover || `${origin}/artwork?id=${encodeURIComponent(track.id)}`;
+  }
+
+  if (track.coverPath) {
+    return `${origin}/cover?id=${encodeURIComponent(track.id)}`;
+  }
+
+  return `${origin}/artwork?id=${encodeURIComponent(track.id)}`;
 }
 
 async function searchTracks(request, url, query) {
@@ -489,7 +520,31 @@ function createPluginTrack(plugin, item, index) {
   const title = pickFirstString(item.title, item.name, item.Name, item.songName, item.musicName) || "未命名歌曲";
   const artist = pickFirstString(item.artist, item.singer, item.author, item.artistName, item.Artist) || "未知艺人";
   const album = pickFirstString(item.album, item.albumName, item.Album) || "";
-  const cover = normalizeRemoteUrl(pickFirstString(item.artwork, item.cover, item.pic, item.picture, item.img, item.albumPic));
+  const cover = normalizeRemoteUrl(pickArtworkString(
+    item.artwork,
+    item.cover,
+    item.coverUrl,
+    item.coverURL,
+    item.coverImgUrl,
+    item.pic,
+    item.picUrl,
+    item.picture,
+    item.img,
+    item.image,
+    item.imageUrl,
+    item.thumbnail,
+    item.thumbnailUrl,
+    item.albumPic,
+    item.album?.picUrl,
+    item.album?.pic,
+    item.album?.cover,
+    item.album?.coverUrl,
+    item.al?.picUrl,
+    item.al?.pic_str,
+    item.artists?.[0]?.img1v1Url,
+    item.artist?.picUrl,
+    item.artist?.img1v1Url,
+  ));
   const mediaUrl = normalizeRemoteUrl(pickFirstString(item.streamUrl, item.src, item.playUrl));
   const mediaKind = isBilibiliPlugin(plugin) ? "video" : inferMediaKind(item, mediaUrl);
   const codec = inferCodec(item, { mediaKind, mediaUrl });
@@ -602,6 +657,27 @@ async function resolvePluginMedia(track, quality) {
   }
 
   track.mediaUrl = mediaUrl;
+  track.cover = track.cover || normalizeRemoteUrl(pickArtworkString(
+    payload?.artwork,
+    payload?.cover,
+    payload?.coverUrl,
+    payload?.coverImgUrl,
+    payload?.pic,
+    payload?.picUrl,
+    payload?.picture,
+    payload?.img,
+    payload?.image,
+    payload?.imageUrl,
+    payload?.thumbnail,
+    payload?.thumbnailUrl,
+    payload?.albumPic,
+    payload?.album?.picUrl,
+    payload?.album?.cover,
+    payload?.data?.artwork,
+    payload?.data?.cover,
+    payload?.data?.picUrl,
+    payload?.data?.imageUrl,
+  ));
   track.mediaKind = track.mediaKind === "video"
     ? "video"
     : (inferMediaKind(payload, mediaUrl) || track.mediaKind || "audio");
@@ -1302,6 +1378,19 @@ function pickFirstString(...values) {
   return value ? value.trim() : "";
 }
 
+function pickArtworkString(...values) {
+  const value = values.find((item) => {
+    if (typeof item !== "string" || !item.trim()) {
+      return false;
+    }
+
+    const normalized = item.trim();
+    return /^https?:\/\//i.test(normalized) || normalized.startsWith("//");
+  });
+
+  return value ? value.trim() : "";
+}
+
 function pickFirstId(...values) {
   const value = values.find((item) => {
     if (typeof item === "number") {
@@ -1859,7 +1948,7 @@ function fetchJsonWithHttp(url) {
   });
 }
 
-function fetchJsonWithHeaders(url, headers = {}) {
+function fetchJsonWithHeaders(url, headers = {}, timeoutMs = 18000) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const client = target.protocol === "https:" ? https : http;
@@ -1884,7 +1973,7 @@ function fetchJsonWithHeaders(url, headers = {}) {
       });
     });
     request.on("error", reject);
-    request.setTimeout(18000, () => {
+    request.setTimeout(timeoutMs, () => {
       request.destroy(new Error("request timeout"));
     });
   });
@@ -2083,6 +2172,214 @@ function getRequestOrigin(request) {
   const forwardedProto = request.headers["x-forwarded-proto"];
   const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || "http";
   return `${proto}://${request.headers.host || `${host}:${port}`}`;
+}
+
+async function sendResolvedArtwork(request, response, track) {
+  const directArtwork = normalizeRemoteUrl(track.cover);
+
+  if (directArtwork) {
+    sendArtworkRedirect(request, response, directArtwork);
+    return;
+  }
+
+  const cacheKey = createArtworkCacheKey(track);
+  const cached = artworkCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.time < ARTWORK_CACHE_TTL_MS) {
+    if (cached.url) {
+      sendArtworkRedirect(request, response, cached.url);
+    } else {
+      sendAlbumPlaceholderSvg(request, response, track);
+    }
+    return;
+  }
+
+  const artworkUrl = await resolveArtworkFromNetwork(track).catch(() => "");
+  artworkCache.set(cacheKey, { url: artworkUrl, time: Date.now() });
+
+  if (artworkUrl) {
+    track.cover = artworkUrl;
+    sendArtworkRedirect(request, response, artworkUrl);
+    return;
+  }
+
+  sendAlbumPlaceholderSvg(request, response, track);
+}
+
+function sendArtworkRedirect(request, response, artworkUrl) {
+  writeCorsHeaders(request, response);
+  response.writeHead(302, {
+    Location: artworkUrl,
+    "Cache-Control": "public, max-age=604800",
+  });
+  response.end();
+}
+
+async function resolveArtworkFromNetwork(track) {
+  const query = createArtworkSearchQuery(track);
+
+  if (!query) {
+    return "";
+  }
+
+  return await lookupItunesArtwork(query)
+    || await lookupNeteaseArtwork(query)
+    || await lookupNeteaseArtistArtwork(query)
+    || "";
+}
+
+function createArtworkSearchQuery(track) {
+  const parts = [
+    track?.title,
+    track?.artist && !/^未知艺人$/.test(track.artist) ? track.artist : "",
+    track?.album,
+  ].filter(Boolean);
+
+  return uniqueStrings(parts)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function createArtworkCacheKey(track) {
+  return crypto.createHash("sha1")
+    .update([
+      track?.source || "",
+      track?.platform || "",
+      track?.sourceId || "",
+      track?.title || "",
+      track?.artist || "",
+      track?.album || "",
+    ].join("|"))
+    .digest("hex");
+}
+
+async function lookupNeteaseArtwork(query) {
+  const url = `https://music.163.com/api/search/get/web?s=${encodeURIComponent(query)}&type=1&limit=6`;
+  const payload = await fetchJsonWithHeaders(url, {
+    "User-Agent": BILIBILI_USER_AGENT,
+    Referer: "https://music.163.com/",
+  }, ARTWORK_LOOKUP_TIMEOUT_MS);
+  const songs = Array.isArray(payload?.result?.songs) ? payload.result.songs : [];
+
+  for (const song of songs) {
+    const artwork = normalizeRemoteUrl(pickArtworkString(
+      song?.album?.picUrl,
+      song?.al?.picUrl,
+    ));
+
+    if (artwork) {
+      return upgradeArtworkSize(artwork);
+    }
+  }
+
+  return "";
+}
+
+async function lookupNeteaseArtistArtwork(query) {
+  const url = `https://music.163.com/api/search/get/web?s=${encodeURIComponent(query)}&type=1&limit=4`;
+  const payload = await fetchJsonWithHeaders(url, {
+    "User-Agent": BILIBILI_USER_AGENT,
+    Referer: "https://music.163.com/",
+  }, ARTWORK_LOOKUP_TIMEOUT_MS);
+  const songs = Array.isArray(payload?.result?.songs) ? payload.result.songs : [];
+
+  for (const song of songs) {
+    const artwork = normalizeRemoteUrl(pickArtworkString(
+      song?.artists?.[0]?.img1v1Url,
+      song?.artist?.img1v1Url,
+    ));
+
+    if (artwork) {
+      return upgradeArtworkSize(artwork);
+    }
+  }
+
+  return "";
+}
+
+async function lookupItunesArtwork(query) {
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=6&country=CN`;
+  const payload = await fetchJsonWithHeaders(url, {
+    "User-Agent": BILIBILI_USER_AGENT,
+  }, ARTWORK_LOOKUP_TIMEOUT_MS);
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+
+  for (const item of results) {
+    const artwork = normalizeRemoteUrl(pickFirstString(
+      item?.artworkUrl100,
+      item?.artworkUrl60,
+      item?.artworkUrl30,
+    ));
+
+    if (artwork) {
+      return upgradeArtworkSize(artwork);
+    }
+  }
+
+  return "";
+}
+
+function upgradeArtworkSize(url) {
+  return String(url || "")
+    .replace(/\?param=\d+y\d+$/i, "?param=600y600")
+    .replace(/\/\d+x\d+bb(\.[a-z0-9]+)$/i, "/600x600bb$1");
+}
+
+function sendAlbumPlaceholderSvg(request, response, track) {
+  const title = String(track?.title || track?.album || "音乐").trim();
+  const artist = String(track?.artist || track?.platform || "Aurora").trim();
+  const initial = getPlaceholderInitial(title || artist);
+  const seed = createArtworkCacheKey(track || { title, artist });
+  const palettes = [
+    ["#fff1f2", "#fee2e2", "#dc2626"],
+    ["#eff6ff", "#dbeafe", "#2563eb"],
+    ["#f5f3ff", "#ede9fe", "#7c3aed"],
+    ["#ecfdf5", "#d1fae5", "#059669"],
+    ["#fff7ed", "#ffedd5", "#ea580c"],
+  ];
+  const palette = palettes[parseInt(seed.slice(0, 2), 16) % palettes.length];
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="${escapeXml(title)}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${palette[0]}"/>
+      <stop offset="1" stop-color="${palette[1]}"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="34%" cy="28%" r="62%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.76"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="600" rx="72" fill="url(#bg)"/>
+  <circle cx="214" cy="188" r="218" fill="url(#glow)"/>
+  <circle cx="300" cy="300" r="164" fill="#ffffff" opacity="0.62"/>
+  <circle cx="300" cy="300" r="112" fill="none" stroke="${palette[2]}" stroke-opacity="0.16" stroke-width="18"/>
+  <circle cx="300" cy="300" r="36" fill="${palette[2]}" opacity="0.14"/>
+  <text x="300" y="326" text-anchor="middle" font-family="Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="104" font-weight="800" fill="${palette[2]}">${escapeXml(initial)}</text>
+</svg>`;
+
+  writeCorsHeaders(request, response);
+  response.writeHead(200, {
+    "Content-Type": "image/svg+xml; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body),
+    "Cache-Control": "public, max-age=86400",
+  });
+  response.end(body);
+}
+
+function getPlaceholderInitial(value) {
+  const normalized = String(value || "音").trim();
+  const first = Array.from(normalized.replace(/^[\s"'([{【《]+/, ""))[0] || "音";
+  return first.toUpperCase();
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function decodeURIComponentSafe(value) {

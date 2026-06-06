@@ -115,6 +115,8 @@ const QUALITY_FILTER_LABELS = {
   lossy: "有损",
 };
 const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
+const LYRIC_PROGRESS_EPSILON = 0.15;
+const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
 const LIBRARY_ALPHABET_KEYS = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "#"];
@@ -298,6 +300,8 @@ const AUTO_DISMISS_STATUS_MS = 1800;
 const AUTO_DISMISS_NOTICE_MS = 1800;
 const PLAYBACK_PRELOAD_CACHE_NAME = "emby-music-web-playback-preload";
 const MAX_PLAYBACK_PRECACHE_BYTES = 32 * 1024 * 1024;
+const PLAYBACK_POSITION_SAVE_INTERVAL_MS = 5000;
+const PLAYBACK_POSITION_SAVE_EPSILON_SECONDS = 2;
 const EXTERNAL_SEARCH_QUALITY_RESOLVE_LIMIT = 24;
 const EXTERNAL_SEARCH_QUALITY_RESOLVE_CONCURRENCY = 3;
 const TRACK_ACCENT_PALETTE = [
@@ -726,6 +730,7 @@ const immersiveProgressFill = document.querySelector("#immersiveProgressFill");
 const immersiveCurrentTime = document.querySelector("#immersiveCurrentTime");
 const immersiveDurationTime = document.querySelector("#immersiveDurationTime");
 const immersivePlayerPanel = document.querySelector("#immersivePlayerPanel");
+const immersiveBackgroundButton = document.querySelector("#immersiveBackgroundButton");
 const immersiveFullscreenButton = document.querySelector("#immersiveFullscreenButton");
 const immersiveCloseButton = document.querySelector("#immersiveCloseButton");
 const immersivePrevButton = document.querySelector("#immersivePrevButton");
@@ -733,6 +738,7 @@ const immersivePlayButton = document.querySelector("#immersivePlayButton");
 const immersiveNextButton = document.querySelector("#immersiveNextButton");
 const immersiveModeButton = document.querySelector("#immersiveModeButton");
 const immersiveFavoriteButton = document.querySelector("#immersiveFavoriteButton");
+const immersiveZenButton = document.querySelector("#immersiveZenButton");
 const immersiveQueueButton = document.querySelector("#immersiveQueueButton");
 const immersiveQueueDrawer = document.querySelector("#immersiveQueueDrawer");
 const immersiveQueueCloseButton = document.querySelector("#immersiveQueueCloseButton");
@@ -760,6 +766,23 @@ let trackFluidFrame = 0;
 let trackFluidPhase = 0;
 let trackFluidWidth = 50;
 let trackFluidActiveTrackId = "";
+let activeTrackRows = [];
+let activeTrackRowsTrackId = "";
+let activeTrackRowsCacheValid = false;
+let progressRenderSignature = "";
+let homeStartProgressSignature = "";
+let playerNextPreviewSignature = "";
+let lyricProgressFrame = 0;
+let lyricProgressActiveIndex = -1;
+let lyricProgressFullWordCount = -1;
+let lyricProgressPartialWordIndex = -1;
+let activeLyricListIndex = -1;
+let lyricLineElements = [];
+let immersiveLyricActiveIndex = -1;
+let immersiveLyricLineElements = [];
+let immersiveLyricWordElements = [];
+let lastStaticLyricRenderSignature = "";
+let lyricRenderRevision = 0;
 let libraryAlphabetScrubber = null;
 let libraryAlphabetHoverZone = null;
 let libraryAlphabetHoverTimer = 0;
@@ -875,6 +898,8 @@ const state = {
   lastPlaybackInfoError: "",
   lastPlaybackError: "",
   lastProgressReportAt: 0,
+  lastQueuePositionSaveAt: 0,
+  lastQueuePositionSaveSeconds: initialQueueState.positionSeconds || 0,
   lastPlaybackProbe: "",
   audioUnlocked: false,
   pendingAutoplayResume: false,
@@ -896,8 +921,11 @@ const state = {
   lyricsLoadRequestId: 0,
   lyricsStatus: "",
   lyricLines: [],
+  lyricTimeline: [],
+  lyricTimelineIndexByLineIndex: [],
   isLyricSynced: false,
   activeLyricIndex: -1,
+  activeLyricTimelineIndex: -1,
   sleepTimerEndAt: 0,
   sleepTimerPresetMinutes: 0,
   sleepTimerTimeoutId: null,
@@ -913,6 +941,7 @@ const state = {
   isCreatingPlaylist: false,
   isMovingPlaylistTrack: false,
   isImmersiveQueueOpen: false,
+  immersiveBackgroundMode: "original",
   immersiveReturnView: "home",
   videoFloatingMode: "hidden",
 };
@@ -972,6 +1001,7 @@ function init() {
   setPlayerEnabled(Boolean(state.queue.length));
   renderQueue();
   renderNowPlaying();
+  applyImmersiveBackgroundMode();
   renderRestoredPlaybackProgress(state.currentTrack);
 
   if (!pendingCredentialLogin && state.session) {
@@ -1215,8 +1245,10 @@ function init() {
   immersiveQueueShuffleButton.addEventListener("click", shuffleQueueRemainder);
   immersiveQueueClearPlayedButton.addEventListener("click", clearPlayedQueueTracks);
   immersiveQueueClearButton.addEventListener("click", clearQueue);
+  immersiveBackgroundButton?.addEventListener("click", cycleImmersiveBackgroundMode);
   immersiveFullscreenButton.addEventListener("click", toggleImmersiveFullscreen);
   immersiveCloseButton.addEventListener("click", closeImmersivePlayer);
+  immersiveZenButton?.addEventListener("click", toggleImmersiveZenMode);
   playerMetaButton.addEventListener("click", openConfiguredPlayerMetaTarget);
   nowFavoriteButton.addEventListener("click", () => toggleFavorite(state.currentTrack));
   immersiveFavoriteButton.addEventListener("click", () => toggleFavorite(state.currentTrack));
@@ -1286,10 +1318,17 @@ function init() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       requestAnimationFrame(ensureVisibleMainPanel);
+      syncLyricProgressLoop();
+    } else {
+      persistPlaybackPosition({ force: true });
+      stopLyricProgressLoop();
     }
   });
+  window.addEventListener("pagehide", () => {
+    persistPlaybackPosition({ force: true });
+  });
   window.addEventListener("beforeunload", () => {
-    saveQueueState();
+    persistPlaybackPosition({ force: true });
     reportPlaybackStopped();
   });
   syncBrowserNetworkStatus({ silent: true });
@@ -1995,6 +2034,8 @@ async function loadMusicLibrary(session) {
   state.currentTrackIndex = savedQueueState.currentTrackIndex;
   state.currentTrack = savedQueueState.currentTrack;
   state.savedPlaybackPositionSeconds = savedQueueState.positionSeconds;
+  state.lastQueuePositionSaveSeconds = savedQueueState.positionSeconds;
+  state.lastQueuePositionSaveAt = Date.now();
   state.queueSavedAt = savedQueueState.savedAt;
   searchInput.disabled = true;
   clearSearchButton.disabled = true;
@@ -3414,26 +3455,35 @@ function formatHomeStartTimelineTime(seconds) {
   return /^\d:\d{2}$/.test(value) ? `0${value}` : value;
 }
 
-function renderHomeStartProgress() {
-  const duration = getAudioDurationSeconds();
-  const current = getAudioCurrentTimeSeconds();
+function renderHomeStartProgress(current = getAudioCurrentTimeSeconds(), duration = getAudioDurationSeconds()) {
   const displayDuration = duration || getTrackDurationSeconds(state.currentTrack);
   const percent = displayDuration ? Math.min((current / displayDuration) * 100, 100) : 0;
+  const currentLabel = state.currentTrack ? formatHomeStartTimelineTime(current) : "00:00";
+  const durationLabel = state.currentTrack ? formatHomeStartTimelineTime(displayDuration) : "00:00";
+  const width = `${percent}%`;
+  const signature = [
+    state.currentTrack?.Id || "",
+    currentLabel,
+    durationLabel,
+    width,
+  ].join("|");
+
+  if (signature === homeStartProgressSignature) {
+    return;
+  }
+
+  homeStartProgressSignature = signature;
 
   if (homeStartProgressText) {
-    homeStartProgressText.textContent = state.currentTrack
-      ? formatHomeStartTimelineTime(current)
-      : "00:00";
+    setTextIfChanged(homeStartProgressText, currentLabel);
   }
 
   if (homeStartTimeText) {
-    homeStartTimeText.textContent = state.currentTrack
-      ? formatHomeStartTimelineTime(displayDuration)
-      : "00:00";
+    setTextIfChanged(homeStartTimeText, durationLabel);
   }
 
   if (homeStartProgressFill) {
-    homeStartProgressFill.style.width = `${percent}%`;
+    setStylePropertyIfChanged(homeStartProgressFill, "width", width);
   }
 }
 
@@ -5249,17 +5299,36 @@ function renderPlayerNextPreview() {
 
   const nextTrack = getNextPreviewTrack();
   const remainingCount = getQueueRemainingTracks().length;
+  const title = nextTrack?.Name || (state.queue.length ? "已到队尾" : "暂无待播");
+  const tooltip = nextTrack
+    ? `下一首：${nextTrack.Name || "未命名歌曲"} · ${getArtists(nextTrack) || "未知艺人"}`
+    : (state.queue.length ? "打开队列" : "播放队列为空");
+  const label = nextTrack
+    ? `查看下一首：${nextTrack.Name || "未命名歌曲"}`
+    : "查看播放队列";
+  const remaining = remainingCount ? String(remainingCount) : "";
+  const signature = [
+    nextTrack?.Id || "",
+    state.queue.length,
+    state.playMode,
+    title,
+    tooltip,
+    label,
+    remaining,
+  ].join("|");
+
+  if (signature === playerNextPreviewSignature) {
+    return;
+  }
+
+  playerNextPreviewSignature = signature;
 
   playerNextPreview.disabled = !state.queue.length;
   playerNextPreview.classList.toggle("is-empty", !nextTrack);
-  playerNextTitle.textContent = nextTrack?.Name || (state.queue.length ? "已到队尾" : "暂无待播");
-  playerNextPreview.title = nextTrack
-    ? `下一首：${nextTrack.Name || "未命名歌曲"} · ${getArtists(nextTrack) || "未知艺人"}`
-    : (state.queue.length ? "打开队列" : "播放队列为空");
-  playerNextPreview.setAttribute("aria-label", nextTrack
-    ? `查看下一首：${nextTrack.Name || "未命名歌曲"}`
-    : "查看播放队列");
-  playerNextPreview.dataset.remaining = remainingCount ? String(remainingCount) : "";
+  setTextIfChanged(playerNextTitle, title);
+  setDomPropertyIfChanged(playerNextPreview, "title", tooltip);
+  setAttributeIfChanged(playerNextPreview, "aria-label", label);
+  setDatasetValueIfChanged(playerNextPreview, "remaining", remaining);
 }
 
 function getNextPreviewTrack() {
@@ -6219,13 +6288,19 @@ function renderImmersiveEmptyActions(hasTrack) {
 }
 
 function renderLyrics(track) {
+  resetLyricLineElementCache();
+
   if (!track) {
     state.lyricsTrackId = null;
     state.lyricsLoadRequestId += 1;
     state.lyricsStatus = "";
     state.lyricLines = [];
+    state.lyricTimeline = [];
+    state.lyricTimelineIndexByLineIndex = [];
     state.isLyricSynced = false;
     state.activeLyricIndex = -1;
+    state.activeLyricTimelineIndex = -1;
+    invalidateLyricRenderState();
     renderLyricsEmptyState("播放歌曲后显示歌词。", []);
     renderNowLyricFocus();
     renderImmersiveLyricFocus();
@@ -6252,6 +6327,7 @@ function renderLyrics(track) {
     const item = document.createElement("p");
     item.className = "lyric-line";
     item.dataset.lyricIndex = String(index);
+    lyricLineElements[index] = item;
     appendLyricLineContent(item, line, {
       originalClassName: "lyric-original",
       translatedClassName: "lyric-translated",
@@ -6275,6 +6351,7 @@ function renderLyrics(track) {
     lyricsList.append(item);
   });
 
+  renderImmersiveLyricFocus();
   updateLyricsHighlight(audioPlayer.currentTime || 0, true);
   renderNowLyricFocus();
 }
@@ -6307,9 +6384,15 @@ function applyLyricsText(track, text, status = "") {
   const parsed = parseLyrics(text);
   state.lyricsTrackId = track?.Id || null;
   state.lyricLines = parsed.lines;
+  state.lyricTimeline = buildLyricTimeline(parsed.lines);
+  state.lyricTimelineIndexByLineIndex = buildLyricTimelineIndexMap(state.lyricTimeline, parsed.lines.length);
   state.isLyricSynced = parsed.isSynced;
   state.activeLyricIndex = -1;
+  state.activeLyricTimelineIndex = -1;
   state.lyricsStatus = status;
+  resetLyricProgressState();
+  invalidateLyricRenderState();
+  syncLyricProgressLoop();
 }
 
 async function loadLyricsFromServer(track) {
@@ -6321,6 +6404,7 @@ async function loadLyricsFromServer(track) {
   state.lyricsStatus = isExternalSourceTrack(track)
     ? "正在从音源桥尝试读取歌词..."
     : "正在从 Emby 尝试读取歌词...";
+  invalidateLyricRenderState();
   renderLyricsEmptyState(state.lyricsStatus, []);
   renderNowLyricFocus();
   renderImmersiveLyricFocus();
@@ -6336,6 +6420,7 @@ async function loadLyricsFromServer(track) {
       state.lyricsStatus = isExternalSourceTrack(track)
         ? "外部音源暂未提供歌词。"
         : "没有读取到歌词。";
+      invalidateLyricRenderState();
       renderLyricsEmptyState(state.lyricsStatus);
       renderNowLyricFocus();
       renderImmersiveLyricFocus();
@@ -6352,6 +6437,7 @@ async function loadLyricsFromServer(track) {
     }
 
     state.lyricsStatus = `歌词读取失败：${readableError(error)}`;
+    invalidateLyricRenderState();
     renderLyricsEmptyState(state.lyricsStatus);
     renderNowLyricFocus();
     renderImmersiveLyricFocus();
@@ -6536,40 +6622,160 @@ function mergeLyricsIntoTrack(track, text) {
 }
 
 function updateLyricsHighlight(currentSeconds, forceScroll = false) {
-  if (!state.isLyricSynced || !state.lyricLines.length) {
-    renderNowLyricFocus();
-    renderImmersiveLyricFocus();
+  if (!state.isLyricSynced || !state.lyricTimeline.length) {
+    stopLyricProgressLoop();
+    renderStaticLyricFocusIfNeeded();
     return;
   }
 
-  let activeIndex = -1;
-
-  for (let index = 0; index < state.lyricLines.length; index += 1) {
-    const line = state.lyricLines[index];
-
-    if (line.time === null || line.time > currentSeconds + 0.18) {
-      break;
-    }
-
-    activeIndex = index;
-  }
+  const activeIndex = findActiveLyricIndex(currentSeconds);
 
   if (activeIndex === state.activeLyricIndex && !forceScroll) {
+    updateImmersiveLyricProgress(currentSeconds);
+    syncLyricProgressLoop();
     return;
   }
 
   state.activeLyricIndex = activeIndex;
   renderNowLyricFocus();
-  renderImmersiveLyricFocus();
-  lyricsList.querySelectorAll(".lyric-line").forEach((item) => {
-    item.classList.toggle("active", Number(item.dataset.lyricIndex) === activeIndex);
-  });
+  updateImmersiveLyricProgress(currentSeconds, forceScroll || getActiveView() === "immersivePlayer", forceScroll);
+  syncLyricListActiveClass(activeIndex);
 
-  const activeItem = lyricsList.querySelector(".lyric-line.active");
+  const activeItem = lyricLineElements[activeIndex];
 
   if (activeItem) {
     activeItem.scrollIntoView({ block: "center", behavior: forceScroll ? "auto" : "smooth" });
   }
+
+  syncLyricProgressLoop();
+}
+
+function resetLyricLineElementCache() {
+  activeLyricListIndex = -1;
+  lyricLineElements = [];
+}
+
+function syncLyricListActiveClass(activeIndex) {
+  if (activeLyricListIndex === activeIndex) {
+    return;
+  }
+
+  lyricLineElements[activeLyricListIndex]?.classList.remove("active");
+  lyricLineElements[activeIndex]?.classList.add("active");
+  activeLyricListIndex = activeIndex;
+}
+
+function renderStaticLyricFocusIfNeeded() {
+  const signature = [
+    state.currentTrack?.Id || "",
+    lyricRenderRevision,
+    state.lyricsStatus || "",
+    state.isLyricSynced ? "synced" : "static",
+    state.lyricLines.length,
+  ].join("|");
+
+  if (signature === lastStaticLyricRenderSignature) {
+    return;
+  }
+
+  lastStaticLyricRenderSignature = signature;
+  renderNowLyricFocus();
+  renderImmersiveLyricFocus();
+}
+
+function invalidateLyricRenderState() {
+  lyricRenderRevision += 1;
+  lastStaticLyricRenderSignature = "";
+}
+
+function findActiveLyricIndex(currentSeconds) {
+  const targetSeconds = currentSeconds + 0.18;
+  const currentIndex = state.activeLyricIndex;
+  const currentTimelineIndex = state.activeLyricTimelineIndex;
+
+  if (
+    currentIndex >= 0
+    && currentIndex < state.lyricLines.length
+    && currentTimelineIndex >= 0
+    && currentTimelineIndex < state.lyricTimeline.length
+  ) {
+    const currentEntry = state.lyricTimeline[currentTimelineIndex];
+    const nextEntry = state.lyricTimeline[currentTimelineIndex + 1];
+
+    if (
+      currentEntry
+      && currentEntry.index === currentIndex
+      && currentEntry.time <= targetSeconds
+      && (!nextEntry || nextEntry.time > targetSeconds)
+    ) {
+      return currentIndex;
+    }
+
+    if (currentEntry?.index === currentIndex && nextEntry && nextEntry.time <= targetSeconds) {
+      if (targetSeconds - currentEntry.time > LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS) {
+        return findActiveLyricIndexBySearch(targetSeconds);
+      }
+
+      let timelineIndex = currentTimelineIndex + 1;
+
+      while (timelineIndex < state.lyricTimeline.length) {
+        const entry = state.lyricTimeline[timelineIndex];
+        const followingEntry = state.lyricTimeline[timelineIndex + 1];
+
+        if (!followingEntry || followingEntry.time > targetSeconds) {
+          state.activeLyricTimelineIndex = timelineIndex;
+          return entry.index;
+        }
+
+        timelineIndex += 1;
+      }
+
+      state.activeLyricTimelineIndex = state.lyricTimeline.length - 1;
+      return state.lyricTimeline[state.activeLyricTimelineIndex]?.index ?? -1;
+    }
+  }
+
+  return findActiveLyricIndexBySearch(targetSeconds);
+}
+
+function buildLyricTimeline(lines) {
+  return lines
+    .map((line, index) => ({ index, time: Number(line?.time) }))
+    .filter((entry) => Number.isFinite(entry.time))
+    .sort((left, right) => left.time - right.time || left.index - right.index);
+}
+
+function buildLyricTimelineIndexMap(timeline, lineCount) {
+  const indexMap = Array(lineCount).fill(-1);
+
+  timeline.forEach((entry, timelineIndex) => {
+    indexMap[entry.index] = timelineIndex;
+  });
+
+  return indexMap;
+}
+
+function findActiveLyricIndexBySearch(targetSeconds) {
+  let low = 0;
+  let high = state.lyricTimeline.length - 1;
+  let activeIndex = -1;
+  let activeTimelineIndex = -1;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const entry = state.lyricTimeline[middle];
+
+    if (entry.time <= targetSeconds) {
+      activeIndex = entry.index;
+      activeTimelineIndex = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  state.activeLyricTimelineIndex = activeTimelineIndex;
+  return activeIndex;
 }
 
 function seekToLyricLine(index) {
@@ -6581,6 +6787,7 @@ function seekToLyricLine(index) {
 
   if (seekToPosition(Math.max(0, line.time), { eventName: "Seek" })) {
     state.activeLyricIndex = -1;
+    state.activeLyricTimelineIndex = -1;
     updateLyricsHighlight(line.time, true);
   }
 }
@@ -6636,7 +6843,7 @@ function focusActiveLyricLine() {
     return;
   }
 
-  const activeItem = lyricsList.querySelector(`.lyric-line[data-lyric-index="${state.activeLyricIndex}"]`);
+  const activeItem = lyricLineElements[state.activeLyricIndex];
 
   if (activeItem) {
     activeItem.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -6646,6 +6853,10 @@ function focusActiveLyricLine() {
 
 function renderImmersiveLyricFocus() {
   immersiveLyricList.replaceChildren();
+  resetLyricProgressState();
+  immersiveLyricActiveIndex = -1;
+  immersiveLyricLineElements = [];
+  immersiveLyricWordElements = [];
 
   const appendLine = (text, className = "") => {
     const line = document.createElement("p");
@@ -6654,14 +6865,30 @@ function renderImmersiveLyricFocus() {
     immersiveLyricList.append(line);
   };
 
-  const appendLyricLine = (lyricLine, className = "") => {
+  const appendLyricLine = (lyricLine, index) => {
     const line = document.createElement("p");
-    line.className = className;
-    appendLyricLineContent(line, lyricLine, {
-      originalClassName: "immersive-lyric-original",
-      translatedClassName: "immersive-lyric-translated",
-      translatedTagName: "strong",
-    });
+    const isActive = index === getVisibleImmersiveLyricIndex();
+    line.className = "lyric-line";
+    line.dataset.lyricIndex = String(index);
+    line.classList.toggle("active", isActive);
+    line.classList.toggle("seekable", state.isLyricSynced && Number.isFinite(lyricLine.time));
+    immersiveLyricWordElements[index] = appendImmersiveLyricLineContent(line, lyricLine);
+    immersiveLyricLineElements[index] = line;
+    if (state.isLyricSynced && Number.isFinite(lyricLine.time)) {
+      line.tabIndex = 0;
+      line.setAttribute("role", "button");
+      line.setAttribute("aria-label", `跳转到 ${formatSeconds(lyricLine.time)}：${formatLyricLineLabel(lyricLine)}`);
+      line.title = `跳转到 ${formatSeconds(lyricLine.time)}`;
+      line.addEventListener("click", () => seekToLyricLine(index));
+      line.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+
+        event.preventDefault();
+        seekToLyricLine(index);
+      });
+    }
     immersiveLyricList.append(line);
   };
 
@@ -6677,24 +6904,260 @@ function renderImmersiveLyricFocus() {
     return;
   }
 
-  const activeIndex = state.isLyricSynced && state.activeLyricIndex >= 0
-    ? state.activeLyricIndex
-    : 0;
-  const start = Math.max(0, activeIndex - 1);
-  const end = Math.min(state.lyricLines.length, start + 6);
-
-  state.lyricLines.slice(start, end).forEach((line, offset) => {
-    const index = start + offset;
-    const className = [
-      index === activeIndex ? "active" : "",
-      state.isLyricSynced && Number.isFinite(line.time) ? "seekable" : "",
-    ].filter(Boolean).join(" ");
-    appendLyricLine(line, className);
+  state.lyricLines.forEach((line, index) => {
+    appendLyricLine(line, index);
   });
 
   if (!state.isLyricSynced) {
-    appendLine("歌词未带时间轴，完整歌词保留在原正在播放页。", "hint");
+    appendLine("歌词未带时间轴。", "hint");
   }
+
+  updateImmersiveLyricProgress(getAudioCurrentTimeSeconds(), true, true);
+  syncLyricProgressLoop();
+}
+
+function getVisibleImmersiveLyricIndex() {
+  return state.isLyricSynced && state.activeLyricIndex >= 0 ? state.activeLyricIndex : 0;
+}
+
+function appendImmersiveLyricLineContent(container, line) {
+  const originalText = line?.originalText || line?.text || " ";
+  const translatedText = line?.originalText ? line.text : "";
+  const original = document.createElement("span");
+  original.className = line?.originalText ? "immersive-lyric-original" : "immersive-lyric-original-fallback";
+  const words = [];
+
+  segmentLyricWords(originalText).forEach((part) => {
+    if (part.type === "space") {
+      original.append(document.createTextNode(part.value));
+      return;
+    }
+
+    const word = document.createElement("span");
+    word.className = "word";
+    word.textContent = part.value;
+    word.style.setProperty("--word-progress", "0%");
+    original.append(word);
+    words.push(word);
+  });
+
+  if (!translatedText) {
+    container.replaceChildren(original);
+    return words;
+  }
+
+  const translated = document.createElement("strong");
+  translated.className = "immersive-lyric-translated";
+  translated.textContent = translatedText;
+  container.replaceChildren(original, translated);
+  return words;
+}
+
+function segmentLyricWords(text) {
+  const value = String(text || " ");
+  const parts = value.match(/[\u3400-\u9fff\uf900-\ufaff]|[^\s\u3400-\u9fff\uf900-\ufaff]+|\s+/g);
+
+  return (parts?.length ? parts : [" "]).map((part) => ({
+    type: /^\s+$/.test(part) ? "space" : "word",
+    value: part,
+  }));
+}
+
+function updateImmersiveLyricProgress(currentSeconds, shouldScroll = false, instantScroll = false) {
+  if (!immersiveLyricList || !state.lyricLines.length) {
+    return;
+  }
+
+  const activeIndex = getVisibleImmersiveLyricIndex();
+  const activeItem = immersiveLyricLineElements[activeIndex];
+  syncImmersiveLyricActiveClass(activeItem, activeIndex);
+  updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds);
+
+  if (activeItem && shouldScroll) {
+    activeItem.scrollIntoView({ block: "center", behavior: instantScroll ? "auto" : "smooth" });
+  }
+}
+
+function syncImmersiveLyricActiveClass(activeItem, activeIndex) {
+  if (immersiveLyricActiveIndex === activeIndex) {
+    return;
+  }
+
+  immersiveLyricLineElements[immersiveLyricActiveIndex]?.classList.remove("active");
+  activeItem?.classList.add("active");
+  immersiveLyricActiveIndex = activeIndex;
+}
+
+function resetLyricProgressState() {
+  lyricProgressActiveIndex = -1;
+  lyricProgressFullWordCount = -1;
+  lyricProgressPartialWordIndex = -1;
+}
+
+function shouldRunLyricProgressLoop() {
+  return state.isLyricSynced
+    && state.lyricLines.length > 0
+    && state.activeLyricIndex >= 0
+    && state.currentTrack
+    && audioPlayer.src
+    && !audioPlayer.paused
+    && !audioPlayer.ended
+    && document.visibilityState !== "hidden";
+}
+
+function syncLyricProgressLoop() {
+  if (!shouldRunLyricProgressLoop()) {
+    stopLyricProgressLoop();
+    return;
+  }
+
+  if (!lyricProgressFrame) {
+    lyricProgressFrame = requestAnimationFrame(updateLyricProgressFrame);
+  }
+}
+
+function stopLyricProgressLoop() {
+  if (!lyricProgressFrame) {
+    return;
+  }
+
+  cancelAnimationFrame(lyricProgressFrame);
+  lyricProgressFrame = 0;
+}
+
+function updateLyricProgressFrame() {
+  if (!shouldRunLyricProgressLoop()) {
+    lyricProgressFrame = 0;
+    return;
+  }
+
+  lyricProgressFrame = requestAnimationFrame(updateLyricProgressFrame);
+  updateLyricsHighlight(getAudioCurrentTimeSeconds());
+}
+
+function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds) {
+  resetInactiveImmersiveWords(activeIndex);
+
+  if (!activeItem) {
+    return;
+  }
+
+  const words = immersiveLyricWordElements[activeIndex] || [];
+  if (!words.length) {
+    return;
+  }
+
+  if (!state.isLyricSynced) {
+    words.forEach((word) => setLyricWordProgress(word, 100));
+    lyricProgressFullWordCount = words.length;
+    lyricProgressPartialWordIndex = -1;
+    return;
+  }
+
+  const currentLine = state.lyricLines[activeIndex];
+  const nextEntry = getNextLyricTimelineEntry(activeIndex);
+  const start = Number(currentLine?.time);
+
+  if (!Number.isFinite(start)) {
+    updateLyricWordProgressWindow(words, words.length);
+    return;
+  }
+
+  const fallbackEnd = start + Math.max(2.4, words.length * 0.22);
+  const end = Number.isFinite(nextEntry?.time) ? nextEntry.time : fallbackEnd;
+  const lineRatio = end > start
+    ? clamp((currentSeconds - start) / (end - start), 0, 1)
+    : 1;
+  const litWords = lineRatio * words.length;
+  updateLyricWordProgressWindow(words, litWords);
+}
+
+function updateLyricWordProgressWindow(words, litWords) {
+  const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
+  const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
+  const nextPartialProgress = nextPartialWordIndex >= 0
+    ? Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)
+    : 0;
+  const previousFullWordCount = lyricProgressFullWordCount;
+  const previousPartialWordIndex = lyricProgressPartialWordIndex;
+
+  if (previousFullWordCount < 0) {
+    words.forEach((word, index) => {
+      const progress = index < nextFullWordCount
+        ? 100
+        : (index === nextPartialWordIndex ? nextPartialProgress : 0);
+      setLyricWordProgress(word, progress);
+    });
+    lyricProgressFullWordCount = nextFullWordCount;
+    lyricProgressPartialWordIndex = nextPartialWordIndex;
+    return;
+  }
+
+  if (nextFullWordCount > previousFullWordCount) {
+    for (let index = previousFullWordCount; index < nextFullWordCount; index += 1) {
+      setLyricWordProgress(words[index], 100);
+    }
+  } else if (nextFullWordCount < previousFullWordCount) {
+    for (let index = nextFullWordCount; index < previousFullWordCount; index += 1) {
+      if (index !== nextPartialWordIndex) {
+        setLyricWordProgress(words[index], 0);
+      }
+    }
+  }
+
+  if (previousPartialWordIndex >= 0 && previousPartialWordIndex !== nextPartialWordIndex) {
+    const previousProgress = previousPartialWordIndex < nextFullWordCount ? 100 : 0;
+    setLyricWordProgress(words[previousPartialWordIndex], previousProgress);
+  }
+
+  if (nextPartialWordIndex >= 0) {
+    setLyricWordProgress(words[nextPartialWordIndex], nextPartialProgress);
+  }
+
+  lyricProgressFullWordCount = nextFullWordCount;
+  lyricProgressPartialWordIndex = nextPartialWordIndex;
+}
+
+function getNextLyricTimelineEntry(activeIndex) {
+  const cachedTimelineIndex = state.activeLyricTimelineIndex;
+  const currentEntry = state.lyricTimeline[cachedTimelineIndex];
+
+  if (currentEntry?.index === activeIndex) {
+    return state.lyricTimeline[cachedTimelineIndex + 1] || null;
+  }
+
+  const activeTimelineIndex = state.lyricTimelineIndexByLineIndex[activeIndex] ?? -1;
+  return activeTimelineIndex >= 0 ? state.lyricTimeline[activeTimelineIndex + 1] || null : null;
+}
+
+function resetInactiveImmersiveWords(activeIndex) {
+  if (lyricProgressActiveIndex === activeIndex) {
+    return;
+  }
+
+  const previousActiveIndex = lyricProgressActiveIndex;
+  lyricProgressActiveIndex = activeIndex;
+  lyricProgressFullWordCount = -1;
+  lyricProgressPartialWordIndex = -1;
+  (immersiveLyricWordElements[previousActiveIndex] || []).forEach((word) => {
+    setLyricWordProgress(word, 0);
+  });
+}
+
+function setLyricWordProgress(word, percent) {
+  if (!word) {
+    return;
+  }
+
+  const normalizedPercent = clamp(Number(percent) || 0, 0, 100);
+  const lastPercent = Number(word.dataset.wordProgress || -1);
+
+  if (Math.abs(lastPercent - normalizedPercent) < LYRIC_PROGRESS_EPSILON) {
+    return;
+  }
+
+  word.dataset.wordProgress = String(normalizedPercent);
+  word.style.setProperty("--word-progress", `${normalizedPercent}%`);
 }
 
 function renderUpNext() {
@@ -8071,7 +8534,57 @@ function openMobileImmersivePlayer() {
 
 function closeImmersivePlayer() {
   closeImmersiveQueue({ restoreFocus: false });
+  setImmersiveZenMode(false);
   switchView(hasView(state.immersiveReturnView) ? state.immersiveReturnView : "home");
+}
+
+function toggleImmersiveZenMode() {
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  setImmersiveZenMode(!shell?.classList.contains("is-zen-mode"));
+}
+
+function setImmersiveZenMode(isEnabled) {
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+
+  if (!shell) {
+    return;
+  }
+
+  shell.classList.toggle("is-zen-mode", Boolean(isEnabled));
+  immersiveZenButton?.setAttribute("aria-pressed", isEnabled ? "true" : "false");
+  immersiveZenButton?.setAttribute("aria-label", isEnabled ? "关闭纯享无干扰模式" : "开启纯享无干扰模式");
+  if (isEnabled) {
+    closeImmersiveQueue({ restoreFocus: false });
+  }
+}
+
+function cycleImmersiveBackgroundMode() {
+  const modes = ["original", "fluid", "stage"];
+  const currentIndex = modes.indexOf(state.immersiveBackgroundMode);
+  state.immersiveBackgroundMode = modes[(currentIndex + 1) % modes.length];
+  applyImmersiveBackgroundMode();
+}
+
+function applyImmersiveBackgroundMode() {
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  const mode = ["original", "fluid", "stage"].includes(state.immersiveBackgroundMode)
+    ? state.immersiveBackgroundMode
+    : "original";
+  const labelMap = {
+    original: "原始",
+    fluid: "流体",
+    stage: "舞台光",
+  };
+
+  if (!shell) {
+    return;
+  }
+
+  shell.classList.toggle("is-fluid-bg", mode === "fluid");
+  shell.classList.toggle("is-stage-bg", mode === "stage");
+  immersiveBackgroundButton?.setAttribute("aria-label", `背景样式：${labelMap[mode]}`);
+  immersiveBackgroundButton?.setAttribute("aria-pressed", mode === "original" ? "false" : "true");
+  immersiveBackgroundButton?.setAttribute("title", `背景样式：${labelMap[mode]}`);
 }
 
 function toggleImmersiveQueue() {
@@ -12453,6 +12966,7 @@ function stopPlaybackFromMediaSession() {
   reportPlaybackStopped();
   audioPlayer.pause();
   unloadAudioSource();
+  stopLyricProgressLoop();
   clearPreload();
   state.currentMediaSourceId = "";
   state.currentPlaySessionId = "";
@@ -12511,6 +13025,8 @@ function playNext(options = {}) {
 }
 
 function handleTrackEnded() {
+  stopLyricProgressLoop();
+
   if (state.playMode === "repeat-one" && state.currentTrack) {
     playTrack(state.currentTrack, state.queue);
     return;
@@ -14319,16 +14835,8 @@ function resetPlayerMeta() {
   playButton.classList.remove("playing");
   nowPlayButton.classList.remove("playing");
   immersivePlayButton.classList.remove("playing");
-  progressFill.style.width = "0";
-  progressFill.style.setProperty("--progress-ratio", "0");
-  nowPlayingProgressFill.style.width = "0";
-  immersiveProgressFill.style.width = "0";
-  currentTime.textContent = "0:00";
-  nowPlayingCurrentTime.textContent = "0:00";
-  immersiveCurrentTime.textContent = "0:00";
-  durationTime.textContent = "0:00";
-  nowPlayingDurationTime.textContent = "0:00";
-  immersiveDurationTime.textContent = "0:00";
+  invalidateProgressRenderCache();
+  setProgressDisplay(0, 0);
   renderNowPlaying();
   updatePlayButtonLabels();
   clearMediaSession();
@@ -14657,6 +15165,7 @@ function getTrackDurationSeconds(track) {
 function handleAudioPlay() {
   setPlaybackBuffering(false);
   updatePlaybackState();
+  syncLyricProgressLoop();
 
   if (state.currentTrack && !state.isChangingTrack) {
     reportPlaybackProgress(true, "Unpause");
@@ -14666,7 +15175,8 @@ function handleAudioPlay() {
 function handleAudioPause() {
   setPlaybackBuffering(false);
   updatePlaybackState();
-  saveQueueState();
+  stopLyricProgressLoop();
+  persistPlaybackPosition({ force: true });
 
   if (state.currentTrack && !state.isChangingTrack && audioPlayer.currentTime > 0 && !audioPlayer.ended) {
     reportPlaybackProgress(true, "Pause");
@@ -14675,23 +15185,26 @@ function handleAudioPause() {
 
 function handleAudioTimeUpdate() {
   updateProgress();
+  persistPlaybackPosition();
 
   if (Date.now() - state.lastProgressReportAt > 15000) {
     reportPlaybackProgress();
-    saveQueueState();
   }
 }
 
 function handleAudioSeeked() {
   setPlaybackBuffering(false);
-  updateProgress();
+  updateProgress({ syncLyrics: false });
+  state.activeLyricTimelineIndex = -1;
+  updateLyricsHighlight(getAudioCurrentTimeSeconds(), true);
+  syncLyricProgressLoop();
 
   if (state.currentTrack && !state.isChangingTrack && audioPlayer.src) {
     if (Date.now() - state.lastProgressReportAt > 500) {
       reportPlaybackProgress(true, "Seek");
     }
 
-    saveQueueState();
+    persistPlaybackPosition({ force: true });
   }
 }
 
@@ -14719,12 +15232,15 @@ function setPlaybackBuffering(isBuffering) {
   updatePlayButtonLabels();
 }
 
-function updateProgress() {
+function updateProgress(options = {}) {
   const duration = getAudioDurationSeconds();
   const current = getAudioCurrentTimeSeconds();
+  const shouldSyncLyrics = options.syncLyrics !== false;
 
   setProgressDisplay(current, duration);
-  updateLyricsHighlight(current);
+  if (shouldSyncLyrics) {
+    updateLyricsHighlight(current);
+  }
   updateMediaSessionPosition();
   renderPlayerNextPreview();
 }
@@ -14732,27 +15248,82 @@ function updateProgress() {
 function setProgressDisplay(current, duration) {
   const percent = duration ? Math.min((current / duration) * 100, 100) : 0;
   const ratio = String(percent / 100);
+  const width = `${percent}%`;
+  const currentLabel = formatSeconds(current);
+  const durationLabel = formatSeconds(duration);
+  const progressLabel = duration
+    ? `播放进度：${currentLabel} / ${durationLabel}`
+    : "播放进度";
+  const signature = [
+    currentLabel,
+    durationLabel,
+    width,
+    ratio,
+    progressLabel,
+  ].join("|");
 
-  progressFill.style.width = `${percent}%`;
-  progressFill.style.setProperty("--progress-ratio", ratio);
-  nowPlayingProgressFill.style.width = `${percent}%`;
-  immersiveProgressFill.style.width = `${percent}%`;
-  currentTime.textContent = formatSeconds(current);
-  nowPlayingCurrentTime.textContent = formatSeconds(current);
-  immersiveCurrentTime.textContent = formatSeconds(current);
-  durationTime.textContent = formatSeconds(duration);
-  nowPlayingDurationTime.textContent = formatSeconds(duration);
-  immersiveDurationTime.textContent = formatSeconds(duration);
-  renderHomeStartProgress();
-  progressTrack.setAttribute("aria-label", duration
-    ? `播放进度：${formatSeconds(current)} / ${formatSeconds(duration)}`
-    : "播放进度");
-  nowPlayingProgressTrack.setAttribute("aria-label", duration
-    ? `播放进度：${formatSeconds(current)} / ${formatSeconds(duration)}`
-    : "播放进度");
-  immersiveProgressTrack.setAttribute("aria-label", duration
-    ? `播放进度：${formatSeconds(current)} / ${formatSeconds(duration)}`
-    : "播放进度");
+  if (signature === progressRenderSignature) {
+    renderHomeStartProgress(current, duration);
+    return;
+  }
+
+  progressRenderSignature = signature;
+  setStylePropertyIfChanged(progressFill, "width", width);
+  setCssVariableIfChanged(progressFill, "--progress-ratio", ratio);
+  setStylePropertyIfChanged(nowPlayingProgressFill, "width", width);
+  setStylePropertyIfChanged(immersiveProgressFill, "width", width);
+  setTextIfChanged(currentTime, currentLabel);
+  setTextIfChanged(nowPlayingCurrentTime, currentLabel);
+  setTextIfChanged(immersiveCurrentTime, currentLabel);
+  setTextIfChanged(durationTime, durationLabel);
+  setTextIfChanged(nowPlayingDurationTime, durationLabel);
+  setTextIfChanged(immersiveDurationTime, durationLabel);
+  renderHomeStartProgress(current, duration);
+  setAttributeIfChanged(progressTrack, "aria-label", progressLabel);
+  setAttributeIfChanged(nowPlayingProgressTrack, "aria-label", progressLabel);
+  setAttributeIfChanged(immersiveProgressTrack, "aria-label", progressLabel);
+}
+
+function invalidateProgressRenderCache() {
+  progressRenderSignature = "";
+  homeStartProgressSignature = "";
+  playerNextPreviewSignature = "";
+}
+
+function setTextIfChanged(element, text) {
+  if (element && element.textContent !== text) {
+    element.textContent = text;
+  }
+}
+
+function setAttributeIfChanged(element, name, value) {
+  if (element && element.getAttribute(name) !== value) {
+    element.setAttribute(name, value);
+  }
+}
+
+function setDomPropertyIfChanged(element, name, value) {
+  if (element && element[name] !== value) {
+    element[name] = value;
+  }
+}
+
+function setDatasetValueIfChanged(element, name, value) {
+  if (element && element.dataset[name] !== value) {
+    element.dataset[name] = value;
+  }
+}
+
+function setStylePropertyIfChanged(element, name, value) {
+  if (element && element.style[name] !== value) {
+    element.style[name] = value;
+  }
+}
+
+function setCssVariableIfChanged(element, name, value) {
+  if (element && element.style.getPropertyValue(name) !== value) {
+    element.style.setProperty(name, value);
+  }
 }
 
 function seekFromProgress(event) {
@@ -14772,11 +15343,25 @@ function getActiveTrackRows() {
   const activeTrack = state.queue[state.currentTrackIndex];
 
   if (!activeTrack?.Id) {
+    activeTrackRows = [];
+    activeTrackRowsTrackId = "";
+    activeTrackRowsCacheValid = true;
     return [];
   }
 
-  return [...document.querySelectorAll(".track-row.active")]
-    .filter((row) => row.dataset.trackId === activeTrack.Id);
+  if (!activeTrackRowsCacheValid || activeTrackRowsTrackId !== activeTrack.Id || activeTrackRows.some((row) => !row.isConnected)) {
+    refreshActiveTrackRowsCache(activeTrack.Id);
+  }
+
+  return activeTrackRows;
+}
+
+function refreshActiveTrackRowsCache(activeTrackId) {
+  activeTrackRowsTrackId = activeTrackId || "";
+  activeTrackRowsCacheValid = true;
+  activeTrackRows = activeTrackId
+    ? [...document.querySelectorAll(`.track-row.active[data-track-id="${escapeCssSelectorValue(activeTrackId)}"]`)]
+    : [];
 }
 
 function stopTrackFluidLoop() {
@@ -14844,6 +15429,7 @@ function syncTrackFluidRows(activeTrackId, isPlaying) {
 function updateActiveRows() {
   const activeTrack = state.queue[state.currentTrackIndex];
   const isPlaying = Boolean(activeTrack && !audioPlayer.paused && !audioPlayer.ended);
+  const nextActiveRows = [];
 
   document.querySelectorAll(".track-row").forEach((row) => {
     const isActive = Boolean(activeTrack && row.dataset.trackId === activeTrack.Id);
@@ -14860,6 +15446,10 @@ function updateActiveRows() {
       row.style.setProperty("--track-fluid-width", "50%");
     }
 
+    if (isActive) {
+      nextActiveRows.push(row);
+    }
+
     if (!index) {
       return;
     }
@@ -14874,6 +15464,9 @@ function updateActiveRows() {
     index.setAttribute("aria-label", isPlaying ? "正在播放" : "已暂停");
   });
 
+  activeTrackRows = nextActiveRows;
+  activeTrackRowsTrackId = activeTrack?.Id || "";
+  activeTrackRowsCacheValid = true;
   syncTrackFluidRows(activeTrack?.Id || "", isPlaying);
 }
 
@@ -14905,6 +15498,9 @@ function switchView(view, options = {}) {
   mobileMoreNavButton.classList.toggle("active", isMoreNavigationActive);
   mobileMoreNavButton.toggleAttribute("aria-current", isMoreNavigationActive);
   document.body.classList.toggle("immersive-player-open", nextView === "immersivePlayer");
+  if (previousView === "immersivePlayer" && nextView !== "immersivePlayer") {
+    setImmersiveZenMode(false);
+  }
   if (nextView !== "library") {
     hideLibraryAlphabetScrubber();
   }
@@ -14920,6 +15516,7 @@ function switchView(view, options = {}) {
     history.replaceState(null, "", `#${nextView}`);
   }
 
+  syncLyricProgressLoop();
   restoreViewScrollPosition(nextView, options);
 }
 
@@ -16171,6 +16768,33 @@ function saveRecentTracks() {
   storage.saveRecentTracks(state.session, state.recentTracks);
 }
 
+function persistPlaybackPosition(options = {}) {
+  if (!state.session || !state.queue.length || !state.currentTrack) {
+    return;
+  }
+
+  const positionSeconds = getQueuePositionSeconds();
+  const durationSeconds = getTrackDurationSeconds(state.currentTrack);
+
+  if (!options.force) {
+    const now = Date.now();
+    const positionDelta = Math.abs(positionSeconds - Number(state.lastQueuePositionSaveSeconds || 0));
+    if (
+      now - Number(state.lastQueuePositionSaveAt || 0) < PLAYBACK_POSITION_SAVE_INTERVAL_MS
+      && positionDelta < PLAYBACK_POSITION_SAVE_EPSILON_SECONDS
+    ) {
+      return;
+    }
+  }
+
+  if (durationSeconds && positionSeconds >= durationSeconds - 1) {
+    saveQueueState(0);
+    return;
+  }
+
+  saveQueueState(positionSeconds);
+}
+
 function saveQueueState(positionSeconds) {
   if (!state.session || !state.queue.length) {
     clearQueueState();
@@ -16181,16 +16805,20 @@ function saveQueueState(positionSeconds) {
   const currentTrackIndex = currentTrack
     ? state.queue.findIndex((track) => track.Id === currentTrack.Id)
     : -1;
+  const savedPositionSeconds = Number.isFinite(Number(positionSeconds))
+    ? Math.max(0, Number(positionSeconds))
+    : getQueuePositionSeconds();
   state.queueSavedAt = new Date().toISOString();
+  state.savedPlaybackPositionSeconds = savedPositionSeconds;
+  state.lastQueuePositionSaveAt = Date.now();
+  state.lastQueuePositionSaveSeconds = savedPositionSeconds;
 
   storage.saveQueueState({
     session: state.session,
     queue: state.queue.map(sanitizeQueueTrack),
     currentTrackId: currentTrack?.Id || "",
     currentTrackIndex: currentTrackIndex >= 0 ? currentTrackIndex : 0,
-    positionSeconds: Number.isFinite(Number(positionSeconds))
-      ? Math.max(0, Number(positionSeconds))
-      : getQueuePositionSeconds(),
+    positionSeconds: savedPositionSeconds,
   });
   renderHomeStartPanel();
 }

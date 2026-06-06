@@ -18,6 +18,17 @@ function extract(pattern, text, label) {
   return match?.[1] || "";
 }
 
+function getCssRule(css, selectorStart) {
+  const start = css.indexOf(selectorStart);
+
+  if (start < 0) {
+    return "";
+  }
+
+  const end = css.indexOf("\n}", start);
+  return end >= 0 ? css.slice(start, end + 2) : css.slice(start);
+}
+
 function checkVersions() {
   const index = read("index.html");
   const config = read("src/config.js");
@@ -26,10 +37,34 @@ function checkVersions() {
   const appVersion = extract(/APP_VERSION:\s*"([^"]+)"/, config, "APP_VERSION");
   const cacheVersion = extract(/CACHE_NAME\s*=\s*"emby-music-web-v([^"]+)"/, sw, "service worker cache version");
   const assetVersion = extract(/ASSET_VERSION\s*=\s*"([^"]+)"/, sw, "service worker asset version");
+  const browserSmoke = read("scripts/browser-smoke.js");
 
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
+  assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
+  assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
+  assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
+  assert(browserSmoke.includes('{ name: "mobile", width: 390, height: 844 }'), "Browser smoke should include a mobile viewport check");
+  assert(browserSmoke.includes('playerbarVisible: isVisible(".playerbar")'), "Browser smoke should verify playerbar visibility");
+  assert(browserSmoke.includes('mobileBottomNavVisible: isVisible(".mobile-bottom-nav")'), "Browser smoke should verify mobile bottom navigation visibility");
+  assert(browserSmoke.includes('check.name === "mobile"'), "Browser smoke should apply viewport-specific assertions");
+  assert(browserSmoke.includes("documentWidth <= page.viewportWidth + 1"), "Browser smoke should detect horizontal document overflow");
+  assert(browserSmoke.includes('loginCardVisible: isVisible(".login-card")'), "Browser smoke should verify login card visibility");
+  assert(browserSmoke.includes('connectFormVisible: isVisible("#connectForm")'), "Browser smoke should verify login form visibility");
+  assert(browserSmoke.includes("EXPECTED_VERSION_LABEL"), "Browser smoke should derive the expected version label from package.json");
+  assert(browserSmoke.includes("PROFILE_CLEANUP_BUDGET_MS"), "Browser smoke profile cleanup should have a bounded time budget");
+  assert(browserSmoke.includes("OLD_PROFILE_CLEANUP_LIMIT"), "Browser smoke should limit old profile cleanup work per run");
+  assert(browserSmoke.includes("BROWSER_SMOKE_OLD_PROFILE_CLEANUP_LIMIT || 0"), "Browser smoke should skip old profile cleanup by default on Windows");
+  assert(browserSmoke.includes("if (OLD_PROFILE_CLEANUP_LIMIT <= 0)"), "Browser smoke should make old profile cleanup opt-in");
+  assert(browserSmoke.includes('withTimeout(Promise.resolve(cdp?.send("Browser.close"))'), "Browser smoke should bound Browser.close during cleanup");
+  assert(browserSmoke.includes("function runDetachedCleanup"), "Browser smoke process cleanup should run in detached helpers");
+  assert(!browserSmoke.includes("spawnSync"), "Browser smoke should not use synchronous process cleanup on Windows");
+  assert(browserSmoke.includes("function removeDirectoryInBackground"), "Browser smoke should clean current Chrome profiles in a detached helper");
+  assert(browserSmoke.includes("cleanup.unref()"), "Browser smoke detached profile cleanup should not keep the test process alive");
+  assert(browserSmoke.includes("removeDirectoryInBackground(browser?.profileDir)"), "Browser smoke should not synchronously remove the current Chrome profile");
+  assert(browserSmoke.includes("Locked Chrome profiles are safe to remove on a later run"), "Browser smoke should not block on locked profile deletion");
+  assert(!browserSmoke.includes(`page.version === "v${appVersion}"`), "Browser smoke should not hard-code the current version label");
 
   [
     "styles.css",
@@ -103,6 +138,76 @@ function checkLyrics() {
   assert(app.includes("renderImmersiveLyricFocus"), "Missing immersive lyric renderer");
   assert(app.includes("immersive-lyric-original"), "Immersive lyric renderer does not render original text");
   assert(app.includes("immersive-lyric-translated"), "Immersive lyric renderer does not render translated text");
+  assert(app.includes("function updateLyricProgressFrame"), "Immersive word lyrics should use an animation-frame progress loop");
+  assert(app.includes("requestAnimationFrame(updateLyricProgressFrame)"), "Lyric word progress loop should be driven by requestAnimationFrame");
+  assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
+  assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
+  assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
+  assert(app.includes("function invalidateProgressRenderCache"), "Progress render caches should be explicitly invalidated");
+  assert(app.includes("function setTextIfChanged"), "Progress rendering should avoid redundant textContent writes");
+  assert(app.includes("function setStylePropertyIfChanged"), "Progress rendering should avoid redundant style writes");
+  assert(app.includes("function setAttributeIfChanged"), "Progress rendering should avoid redundant aria-label writes");
+  assert(app.includes("PLAYBACK_POSITION_SAVE_INTERVAL_MS"), "Playback position should have a local save throttle");
+  assert(app.includes("function persistPlaybackPosition"), "Playback position should be persisted while audio is playing");
+  assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?updateProgress\(\);[\s\S]*?persistPlaybackPosition\(\);/.test(app), "Playback time updates should persist local resume position independently of server progress reports");
+  assert(/document\.addEventListener\("visibilitychange"[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Backgrounding the page should force-save playback position");
+  assert(app.includes('window.addEventListener("pagehide", () => {\n    persistPlaybackPosition({ force: true });\n  });'), "Pagehide should force-save playback position on mobile browsers");
+  assert(!/function resetPlayerMeta\(\) \{[\s\S]*?progressFill\.style\.width = "0";/.test(app), "Player reset should reuse cached progress rendering instead of direct progress DOM writes");
+  assert(app.includes("activeTrackRowsCacheValid"), "Track-row fluid animation should cache active rows instead of querying every frame");
+  assert(app.includes("function refreshActiveTrackRowsCache"), "Track-row fluid animation should have an explicit active-row cache refresh");
+  assert(!/function getActiveTrackRows\(\) \{[\s\S]*?document\.querySelectorAll\("\.track-row\.active"\)/.test(app), "Track-row fluid animation should not query all active rows on every animation frame");
+  assert(app.includes("function setLyricWordProgress"), "Lyric word progress should avoid redundant DOM writes");
+  assert(app.includes("LYRIC_PROGRESS_EPSILON"), "Lyric word progress should be diffed before style updates");
+  assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
+  assert(app.includes("lyricProgressFullWordCount"), "Lyric word progress should cache the previous fully-lit word count");
+  assert(app.includes("lyricProgressPartialWordIndex"), "Lyric word progress should cache the previous partial word index");
+  assert(!/words\.forEach\(\(word,\s*index\)\s*=>\s*\{\s*const wordRatio = clamp\(litWords - index, 0, 1\)/.test(app), "Lyric word progress should not recalculate every word on each animation frame");
+  assert(app.includes("lyricTimeline"), "Synced lyric highlighting should use a precomputed timeline");
+  assert(app.includes("lyricTimelineIndexByLineIndex"), "Lyric word progress should map line indexes to timeline indexes");
+  assert(app.includes("activeLyricTimelineIndex"), "Synced lyric highlighting should cache the active timeline index");
+  assert(app.includes("function findActiveLyricIndexBySearch"), "Lyric seeks should use binary search over the timeline");
+  assert(app.includes("LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Large lyric seeks should switch to timeline binary search");
+  assert(app.includes("currentEntry.index === currentIndex"), "Lyric timeline fast path should verify the cached line index before reusing it");
+  assert(app.includes("targetSeconds - currentEntry.time > LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Lyric timeline jumps should not be advanced line by line");
+  assert(/function handleAudioSeeked\(\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\), true\);/.test(app), "Audio seeks should reset lyric timeline cache and force-refresh lyric highlights without double-rendering");
+  assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics\) \{\s*updateLyricsHighlight\(current\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass");
+  assert(!app.includes("state.lyricTimeline.findIndex"), "Lyric progress should not search the timeline every frame");
+  assert(app.includes("function renderStaticLyricFocusIfNeeded"), "Static lyric views should skip redundant playback-time renders");
+  assert(app.includes("lastStaticLyricRenderSignature"), "Static lyric views should cache their rendered state");
+  assert(app.includes("lyricRenderRevision"), "Static lyric render cache should be invalidated by lyric revisions");
+  assert(app.includes("function invalidateLyricRenderState"), "Lyric render cache should have an explicit invalidation helper");
+  assert((app.match(/invalidateLyricRenderState\(\);/g) || []).length >= 4, "Lyric load/status changes should invalidate static lyric renders");
+  assert(/if \(!state\.isLyricSynced \|\| !state\.lyricTimeline\.length\) \{\s*stopLyricProgressLoop\(\);\s*renderStaticLyricFocusIfNeeded\(\);\s*return;/m.test(app), "Unsynced lyric updates should not rebuild lyric DOM on every tick");
+  assert(app.includes("function getNextLyricTimelineEntry"), "Lyric word progress should reuse the lyric timeline for next-line timing");
+  assert(!/state\.lyricLines\s*\.\s*slice\(activeIndex \+ 1\)\s*\.\s*find/.test(app), "Lyric word progress should not allocate slices on every frame");
+  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricWordProgressWindow\(words, words\.length\);[\s\S]*?return;[\s\S]*?const fallbackEnd = start \+/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
+  assert(app.includes("lyricLineElements"), "Now-playing lyric lines should be cached for active updates");
+  assert(app.includes("function syncLyricListActiveClass"), "Now-playing lyric active class should be updated without scanning the list");
+  assert(!app.includes('lyricsList.querySelectorAll(".lyric-line")'), "Now-playing lyric active updates should not query every lyric line");
+  assert(!app.includes('lyricsList.querySelector(".lyric-line.active")'), "Now-playing lyric scroll should use the cached active line");
+  assert(app.includes("immersiveLyricLineElements"), "Immersive lyric lines should be cached for frame updates");
+  assert(app.includes("immersiveLyricWordElements"), "Immersive lyric words should be cached for frame updates");
+  assert(app.includes("immersiveLyricLineElements[activeIndex]"), "Lyric progress should use cached active line elements");
+  assert(app.includes("immersiveLyricWordElements[activeIndex] || []"), "Lyric progress should use cached word elements");
+  assert(app.includes("immersiveLyricActiveIndex = -1;\n  immersiveLyricLineElements = []"), "Immersive active class cache should reset when the lyric DOM is rebuilt");
+  assert(!/function resetLyricProgressState\(\) \{\s*lyricProgressActiveIndex = -1;\s*immersiveLyricActiveIndex = -1;/.test(app), "Lyric progress resets should not hide the previous active class index");
+  assert(!app.includes('querySelectorAll(`.lyric-line:not([data-lyric-index="${activeIndex}"]) .word`)'), "Lyric line changes should not scan all inactive word nodes");
+  assert(
+    /renderImmersiveLyricFocus\(\);\s*updateLyricsHighlight\(audioPlayer\.currentTime \|\| 0, true\);/.test(app),
+    "Immersive lyrics should be rendered once when lyric content is rebuilt"
+  );
+  assert(
+    /state\.activeLyricIndex = activeIndex;[\s\S]*?renderNowLyricFocus\(\);[\s\S]*?updateImmersiveLyricProgress\(currentSeconds, forceScroll \|\| getActiveView\(\) === "immersivePlayer", forceScroll\);/.test(app),
+    "Active lyric changes should update immersive lyric state without rebuilding the full list"
+  );
+  assert(
+    !/state\.activeLyricIndex = activeIndex;\s*resetLyricProgressState\(\);/.test(app),
+    "Active lyric changes should keep the previous word-progress index so the old line can be reset"
+  );
+  assert(
+    !/state\.activeLyricIndex = activeIndex;[\s\S]*?renderImmersiveLyricFocus\(\);[\s\S]*?lyricsList\.querySelectorAll\("\.lyric-line"\)/.test(app),
+    "Active lyric changes should not rebuild the immersive lyric DOM"
+  );
 }
 
 function checkAppFunctionReferences() {
@@ -182,8 +287,10 @@ function checkAppFunctionReferences() {
   assert(css.includes("@keyframes glowPulse"), "Active home track rows should have ambient glow pulse");
   assert(css.includes("@keyframes shimmer"), "Home track skeletons should use shimmer loading");
   assert(css.includes("transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"), "Track row hover should use the premium light motion curve");
-  assert(css.includes("0 12px 30px rgba(var(--accent-color-rgb), 0.04)"), "Track row hover should use a soft external accent shadow");
-  assert(!/\.home-track-row:hover::after[\s\S]*?radial-gradient\(circle at var\(--ripple-x/.test(css), "Home track hover must not use internal pointer-origin gradients");
+  assert(css.includes("box-shadow: 0 12px 30px rgba(var(--accent-color-rgb), 0.04)"), "Track row hover should use the original light integrated shadow");
+  assert(/\.track-row::after,\s*\.queue-track-row::after,\s*\.library-track-row::after[\s\S]*?display: none;[\s\S]*?content: none;/.test(css), "Full queue and library rows should keep the restored non-ripple hover layer");
+  assert(getCssRule(css, ".track-row:hover,").includes("transform: none"), "Track row hover should not lift rows away from the list rhythm");
+  assert(getCssRule(css, ".queue-track-row.playing::after,").includes("display: none"), "Active queue/library rows should keep the restored non-ripple hover layer");
   assert(css.includes("backdrop-filter: blur(120px) opacity(6%)"), "Album-aware ambient light should use large blurred glow");
   assert(css.includes("transition: all 1.2s cubic-bezier(0.25, 1, 0.5, 1)"), "Album ambient light should transition smoothly on track changes");
   assert(css.includes("background: var(--accent-color, #ff2f3d)"), "Home equalizer should stay bound to the red theme accent fallback");
@@ -199,10 +306,15 @@ function checkAppFunctionReferences() {
   assert(app.includes("library-track-row"), "All non-home song lists should get refined track row styling hooks");
   assert(app.includes("quick-queue-item") && app.includes("updateHomeTrackRippleOrigin"), "Quick queue rows should bind pointer ripple origin");
   assert(app.includes("immersive-queue-item") && app.includes("updateHomeTrackRippleOrigin"), "Immersive queue rows should bind pointer ripple origin");
-  assert(!/\.queue-track-row:hover::after[\s\S]*?radial-gradient\(circle at var\(--ripple-x/.test(css), "Full queue row hover must not use internal pointer-origin gradients");
-  assert(!/\.library-track-row:hover::after[\s\S]*?radial-gradient\(circle at var\(--ripple-x/.test(css), "All song list row hover must not use internal pointer-origin gradients");
+  assert(css.includes(".queue-track-row") && css.includes(".library-track-row"), "Full queue and library rows should keep refined list styling hooks");
   assert(css.includes(".quick-queue-item::after"), "Quick queue items should have pointer-origin ripple");
   assert(css.includes(".immersive-queue-item::after"), "Immersive queue items should have pointer-origin ripple");
+  assert(css.includes("--mobile-bottom-control-stack"), "Mobile overlays should share a bottom control stack offset");
+  assert(css.includes("bottom: calc(var(--mobile-bottom-control-stack)"), "Mobile queue/video overlays should avoid the player and bottom navigation");
+  assert(css.includes("calc(100dvh - var(--mobile-bottom-control-stack)"), "Mobile queue overlay height should use dynamic viewport space above controls");
+  assert(!css.includes("bottom: 8.8rem"), "Mobile quick queue should not use a fixed bottom offset");
+  assert(!css.includes("bottom: 8rem"), "Mobile quick queue should not use a fixed compact bottom offset");
+  assert(!css.includes("bottom: 8.25rem"), "Mobile floating video should not use a fixed bottom offset");
   assert(css.includes(".queue-track-row.playing"), "Full queue active rows should share accent glow styling");
   assert(css.includes(".library-track-row.playing"), "All song list active rows should share accent glow styling");
   assert(css.includes(".quick-queue-action:not(:disabled):active"), "Quick queue actions should have spring click feedback");
@@ -267,11 +379,43 @@ function checkAppFunctionReferences() {
 function checkDomReferences() {
   const app = read("app.js");
   const index = read("index.html");
+  const browserSmoke = read("scripts/browser-smoke.js");
   const ids = new Set([...index.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
   const referencedIds = new Set([...app.matchAll(/document\.querySelector\(\s*"#([^"]+)"\s*\)/g)].map((match) => match[1]));
   const missingIds = [...referencedIds].filter((id) => !ids.has(id)).sort();
+  const browserSmokeIds = new Set([...browserSmoke.matchAll(/querySelector\(\s*["'`]#([A-Za-z][\w:-]*)["'`]\s*\)/g)].map((match) => match[1]));
+  const missingBrowserSmokeIds = [...browserSmokeIds].filter((id) => !ids.has(id)).sort();
 
   assert(!missingIds.length, `app.js references missing index.html id(s): ${missingIds.map((id) => `#${id}`).join(", ")}`);
+  assert(!missingBrowserSmokeIds.length, `browser-smoke.js references missing index.html id(s): ${missingBrowserSmokeIds.map((id) => `#${id}`).join(", ")}`);
+
+  [
+    "aria-controls",
+    "aria-labelledby",
+    "aria-describedby",
+    "for",
+  ].forEach((attribute) => {
+    const missingAttributeIds = findMissingHtmlIdReferences(index, ids, attribute);
+    assert(
+      !missingAttributeIds.length,
+      `index.html ${attribute} references missing id(s): ${missingAttributeIds.map((id) => `#${id}`).join(", ")}`
+    );
+  });
+}
+
+function findMissingHtmlIdReferences(html, ids, attribute) {
+  const references = new Set();
+  const pattern = new RegExp(`\\b${attribute}="([^"]+)"`, "g");
+
+  [...html.matchAll(pattern)].forEach((match) => {
+    String(match[1] || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .forEach((id) => references.add(id));
+  });
+
+  return [...references].filter((id) => !ids.has(id)).sort();
 }
 
 function main() {
