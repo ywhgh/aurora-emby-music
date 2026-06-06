@@ -52,6 +52,18 @@ function checkVersions() {
   assert(browserSmoke.includes("documentWidth <= page.viewportWidth + 1"), "Browser smoke should detect horizontal document overflow");
   assert(browserSmoke.includes('loginCardVisible: isVisible(".login-card")'), "Browser smoke should verify login card visibility");
   assert(browserSmoke.includes('connectFormVisible: isVisible("#connectForm")'), "Browser smoke should verify login form visibility");
+  assert(browserSmoke.includes("async function waitForAppReady"), "Browser smoke should wait for the main app to finish initialization");
+  assert(browserSmoke.includes("window.EmbyMusicAppReady"), "Browser smoke should inspect the app ready marker before exercising controls");
+  assert(browserSmoke.includes("window.EmbyMusicAppError"), "Browser smoke should surface app initialization errors");
+  assert(browserSmoke.includes("main app did not report ready"), "Browser smoke should assert the app ready marker");
+  assert(browserSmoke.includes("function createLyricOffsetSmokeScript"), "Browser smoke should exercise lyric offset controls in real Chrome");
+  assert(browserSmoke.includes('localStorage.removeItem(key)'), "Browser smoke should reset lyric offset storage before checking controls");
+  assert(browserSmoke.includes('click(\'[data-lyric-offset-adjust="earlier"]\')'), "Browser smoke should click the lyric offset earlier button");
+  assert(browserSmoke.includes('click(\'[data-lyric-offset-adjust="later"]\')'), "Browser smoke should click the lyric offset later button");
+  assert(browserSmoke.includes('click("[data-lyric-offset-reset]")'), "Browser smoke should click the lyric offset reset button");
+  assert(browserSmoke.includes('afterEarlierStorage === "0.28"'), "Browser smoke should verify lyric offset earlier persistence");
+  assert(browserSmoke.includes('afterLaterTwiceStorage === "0.08"'), "Browser smoke should verify lyric offset later persistence");
+  assert(browserSmoke.includes('afterResetStorage === "0.18"'), "Browser smoke should verify lyric offset reset persistence");
   assert(browserSmoke.includes("EXPECTED_VERSION_LABEL"), "Browser smoke should derive the expected version label from package.json");
   assert(browserSmoke.includes("PROFILE_CLEANUP_BUDGET_MS"), "Browser smoke profile cleanup should have a bounded time budget");
   assert(browserSmoke.includes("OLD_PROFILE_CLEANUP_LIMIT"), "Browser smoke should limit old profile cleanup work per run");

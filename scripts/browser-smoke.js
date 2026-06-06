@@ -165,6 +165,75 @@ function runDetachedCleanup(command, args) {
   }
 }
 
+function createLyricOffsetSmokeScript() {
+  return `(() => {
+    const key = "emby-music-web/lyric-offset-seconds";
+    const getLabels = () => [...document.querySelectorAll("[data-lyric-offset-value]")]
+      .map((element) => element.textContent.trim());
+    const getResetDisabledStates = () => [...document.querySelectorAll("[data-lyric-offset-reset]")]
+      .map((button) => Boolean(button.disabled));
+    const click = (selector) => {
+      const button = document.querySelector(selector);
+      if (!button) {
+        return false;
+      }
+      button.click();
+      return true;
+    };
+
+    localStorage.removeItem(key);
+
+    const hasEarlierButton = Boolean(document.querySelector('[data-lyric-offset-adjust="earlier"]'));
+    const hasLaterButton = Boolean(document.querySelector('[data-lyric-offset-adjust="later"]'));
+    const hasResetButton = Boolean(document.querySelector("[data-lyric-offset-reset]"));
+    const hasValueLabels = document.querySelectorAll("[data-lyric-offset-value]").length >= 2;
+    const initialLabels = getLabels();
+    const initialResetDisabled = getResetDisabledStates();
+
+    const clickedEarlier = click('[data-lyric-offset-adjust="earlier"]');
+    const afterEarlierLabels = getLabels();
+    const afterEarlierStorage = localStorage.getItem(key) || "";
+    const afterEarlierResetDisabled = getResetDisabledStates();
+
+    const clickedLaterOnce = click('[data-lyric-offset-adjust="later"]');
+    const afterLaterOnceLabels = getLabels();
+    const afterLaterOnceStorage = localStorage.getItem(key) || "";
+
+    const clickedLaterTwice = click('[data-lyric-offset-adjust="later"]');
+    const afterLaterTwiceLabels = getLabels();
+    const afterLaterTwiceStorage = localStorage.getItem(key) || "";
+
+    const clickedReset = click("[data-lyric-offset-reset]");
+    const afterResetLabels = getLabels();
+    const afterResetStorage = localStorage.getItem(key) || "";
+    const afterResetDisabled = getResetDisabledStates();
+
+    return {
+      key,
+      hasEarlierButton,
+      hasLaterButton,
+      hasResetButton,
+      hasValueLabels,
+      initialLabels,
+      initialResetDisabled,
+      clickedEarlier,
+      afterEarlierLabels,
+      afterEarlierStorage,
+      afterEarlierResetDisabled,
+      clickedLaterOnce,
+      afterLaterOnceLabels,
+      afterLaterOnceStorage,
+      clickedLaterTwice,
+      afterLaterTwiceLabels,
+      afterLaterTwiceStorage,
+      clickedReset,
+      afterResetLabels,
+      afterResetStorage,
+      afterResetDisabled,
+    };
+  })()`;
+}
+
 function killProcessTree(pid) {
   if (!pid) {
     return;
@@ -309,6 +378,35 @@ async function createBrowser(chromePath) {
   return { chrome, port, profileDir };
 }
 
+async function waitForAppReady(cdp, check) {
+  const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  let latest = null;
+
+  while (Date.now() < deadline) {
+    const evaluation = await cdp.send("Runtime.evaluate", {
+      returnByValue: true,
+      expression: `(() => ({
+        readyState: document.readyState,
+        appReady: Boolean(window.EmbyMusicAppReady),
+        appError: String(window.EmbyMusicAppError || ""),
+      }))()`,
+    });
+    latest = evaluation.result.value || {};
+
+    if (latest.appReady) {
+      return latest;
+    }
+
+    if (latest.appError) {
+      throw new Error(`[${check.name}] app initialization failed: ${latest.appError}`);
+    }
+
+    await delay(150);
+  }
+
+  throw new Error(`[${check.name}] app did not become ready: ${JSON.stringify(latest)}`);
+}
+
 async function closeBrowser(browser, cdp) {
   try {
     await withTimeout(Promise.resolve(cdp?.send("Browser.close")), 4000, "Browser.close");
@@ -343,11 +441,13 @@ async function runBrowserCheck(cdp, check) {
     await cdp.send("Page.navigate", {
       url: `${APP_URL}?browser-smoke=${encodeURIComponent(check.name)}-${Date.now()}`,
     });
-    await delay(2500);
+    await waitForAppReady(cdp, check);
+    await delay(250);
 
     const evaluation = await cdp.send("Runtime.evaluate", {
       returnByValue: true,
       expression: `(() => {
+        const lyricOffset = ${createLyricOffsetSmokeScript()};
         const text = (selector) => document.querySelector(selector)?.textContent?.trim() || "";
         const exists = (selector) => Boolean(document.querySelector(selector));
         const isVisible = (selector) => {
@@ -368,6 +468,8 @@ async function runBrowserCheck(cdp, check) {
         return {
           title: document.title,
           readyState: document.readyState,
+          appReady: Boolean(window.EmbyMusicAppReady),
+          appError: String(window.EmbyMusicAppError || ""),
           bodyClass: document.body.className,
           viewportWidth: window.innerWidth,
           documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
@@ -393,6 +495,7 @@ async function runBrowserCheck(cdp, check) {
           playerbarRect: rect(".playerbar"),
           mobileBottomNavVisible: isVisible(".mobile-bottom-nav"),
           mobileBottomNavRect: rect(".mobile-bottom-nav"),
+          lyricOffset,
           storageKeys: Object.keys(localStorage).filter((key) => key.startsWith("emby-music-web/")).sort(),
         };
       })()`,
@@ -415,8 +518,14 @@ async function runBrowserCheck(cdp, check) {
 
 function checkPageState(check, page) {
   const label = `[${check.name}]`;
+  const lyricOffset = page.lyricOffset || {};
+  const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
+  const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
+
   assert(page.title === "Emby Music Web", `${label} expected title Emby Music Web, got ${page.title || "-"}`);
   assert(["interactive", "complete"].includes(page.readyState), `${label} document did not become interactive`);
+  assert(page.appReady, `${label} main app did not report ready`);
+  assert(!page.appError, `${label} main app reported initialization error: ${page.appError || "-"}`);
   assert(page.hasLoginView, `${label} missing login view`);
   assert(page.hasConnectForm, `${label} missing login form`);
   assert(page.hasMainView, `${label} missing main view`);
@@ -442,6 +551,26 @@ function checkPageState(check, page) {
     }
   }
   assert(page.version === EXPECTED_VERSION_LABEL, `${label} version label mismatch: ${page.version || "-"}, expected ${EXPECTED_VERSION_LABEL}`);
+  assert(lyricOffset.hasEarlierButton, `${label} missing lyric offset earlier button`);
+  assert(lyricOffset.hasLaterButton, `${label} missing lyric offset later button`);
+  assert(lyricOffset.hasResetButton, `${label} missing lyric offset reset button`);
+  assert(lyricOffset.hasValueLabels, `${label} missing mirrored lyric offset value labels`);
+  assert(labelsEqual(lyricOffset.initialLabels, "+0.18s"), `${label} initial lyric offset labels were ${JSON.stringify(lyricOffset.initialLabels)}`);
+  assert(resetStatesEqual(lyricOffset.initialResetDisabled, true), `${label} lyric offset reset should start disabled`);
+  assert(lyricOffset.clickedEarlier, `${label} lyric offset earlier button did not click`);
+  assert(labelsEqual(lyricOffset.afterEarlierLabels, "+0.28s"), `${label} earlier click did not advance labels: ${JSON.stringify(lyricOffset.afterEarlierLabels)}`);
+  assert(lyricOffset.afterEarlierStorage === "0.28", `${label} earlier click did not persist 0.28, got ${lyricOffset.afterEarlierStorage || "-"}`);
+  assert(resetStatesEqual(lyricOffset.afterEarlierResetDisabled, false), `${label} lyric offset reset should enable after adjustment`);
+  assert(lyricOffset.clickedLaterOnce, `${label} lyric offset later button did not click once`);
+  assert(labelsEqual(lyricOffset.afterLaterOnceLabels, "+0.18s"), `${label} first later click did not return to default labels: ${JSON.stringify(lyricOffset.afterLaterOnceLabels)}`);
+  assert(lyricOffset.afterLaterOnceStorage === "0.18", `${label} first later click did not persist 0.18, got ${lyricOffset.afterLaterOnceStorage || "-"}`);
+  assert(lyricOffset.clickedLaterTwice, `${label} lyric offset later button did not click twice`);
+  assert(labelsEqual(lyricOffset.afterLaterTwiceLabels, "+0.08s"), `${label} second later click did not delay labels: ${JSON.stringify(lyricOffset.afterLaterTwiceLabels)}`);
+  assert(lyricOffset.afterLaterTwiceStorage === "0.08", `${label} second later click did not persist 0.08, got ${lyricOffset.afterLaterTwiceStorage || "-"}`);
+  assert(lyricOffset.clickedReset, `${label} lyric offset reset button did not click`);
+  assert(labelsEqual(lyricOffset.afterResetLabels, "+0.18s"), `${label} reset click did not restore labels: ${JSON.stringify(lyricOffset.afterResetLabels)}`);
+  assert(lyricOffset.afterResetStorage === "0.18", `${label} reset click did not persist 0.18, got ${lyricOffset.afterResetStorage || "-"}`);
+  assert(resetStatesEqual(lyricOffset.afterResetDisabled, true), `${label} lyric offset reset should disable after reset`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 
