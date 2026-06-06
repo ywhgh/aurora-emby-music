@@ -115,6 +115,8 @@ function checkCss() {
 
 function checkLyrics() {
   const lyricsCode = read("src/lyrics.js");
+  const index = read("index.html");
+  const css = read("styles.css");
   const context = { window: {} };
   vm.runInNewContext(lyricsCode, context, { filename: "src/lyrics.js" });
   const parseLyrics = context.window.EmbyMusicLyrics?.parseLyrics;
@@ -138,8 +140,26 @@ function checkLyrics() {
   assert(app.includes("renderImmersiveLyricFocus"), "Missing immersive lyric renderer");
   assert(app.includes("immersive-lyric-original"), "Immersive lyric renderer does not render original text");
   assert(app.includes("immersive-lyric-translated"), "Immersive lyric renderer does not render translated text");
+  assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
+  assert(index.includes('data-lyric-offset-adjust="later"'), "Lyrics panel should expose a button for lyrics that are too fast");
+  assert(index.includes("data-lyric-offset-reset"), "Lyrics panel should expose a lyric offset reset button");
+  assert(css.includes(".lyric-offset-controls"), "Lyric offset controls should have scoped styles");
+  assert(app.includes('LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds"'), "Lyric offset should be persisted in localStorage");
+  assert(app.includes("DEFAULT_LYRIC_OFFSET_SECONDS = 0.18"), "Lyric offset should preserve the previous default lead");
+  assert(app.includes("function loadLyricOffsetSeconds"), "Lyric offset should load a saved preference");
+  assert(app.includes("function saveLyricOffsetSeconds"), "Lyric offset should save preference changes");
+  assert(app.includes("function adjustLyricOffset"), "Lyric offset should be adjustable from controls");
+  assert(app.includes("function getAdjustedLyricSeconds"), "Lyric timing should share one adjusted playback time");
+  assert(!app.includes("currentSeconds + 0.18"), "Lyric timing should not use a hard-coded 0.18s lead");
+  assert(/function findActiveLyricIndex\(currentSeconds\) \{\s*const targetSeconds = getAdjustedLyricSeconds\(currentSeconds\);/.test(app), "Active lyric lookup should use configurable lyric offset");
+  assert(/const lyricSeconds = getAdjustedLyricSeconds\(currentSeconds\);[\s\S]*?clamp\(\(lyricSeconds - start\) \/ \(end - start\), 0, 1\)/.test(app), "Immersive word progress should use configurable lyric offset");
+  assert(/function refreshLyricsAfterOffsetChange\(\) \{[\s\S]*?state\.activeLyricIndex = -1;[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\), true\);/.test(app), "Changing lyric offset should reset lyric caches and refresh immediately");
   assert(app.includes("function updateLyricProgressFrame"), "Immersive word lyrics should use an animation-frame progress loop");
   assert(app.includes("requestAnimationFrame(updateLyricProgressFrame)"), "Lyric word progress loop should be driven by requestAnimationFrame");
+  assert(app.includes("function isImmersiveLyricsVisible"), "Immersive word lyric animation should have an explicit visibility gate");
+  assert(/function shouldRunLyricProgressLoop\(\) \{[\s\S]*?&& isImmersiveLyricsVisible\(\)[\s\S]*?&& !audioPlayer\.ended;/.test(app), "Immersive word lyric RAF loop should run only while the immersive lyrics are visible");
+  assert(/if \(activeIndex === state\.activeLyricIndex && !forceScroll\) \{[\s\S]*?if \(isImmersiveLyricsVisible\(\)\) \{[\s\S]*?updateImmersiveLyricProgress\(currentSeconds\);/.test(app), "Hidden immersive lyrics should not receive per-frame word progress updates");
+  assert(/if \(nextView === "immersivePlayer" && state\.isLyricSynced\) \{[\s\S]*?updateImmersiveLyricProgress\(getAudioCurrentTimeSeconds\(\), true, true\);/.test(app), "Entering immersive playback should immediately refresh current word lyric progress");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");

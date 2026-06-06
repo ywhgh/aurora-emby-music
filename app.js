@@ -200,6 +200,11 @@ const EXTERNAL_SOURCE_QUALITY_KEY = "emby-music-web/external-source-quality";
 const EXTERNAL_SOURCE_VIDEO_QUALITY_KEY = "emby-music-web/external-source-video-quality";
 const DEFAULT_EXTERNAL_SOURCE_QUALITY_ID = "high";
 const DEFAULT_EXTERNAL_SOURCE_VIDEO_QUALITY_ID = "video-720";
+const LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds";
+const DEFAULT_LYRIC_OFFSET_SECONDS = 0.18;
+const LYRIC_OFFSET_STEP_SECONDS = 0.1;
+const MIN_LYRIC_OFFSET_SECONDS = -2;
+const MAX_LYRIC_OFFSET_SECONDS = 2;
 const EXTERNAL_SOURCE_QUALITY_OPTIONS = [
   {
     id: "high",
@@ -802,6 +807,7 @@ const state = {
   externalSourceApiUrl: getInitialExternalSourceApiUrl(initialSession),
   sourceBridgeManifestUrl: loadSourceBridgeManifestUrl(),
   sourceBridgeMusicDir: loadSourceBridgeMusicDir(),
+  lyricOffsetSeconds: loadLyricOffsetSeconds(),
   sourceBridgeInfo: null,
   views: [],
   libraryViewId: initialLibraryViewId,
@@ -1004,6 +1010,7 @@ function init() {
   setPlayerEnabled(Boolean(state.queue.length));
   renderQueue();
   renderNowPlaying();
+  renderLyricOffsetControls();
   applyImmersiveBackgroundMode();
   renderRestoredPlaybackProgress(state.currentTrack);
 
@@ -1269,6 +1276,7 @@ function init() {
   nowPlayingPlayLibraryButton.addEventListener("click", playLibraryFromNowPlaying);
   nowPlayingOpenLibraryButton.addEventListener("click", () => switchView("library"));
   nowLyricFocus.addEventListener("click", focusActiveLyricLine);
+  bindLyricOffsetControls();
   immersiveArtist.addEventListener("click", () => {
     if (state.currentTrack) {
       openTrackArtist(state.currentTrack);
@@ -6626,6 +6634,94 @@ function mergeLyricsIntoTrack(track, text) {
   saveQueueState();
 }
 
+function bindLyricOffsetControls() {
+  document.querySelectorAll("[data-lyric-offset-adjust]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const direction = button.dataset.lyricOffsetAdjust;
+      adjustLyricOffset(direction === "earlier" ? LYRIC_OFFSET_STEP_SECONDS : -LYRIC_OFFSET_STEP_SECONDS);
+    });
+  });
+
+  document.querySelectorAll("[data-lyric-offset-reset]").forEach((button) => {
+    button.addEventListener("click", () => resetLyricOffset());
+  });
+}
+
+function adjustLyricOffset(deltaSeconds) {
+  setLyricOffsetSeconds(state.lyricOffsetSeconds + deltaSeconds);
+}
+
+function resetLyricOffset() {
+  setLyricOffsetSeconds(DEFAULT_LYRIC_OFFSET_SECONDS);
+}
+
+function setLyricOffsetSeconds(nextSeconds) {
+  const normalizedSeconds = normalizeLyricOffsetSeconds(nextSeconds);
+
+  if (Math.abs(normalizedSeconds - state.lyricOffsetSeconds) < 0.001) {
+    renderLyricOffsetControls();
+    return;
+  }
+
+  state.lyricOffsetSeconds = normalizedSeconds;
+  saveLyricOffsetSeconds(normalizedSeconds);
+  renderLyricOffsetControls();
+  refreshLyricsAfterOffsetChange();
+}
+
+function refreshLyricsAfterOffsetChange() {
+  state.activeLyricIndex = -1;
+  state.activeLyricTimelineIndex = -1;
+  resetLyricProgressState();
+  updateLyricsHighlight(getAudioCurrentTimeSeconds(), true);
+  syncLyricProgressLoop();
+}
+
+function renderLyricOffsetControls() {
+  const label = formatLyricOffsetLabel(state.lyricOffsetSeconds);
+  const title = `歌词偏移 ${label}，正数会让歌词更早显示`;
+
+  document.querySelectorAll("[data-lyric-offset-value]").forEach((element) => {
+    element.textContent = label;
+    element.title = title;
+  });
+
+  document.querySelectorAll("[data-lyric-offset-reset]").forEach((button) => {
+    button.disabled = Math.abs(state.lyricOffsetSeconds - DEFAULT_LYRIC_OFFSET_SECONDS) < 0.001;
+  });
+}
+
+function getAdjustedLyricSeconds(currentSeconds) {
+  return (Number(currentSeconds) || 0) + state.lyricOffsetSeconds;
+}
+
+function formatLyricOffsetLabel(seconds) {
+  const roundedSeconds = normalizeLyricOffsetSeconds(seconds);
+  const sign = roundedSeconds >= 0 ? "+" : "";
+  const tenths = Math.round(roundedSeconds * 10);
+  const hundredths = Math.round(roundedSeconds * 100);
+  const precision = Math.abs((tenths * 10) - hundredths) < 0.001 ? 1 : 2;
+  return `${sign}${roundedSeconds.toFixed(precision)}s`;
+}
+
+function normalizeLyricOffsetSeconds(seconds) {
+  if (seconds === null || seconds === undefined || seconds === "") {
+    return DEFAULT_LYRIC_OFFSET_SECONDS;
+  }
+
+  const numericSeconds = Number(seconds);
+  const finiteSeconds = Number.isFinite(numericSeconds) ? numericSeconds : DEFAULT_LYRIC_OFFSET_SECONDS;
+  return Math.round(clamp(finiteSeconds, MIN_LYRIC_OFFSET_SECONDS, MAX_LYRIC_OFFSET_SECONDS) * 100) / 100;
+}
+
+function loadLyricOffsetSeconds() {
+  return normalizeLyricOffsetSeconds(localStorage.getItem(LYRIC_OFFSET_KEY));
+}
+
+function saveLyricOffsetSeconds(seconds) {
+  localStorage.setItem(LYRIC_OFFSET_KEY, String(normalizeLyricOffsetSeconds(seconds)));
+}
+
 function updateLyricsHighlight(currentSeconds, forceScroll = false) {
   if (!state.isLyricSynced || !state.lyricTimeline.length) {
     stopLyricProgressLoop();
@@ -6636,14 +6732,18 @@ function updateLyricsHighlight(currentSeconds, forceScroll = false) {
   const activeIndex = findActiveLyricIndex(currentSeconds);
 
   if (activeIndex === state.activeLyricIndex && !forceScroll) {
-    updateImmersiveLyricProgress(currentSeconds);
+    if (isImmersiveLyricsVisible()) {
+      updateImmersiveLyricProgress(currentSeconds);
+    }
     syncLyricProgressLoop();
     return;
   }
 
   state.activeLyricIndex = activeIndex;
   renderNowLyricFocus();
-  updateImmersiveLyricProgress(currentSeconds, forceScroll || getActiveView() === "immersivePlayer", forceScroll);
+  if (isImmersiveLyricsVisible()) {
+    updateImmersiveLyricProgress(currentSeconds, forceScroll || getActiveView() === "immersivePlayer", forceScroll);
+  }
   syncLyricListActiveClass(activeIndex);
 
   const activeItem = lyricLineElements[activeIndex];
@@ -6694,7 +6794,7 @@ function invalidateLyricRenderState() {
 }
 
 function findActiveLyricIndex(currentSeconds) {
-  const targetSeconds = currentSeconds + 0.18;
+  const targetSeconds = getAdjustedLyricSeconds(currentSeconds);
   const currentIndex = state.activeLyricIndex;
   const currentTimelineIndex = state.activeLyricTimelineIndex;
 
@@ -6999,15 +7099,21 @@ function resetLyricProgressState() {
   lyricProgressPartialWordIndex = -1;
 }
 
+function isImmersiveLyricsVisible() {
+  return getActiveView() === "immersivePlayer"
+    && immersivePlayerPanel?.classList.contains("active")
+    && document.visibilityState !== "hidden";
+}
+
 function shouldRunLyricProgressLoop() {
   return state.isLyricSynced
     && state.lyricLines.length > 0
     && state.activeLyricIndex >= 0
+    && isImmersiveLyricsVisible()
     && state.currentTrack
     && audioPlayer.src
     && !audioPlayer.paused
-    && !audioPlayer.ended
-    && document.visibilityState !== "hidden";
+    && !audioPlayer.ended;
 }
 
 function syncLyricProgressLoop() {
@@ -7062,6 +7168,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
   const currentLine = state.lyricLines[activeIndex];
   const nextEntry = getNextLyricTimelineEntry(activeIndex);
   const start = Number(currentLine?.time);
+  const lyricSeconds = getAdjustedLyricSeconds(currentSeconds);
 
   if (!Number.isFinite(start)) {
     updateLyricWordProgressWindow(words, words.length);
@@ -7071,7 +7178,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
   const fallbackEnd = start + Math.max(2.4, words.length * 0.22);
   const end = Number.isFinite(nextEntry?.time) ? nextEntry.time : fallbackEnd;
   const lineRatio = end > start
-    ? clamp((currentSeconds - start) / (end - start), 0, 1)
+    ? clamp((lyricSeconds - start) / (end - start), 0, 1)
     : 1;
   const litWords = lineRatio * words.length;
   updateLyricWordProgressWindow(words, litWords);
@@ -15696,6 +15803,9 @@ function switchView(view, options = {}) {
     history.replaceState(null, "", `#${nextView}`);
   }
 
+  if (nextView === "immersivePlayer" && state.isLyricSynced) {
+    updateImmersiveLyricProgress(getAudioCurrentTimeSeconds(), true, true);
+  }
   syncLyricProgressLoop();
   restoreViewScrollPosition(nextView, options);
 }
