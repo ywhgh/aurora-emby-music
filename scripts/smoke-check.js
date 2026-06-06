@@ -153,13 +153,25 @@ function checkLyrics() {
   assert(!app.includes("currentSeconds + 0.18"), "Lyric timing should not use a hard-coded 0.18s lead");
   assert(/function findActiveLyricIndex\(currentSeconds\) \{\s*const targetSeconds = getAdjustedLyricSeconds\(currentSeconds\);/.test(app), "Active lyric lookup should use configurable lyric offset");
   assert(/const lyricSeconds = getAdjustedLyricSeconds\(currentSeconds\);[\s\S]*?clamp\(\(lyricSeconds - start\) \/ \(end - start\), 0, 1\)/.test(app), "Immersive word progress should use configurable lyric offset");
-  assert(/function refreshLyricsAfterOffsetChange\(\) \{[\s\S]*?state\.activeLyricIndex = -1;[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\), true\);/.test(app), "Changing lyric offset should reset lyric caches and refresh immediately");
+  assert(/function refreshLyricsAfterOffsetChange\(\) \{[\s\S]*?state\.activeLyricIndex = -1;[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Changing lyric offset should reset lyric caches and refresh immediately");
   assert(app.includes("function updateLyricProgressFrame"), "Immersive word lyrics should use an animation-frame progress loop");
   assert(app.includes("requestAnimationFrame(updateLyricProgressFrame)"), "Lyric word progress loop should be driven by requestAnimationFrame");
+  assert(app.includes("lyricClockAudioSeconds"), "Lyric word progress should maintain a high-resolution playback clock");
+  assert(app.includes("function syncLyricPlaybackClock"), "Lyric playback clock should be explicitly synchronized");
+  assert(app.includes("function getLyricPlaybackTimeSeconds"), "Lyric word progress should read from a smooth playback clock");
+  assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
+  assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getLyricPlaybackTimeSeconds\(\)\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock");
+  assert(!/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\)\);/.test(app), "RAF lyric progress should not depend on discrete audio.currentTime reads");
+  assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?syncLyricProgressLoop\(\);/.test(app), "Audio play should start the smooth lyric playback clock");
+  assert(/function handleAudioPause\(\) \{[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Audio pause should freeze the smooth lyric playback clock");
+  assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\);/.test(app), "Audio timeupdate should recalibrate the smooth lyric playback clock");
+  assert(/function handleAudioSeeked\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeked should recalibrate and force-refresh lyrics");
+  assert(app.includes('audioPlayer.addEventListener("ratechange", handleAudioRateChange)'), "Playback rate changes should recalibrate lyric timing");
+  assert(/function handleAudioRateChange\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateMediaSessionPosition\(\);/.test(app), "Audio rate changes should sync lyric clock before updating media session position");
   assert(app.includes("function isImmersiveLyricsVisible"), "Immersive word lyric animation should have an explicit visibility gate");
   assert(/function shouldRunLyricProgressLoop\(\) \{[\s\S]*?&& isImmersiveLyricsVisible\(\)[\s\S]*?&& !audioPlayer\.ended;/.test(app), "Immersive word lyric RAF loop should run only while the immersive lyrics are visible");
   assert(/if \(activeIndex === state\.activeLyricIndex && !forceScroll\) \{[\s\S]*?if \(isImmersiveLyricsVisible\(\)\) \{[\s\S]*?updateImmersiveLyricProgress\(currentSeconds\);/.test(app), "Hidden immersive lyrics should not receive per-frame word progress updates");
-  assert(/if \(nextView === "immersivePlayer" && state\.isLyricSynced\) \{[\s\S]*?updateImmersiveLyricProgress\(getAudioCurrentTimeSeconds\(\), true, true\);/.test(app), "Entering immersive playback should immediately refresh current word lyric progress");
+  assert(/if \(nextView === "immersivePlayer" && state\.isLyricSynced\) \{[\s\S]*?updateImmersiveLyricProgress\(getVisibleLyricSyncTimeSeconds\(\), true, true\);/.test(app), "Entering immersive playback should immediately refresh current word lyric progress");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
@@ -189,8 +201,8 @@ function checkLyrics() {
   assert(app.includes("LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Large lyric seeks should switch to timeline binary search");
   assert(app.includes("currentEntry.index === currentIndex"), "Lyric timeline fast path should verify the cached line index before reusing it");
   assert(app.includes("targetSeconds - currentEntry.time > LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Lyric timeline jumps should not be advanced line by line");
-  assert(/function handleAudioSeeked\(\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\), true\);/.test(app), "Audio seeks should reset lyric timeline cache and force-refresh lyric highlights without double-rendering");
-  assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics\) \{\s*updateLyricsHighlight\(current\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass");
+  assert(/function handleAudioSeeked\(\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeks should reset lyric timeline cache and force-refresh lyric highlights without double-rendering");
+  assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics\) \{\s*updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass");
   assert(!app.includes("state.lyricTimeline.findIndex"), "Lyric progress should not search the timeline every frame");
   assert(app.includes("function renderStaticLyricFocusIfNeeded"), "Static lyric views should skip redundant playback-time renders");
   assert(app.includes("lastStaticLyricRenderSignature"), "Static lyric views should cache their rendered state");
@@ -213,7 +225,7 @@ function checkLyrics() {
   assert(!/function resetLyricProgressState\(\) \{\s*lyricProgressActiveIndex = -1;\s*immersiveLyricActiveIndex = -1;/.test(app), "Lyric progress resets should not hide the previous active class index");
   assert(!app.includes('querySelectorAll(`.lyric-line:not([data-lyric-index="${activeIndex}"]) .word`)'), "Lyric line changes should not scan all inactive word nodes");
   assert(
-    /renderImmersiveLyricFocus\(\);\s*updateLyricsHighlight\(audioPlayer\.currentTime \|\| 0, true\);/.test(app),
+    /renderImmersiveLyricFocus\(\);\s*updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app),
     "Immersive lyrics should be rendered once when lyric content is rebuilt"
   );
   assert(

@@ -782,6 +782,10 @@ let lyricProgressFrame = 0;
 let lyricProgressActiveIndex = -1;
 let lyricProgressFullWordCount = -1;
 let lyricProgressPartialWordIndex = -1;
+let lyricClockAudioSeconds = 0;
+let lyricClockStartedAtMs = 0;
+let lyricClockPlaybackRate = 1;
+let lyricClockIsRunning = false;
 let activeLyricListIndex = -1;
 let lyricLineElements = [];
 let immersiveLyricActiveIndex = -1;
@@ -1313,7 +1317,7 @@ function init() {
   audioPlayer.addEventListener("playing", handleAudioBufferingEnd);
   audioPlayer.addEventListener("durationchange", updateProgress);
   audioPlayer.addEventListener("seeked", handleAudioSeeked);
-  audioPlayer.addEventListener("ratechange", updateMediaSessionPosition);
+  audioPlayer.addEventListener("ratechange", handleAudioRateChange);
   audioPlayer.addEventListener("volumechange", updateVolumeButton);
   audioPlayer.addEventListener("error", handleAudioElementError);
   playerbarSweepLayer?.addEventListener("animationend", () => {
@@ -6365,7 +6369,7 @@ function renderLyrics(track) {
   });
 
   renderImmersiveLyricFocus();
-  updateLyricsHighlight(audioPlayer.currentTime || 0, true);
+  updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   renderNowLyricFocus();
 }
 
@@ -6673,7 +6677,7 @@ function refreshLyricsAfterOffsetChange() {
   state.activeLyricIndex = -1;
   state.activeLyricTimelineIndex = -1;
   resetLyricProgressState();
-  updateLyricsHighlight(getAudioCurrentTimeSeconds(), true);
+  updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   syncLyricProgressLoop();
 }
 
@@ -7017,7 +7021,7 @@ function renderImmersiveLyricFocus() {
     appendLine("歌词未带时间轴。", "hint");
   }
 
-  updateImmersiveLyricProgress(getAudioCurrentTimeSeconds(), true, true);
+  updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
   syncLyricProgressLoop();
 }
 
@@ -7143,7 +7147,7 @@ function updateLyricProgressFrame() {
   }
 
   lyricProgressFrame = requestAnimationFrame(updateLyricProgressFrame);
-  updateLyricsHighlight(getAudioCurrentTimeSeconds());
+  updateLyricsHighlight(getLyricPlaybackTimeSeconds());
 }
 
 function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds) {
@@ -13211,6 +13215,7 @@ function seekToPosition(positionSeconds, options = {}) {
     audioPlayer.currentTime = position;
   }
 
+  pauseLyricPlaybackClock();
   updateProgress();
 
   if (options.report !== false) {
@@ -13230,6 +13235,55 @@ function getAudioCurrentTimeSeconds() {
   return Number.isFinite(currentTime) && currentTime > 0 ? currentTime : 0;
 }
 
+function getMonotonicNowMs() {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
+function syncLyricPlaybackClock(options = {}) {
+  const nowMs = getMonotonicNowMs();
+  lyricClockAudioSeconds = getAudioCurrentTimeSeconds();
+  lyricClockStartedAtMs = nowMs;
+  lyricClockPlaybackRate = Number(audioPlayer.playbackRate) || 1;
+  lyricClockIsRunning = options.running ?? shouldEstimateLyricPlaybackClock();
+}
+
+function shouldEstimateLyricPlaybackClock() {
+  return Boolean(
+    state.currentTrack
+    && audioPlayer.src
+    && !audioPlayer.paused
+    && !audioPlayer.ended
+    && !audioPlayer.seeking
+    && !state.isPlaybackBuffering
+  );
+}
+
+function getLyricPlaybackTimeSeconds() {
+  if (!lyricClockIsRunning) {
+    return getAudioCurrentTimeSeconds();
+  }
+
+  const elapsedSeconds = Math.max(0, (getMonotonicNowMs() - lyricClockStartedAtMs) / 1000);
+  const estimatedSeconds = lyricClockAudioSeconds + (elapsedSeconds * lyricClockPlaybackRate);
+  const durationSeconds = getAudioDurationSeconds();
+  return durationSeconds ? clamp(estimatedSeconds, 0, durationSeconds) : Math.max(0, estimatedSeconds);
+}
+
+function getVisibleLyricSyncTimeSeconds(fallbackSeconds = getAudioCurrentTimeSeconds()) {
+  return isImmersiveLyricsVisible() && shouldEstimateLyricPlaybackClock()
+    ? getLyricPlaybackTimeSeconds()
+    : fallbackSeconds;
+}
+
+function pauseLyricPlaybackClock() {
+  lyricClockAudioSeconds = getAudioCurrentTimeSeconds();
+  lyricClockStartedAtMs = getMonotonicNowMs();
+  lyricClockPlaybackRate = Number(audioPlayer.playbackRate) || 1;
+  lyricClockIsRunning = false;
+}
+
 function stopPlaybackFromMediaSession() {
   if (!state.currentTrack && !audioPlayer.src) {
     clearMediaSession();
@@ -13239,6 +13293,7 @@ function stopPlaybackFromMediaSession() {
   state.savedPlaybackPositionSeconds = getAudioCurrentTimeSeconds();
   reportPlaybackStopped();
   audioPlayer.pause();
+  pauseLyricPlaybackClock();
   unloadAudioSource();
   stopLyricProgressLoop();
   clearPreload();
@@ -13315,6 +13370,7 @@ function playNext(options = {}) {
 
 function handleTrackEnded() {
   stopLyricProgressLoop();
+  pauseLyricPlaybackClock();
 
   if (state.playMode === "repeat-one" && state.currentTrack) {
     playTrack(state.currentTrack, state.queue);
@@ -15451,6 +15507,7 @@ function getTrackDurationSeconds(track) {
 
 function handleAudioPlay() {
   setPlaybackBuffering(false);
+  syncLyricPlaybackClock({ running: true });
   updatePlaybackState();
   syncLyricProgressLoop();
 
@@ -15461,6 +15518,7 @@ function handleAudioPlay() {
 
 function handleAudioPause() {
   setPlaybackBuffering(false);
+  pauseLyricPlaybackClock();
   updatePlaybackState();
   stopLyricProgressLoop();
   persistPlaybackPosition({ force: true });
@@ -15471,6 +15529,7 @@ function handleAudioPause() {
 }
 
 function handleAudioTimeUpdate() {
+  syncLyricPlaybackClock();
   updateProgress();
   persistPlaybackPosition();
 
@@ -15481,9 +15540,10 @@ function handleAudioTimeUpdate() {
 
 function handleAudioSeeked() {
   setPlaybackBuffering(false);
+  syncLyricPlaybackClock();
   updateProgress({ syncLyrics: false });
   state.activeLyricTimelineIndex = -1;
-  updateLyricsHighlight(getAudioCurrentTimeSeconds(), true);
+  updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   syncLyricProgressLoop();
 
   if (state.currentTrack && !state.isChangingTrack && audioPlayer.src) {
@@ -15500,11 +15560,19 @@ function handleAudioBufferingStart() {
     return;
   }
 
+  pauseLyricPlaybackClock();
   setPlaybackBuffering(true);
 }
 
 function handleAudioBufferingEnd() {
   setPlaybackBuffering(false);
+  syncLyricPlaybackClock();
+  syncLyricProgressLoop();
+}
+
+function handleAudioRateChange() {
+  syncLyricPlaybackClock();
+  updateMediaSessionPosition();
 }
 
 function setPlaybackBuffering(isBuffering) {
@@ -15526,7 +15594,7 @@ function updateProgress(options = {}) {
 
   setProgressDisplay(current, duration);
   if (shouldSyncLyrics) {
-    updateLyricsHighlight(current);
+    updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(current));
   }
   updateMediaSessionPosition();
   renderPlayerNextPreview();
@@ -15804,7 +15872,7 @@ function switchView(view, options = {}) {
   }
 
   if (nextView === "immersivePlayer" && state.isLyricSynced) {
-    updateImmersiveLyricProgress(getAudioCurrentTimeSeconds(), true, true);
+    updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
   }
   syncLyricProgressLoop();
   restoreViewScrollPosition(nextView, options);
