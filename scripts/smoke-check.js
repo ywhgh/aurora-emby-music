@@ -307,6 +307,55 @@ function checkLyrics() {
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
 }
 
+async function checkExternalSourceLyrics() {
+  const externalSourceCode = read("src/external-source-api.js");
+  const requests = [];
+  const context = {
+    URL,
+    location: { href: "http://localhost:5174/" },
+    fetch: async (url) => {
+      requests.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({
+          data: {
+            sentences: [
+              { startTimeMs: 1230, text: "第一句" },
+              { StartPositionTicks: 24500000, Text: "第二句" },
+              { value: "无时间歌词" },
+            ],
+          },
+        }),
+      };
+    },
+    window: {},
+  };
+  vm.runInNewContext(externalSourceCode, context, { filename: "src/external-source-api.js" });
+
+  const api = context.window.EmbyMusicExternalSource.createExternalSourceApi();
+  const lyric = await api.fetchLyric("http://localhost:5174", {
+    Id: "external:test:song-1",
+    ExternalSource: {
+      id: "song-1",
+      platform: "test",
+    },
+  });
+
+  assert(requests[0]?.includes("/lyric"), `External lyric request should call /lyric, got ${requests[0] || "-"}`);
+  assert(lyric.includes("[00:01.23]第一句"), `External lyric line array should convert millisecond time, got ${lyric}`);
+  assert(lyric.includes("[00:02.45]第二句"), `External lyric line array should convert tick time, got ${lyric}`);
+  assert(lyric.includes("无时间歌词"), `External lyric line array should keep untimed text, got ${lyric}`);
+
+  const bridge = read("scripts/source-bridge.js");
+  assert(bridge.includes("function extractPluginLyricText"), "Source bridge should normalize plugin lyric payloads");
+  assert(bridge.includes("formatPluginLyricLineArray"), "Source bridge should convert plugin lyric line arrays to LRC");
+  assert(bridge.includes("payload.result?.sentences"), "Source bridge should inspect nested lyric sentence arrays");
+  assert(bridge.includes("line?.StartPositionTicks"), "Source bridge should support Emby-style lyric tick fields");
+  assert(bridge.includes("function formatLrcTimestamp"), "Source bridge should format converted lyric line timestamps");
+}
+
 function checkAppFunctionReferences() {
   const app = read("app.js");
   [
@@ -533,10 +582,11 @@ function findMissingHtmlIdReferences(html, ids, attribute) {
   return [...references].filter((id) => !ids.has(id)).sort();
 }
 
-function main() {
+async function main() {
   checkVersions();
   checkCss();
   checkLyrics();
+  await checkExternalSourceLyrics();
   checkAppFunctionReferences();
   checkDomReferences();
 
@@ -548,4 +598,7 @@ function main() {
   console.log("smoke-check ok");
 }
 
-main();
+main().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});

@@ -391,13 +391,29 @@ function extractLyricText(payload) {
     return direct;
   }
 
-  const lines = [
+  return formatLyricLineArray([
     payload.lines,
     payload.Lines,
+    payload.lyricLines,
+    payload.LyricLines,
+    payload.sentences,
+    payload.Sentences,
     payload.data?.lines,
     payload.data?.Lines,
-  ].find(Array.isArray);
+    payload.data?.lyricLines,
+    payload.data?.LyricLines,
+    payload.data?.sentences,
+    payload.data?.Sentences,
+    payload.result?.lines,
+    payload.result?.Lines,
+    payload.result?.lyricLines,
+    payload.result?.LyricLines,
+    payload.result?.sentences,
+    payload.result?.Sentences,
+  ].find(Array.isArray));
+}
 
+function formatLyricLineArray(lines) {
   if (!lines) {
     return "";
   }
@@ -412,7 +428,7 @@ function extractLyricText(payload) {
     }
 
     const text = pickString(line.text, line.Text, line.line, line.Line, line.value, line.Value);
-    const time = Number(line.time ?? line.Time ?? line.seconds ?? line.StartSeconds);
+    const time = getLyricLineTimeSeconds(line);
 
     if (Number.isFinite(time) && time >= 0) {
       return `[${formatLrcTimestamp(time)}]${text}`;
@@ -420,6 +436,52 @@ function extractLyricText(payload) {
 
     return text;
   }).filter(Boolean).join("\n");
+}
+
+function getLyricLineTimeSeconds(line) {
+  const seconds = Number(
+    line?.time
+      ?? line?.Time
+      ?? line?.seconds
+      ?? line?.Seconds
+      ?? line?.startTime
+      ?? line?.StartTime
+      ?? line?.startSeconds
+      ?? line?.StartSeconds
+  );
+
+  if (Number.isFinite(seconds)) {
+    return seconds;
+  }
+
+  const milliseconds = Number(
+    line?.timeMs
+      ?? line?.TimeMs
+      ?? line?.startTimeMs
+      ?? line?.StartTimeMs
+      ?? line?.startMilliseconds
+      ?? line?.StartMilliseconds
+      ?? line?.offset
+      ?? line?.Offset
+  );
+
+  if (Number.isFinite(milliseconds)) {
+    return milliseconds / 1000;
+  }
+
+  const ticks = Number(
+    line?.ticks
+      ?? line?.Ticks
+      ?? line?.startTicks
+      ?? line?.StartTicks
+      ?? line?.StartPositionTicks
+  );
+
+  if (Number.isFinite(ticks)) {
+    return ticks / TICKS_PER_SECOND;
+  }
+
+  return NaN;
 }
 
 function normalizeExternalTrack(item, context = {}) {

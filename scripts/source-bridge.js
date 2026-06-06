@@ -1061,17 +1061,7 @@ async function resolvePluginLyric(track) {
   }
 
   const payload = await callWithTimeout(runtime.module.getLyric(track.raw), 18000, `${track.pluginName || track.pluginKey} lyric timeout`);
-  const lyric = pickFirstString(
-    payload?.rawLrc,
-    payload?.lrc,
-    payload?.lyric,
-    payload?.lyrics,
-    payload?.text,
-    payload?.data?.rawLrc,
-    payload?.data?.lrc,
-    payload?.data?.lyric,
-    payload?.data?.lyrics,
-  );
+  const lyric = extractPluginLyricText(payload);
 
   track.lyric = lyric;
   return lyric;
@@ -1376,6 +1366,131 @@ function getPluginItemId(item, index) {
 function pickFirstString(...values) {
   const value = values.find((item) => typeof item === "string" && item.trim());
   return value ? value.trim() : "";
+}
+
+function extractPluginLyricText(payload) {
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const direct = pickFirstString(
+    payload.rawLrc,
+    payload.lrc,
+    payload.lyric,
+    payload.lyrics,
+    payload.text,
+    payload.value,
+    payload.data?.rawLrc,
+    payload.data?.lrc,
+    payload.data?.lyric,
+    payload.data?.lyrics,
+    payload.data?.text,
+    payload.result?.rawLrc,
+    payload.result?.lrc,
+    payload.result?.lyric,
+    payload.result?.lyrics,
+    payload.result?.text,
+  );
+
+  if (direct) {
+    return direct;
+  }
+
+  return formatPluginLyricLineArray([
+    payload.lines,
+    payload.Lines,
+    payload.lyricLines,
+    payload.LyricLines,
+    payload.sentences,
+    payload.Sentences,
+    payload.data?.lines,
+    payload.data?.Lines,
+    payload.data?.lyricLines,
+    payload.data?.LyricLines,
+    payload.data?.sentences,
+    payload.data?.Sentences,
+    payload.result?.lines,
+    payload.result?.Lines,
+    payload.result?.lyricLines,
+    payload.result?.LyricLines,
+    payload.result?.sentences,
+    payload.result?.Sentences,
+  ].find(Array.isArray));
+}
+
+function formatPluginLyricLineArray(lines) {
+  if (!lines) {
+    return "";
+  }
+
+  return lines.map((line) => {
+    if (typeof line === "string") {
+      return line;
+    }
+
+    if (!line || typeof line !== "object") {
+      return "";
+    }
+
+    const text = pickFirstString(line.text, line.Text, line.line, line.Line, line.value, line.Value);
+    const time = getPluginLyricLineTimeSeconds(line);
+
+    if (Number.isFinite(time) && time >= 0) {
+      return `[${formatLrcTimestamp(time)}]${text}`;
+    }
+
+    return text;
+  }).filter(Boolean).join("\n");
+}
+
+function getPluginLyricLineTimeSeconds(line) {
+  const seconds = Number(
+    line?.time
+      ?? line?.Time
+      ?? line?.seconds
+      ?? line?.Seconds
+      ?? line?.startTime
+      ?? line?.StartTime
+      ?? line?.startSeconds
+      ?? line?.StartSeconds
+  );
+
+  if (Number.isFinite(seconds)) {
+    return seconds;
+  }
+
+  const milliseconds = Number(
+    line?.timeMs
+      ?? line?.TimeMs
+      ?? line?.startTimeMs
+      ?? line?.StartTimeMs
+      ?? line?.startMilliseconds
+      ?? line?.StartMilliseconds
+      ?? line?.offset
+      ?? line?.Offset
+  );
+
+  if (Number.isFinite(milliseconds)) {
+    return milliseconds / 1000;
+  }
+
+  const ticks = Number(
+    line?.ticks
+      ?? line?.Ticks
+      ?? line?.startTicks
+      ?? line?.StartTicks
+      ?? line?.StartPositionTicks
+  );
+
+  if (Number.isFinite(ticks)) {
+    return ticks / 10000000;
+  }
+
+  return NaN;
 }
 
 function pickArtworkString(...values) {
@@ -1828,6 +1943,13 @@ function normalizeDurationSeconds(value) {
   }
 
   return Math.round(duration);
+}
+
+function formatLrcTimestamp(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = total - minutes * 60;
+  return `${String(minutes).padStart(2, "0")}:${remainingSeconds.toFixed(2).padStart(5, "0")}`;
 }
 
 function mapPluginQuality(value) {
