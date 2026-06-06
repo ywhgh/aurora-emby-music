@@ -52,11 +52,20 @@ function parseLyrics(text) {
   const timePattern = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
   const inlineTimePattern = /<((?:(?:\d{1,2}:){1,2})?\d{1,2}(?:[.:]\d{1,3})?)>/g;
   const metadataPattern = /^\[[a-z]+:.+\]$/i;
+  const offsetSeconds = findLyricOffsetSeconds(rawLines);
 
   rawLines.forEach((rawLine) => {
     const line = rawLine.trim();
 
-    if (!line || metadataPattern.test(line)) {
+    if (!line) {
+      return;
+    }
+
+    if (isLyricOffsetLine(line)) {
+      return;
+    }
+
+    if (metadataPattern.test(line)) {
       return;
     }
 
@@ -78,9 +87,10 @@ function parseLyrics(text) {
       const minutes = Number(match[2] || 0);
       const seconds = Number(match[3] || 0);
       const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
+      const baseTime = hours * 3600 + minutes * 60 + seconds + fraction;
       timedLines.push({
-        time: hours * 3600 + minutes * 60 + seconds + fraction,
-        ...lyricPayload,
+        time: applySourceLyricOffsetSeconds(baseTime, offsetSeconds),
+        ...applyLyricPayloadSourceOffset(lyricPayload, offsetSeconds),
       });
     });
   });
@@ -100,6 +110,35 @@ function parseLyrics(text) {
 
 function parseLyricTextPart(text) {
   return splitInlineBilingualText(text) || { text: String(text || "").trim() };
+}
+
+function findLyricOffsetSeconds(lines) {
+  return lines.reduce((offsetSeconds, line) => {
+    const offsetMatch = String(line || "").trim().match(/^\[offset:\s*([+-]?\d+(?:\.\d+)?)\s*\]$/i);
+    return offsetMatch ? Number(offsetMatch[1]) / 1000 : offsetSeconds;
+  }, 0);
+}
+
+function isLyricOffsetLine(line) {
+  return /^\[offset:\s*[+-]?\d+(?:\.\d+)?\s*\]$/i.test(line);
+}
+
+function applySourceLyricOffsetSeconds(seconds, offsetSeconds) {
+  return Math.max(0, seconds - offsetSeconds);
+}
+
+function applyLyricPayloadSourceOffset(payload, offsetSeconds) {
+  if (!payload?.wordTimeline?.length || !offsetSeconds) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    wordTimeline: payload.wordTimeline.map((word) => ({
+      ...word,
+      time: applySourceLyricOffsetSeconds(word.time, offsetSeconds),
+    })),
+  };
 }
 
 function parseInlineLyricWordTimeline(text, inlineTimePattern) {

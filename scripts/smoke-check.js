@@ -154,6 +154,13 @@ function checkLyrics() {
   const enhancedSecondOnlyLine = parseLyrics("[00:00.00]<0.00>你<0.30>好").lines[0];
   assert(enhancedSecondOnlyLine?.text === "你好", `Second-only enhanced LRC text expected 你好, got ${enhancedSecondOnlyLine?.text}`);
   assert(enhancedSecondOnlyLine.wordTimeline?.[1]?.time === 0.3, `Second-only enhanced LRC second word time expected 0.3, got ${enhancedSecondOnlyLine.wordTimeline?.[1]?.time}`);
+  const offsetLine = parseLyrics("[offset:500]\n[00:01.00]Offset lyric").lines[0];
+  assert(offsetLine?.time === 0.5, `LRC positive offset should shift line time earlier to 0.5, got ${offsetLine?.time}`);
+  const lateOffsetLine = parseLyrics("[00:01.00]Offset lyric\n[offset:+500]").lines[0];
+  assert(lateOffsetLine?.time === 0.5, `LRC offset should apply globally even when declared later, got ${lateOffsetLine?.time}`);
+  const offsetEnhancedLine = parseLyrics("[offset:-200]\n[00:01.00]<1.00>你<1.30>好").lines[0];
+  assert(offsetEnhancedLine?.time === 1.2, `LRC negative offset should shift line time later to 1.2, got ${offsetEnhancedLine?.time}`);
+  assert(offsetEnhancedLine.wordTimeline?.[1]?.time === 1.5, `LRC offset should shift enhanced word time to 1.5, got ${offsetEnhancedLine.wordTimeline?.[1]?.time}`);
 
   const app = read("app.js");
   assert(app.includes("function appendLyricLineContent"), "Missing shared lyric line renderer");
