@@ -1435,11 +1435,17 @@ function runLyricProgressScenario() {
   setLyricOffsetSeconds(0.68);
   updateLyricsHighlight(4.12, true);
   const afterOffset = collectBrowserSmokeLyricState();
+  state.activeLyricIndex = -1;
+  state.activeLyricTimelineIndex = -1;
+  resetLyricProgressState();
+  refreshLyricsForPlaybackResume(4.12);
+  const afterResumeRefresh = collectBrowserSmokeLyricState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
     beforeOffset,
     afterOffset,
+    afterResumeRefresh,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -15637,7 +15643,7 @@ function handleAudioPlay() {
   setPlaybackBuffering(false);
   syncLyricPlaybackClock({ running: true });
   updatePlaybackState();
-  syncLyricProgressLoop();
+  refreshLyricsForPlaybackResume();
 
   if (state.currentTrack && !state.isChangingTrack) {
     reportPlaybackProgress(true, "Unpause");
@@ -15695,12 +15701,17 @@ function handleAudioBufferingStart() {
 function handleAudioBufferingEnd() {
   setPlaybackBuffering(false);
   syncLyricPlaybackClock();
-  syncLyricProgressLoop();
+  refreshLyricsForPlaybackResume();
 }
 
 function handleAudioRateChange() {
   syncLyricPlaybackClock();
   updateMediaSessionPosition();
+}
+
+function refreshLyricsForPlaybackResume(fallbackSeconds = getAudioCurrentTimeSeconds()) {
+  updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(fallbackSeconds));
+  syncLyricProgressLoop();
 }
 
 function setPlaybackBuffering(isBuffering) {

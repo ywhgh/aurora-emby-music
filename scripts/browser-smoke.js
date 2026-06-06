@@ -548,6 +548,7 @@ function checkPageState(check, page) {
   const lyricProgress = page.lyricProgress || {};
   const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
   const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
+  const lyricProgressAfterResumeRefresh = lyricProgress.afterResumeRefresh || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -619,6 +620,8 @@ function checkPageState(check, page) {
   assert(lyricProgressAfterOffset.wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1], `${label} lyric offset should advance partial word progress: before ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}, after ${JSON.stringify(lyricProgressAfterOffset.wordProgress)}`);
   assert(lyricProgressAfterOffset.wordProgress?.[2] === 0, `${label} lyric offset smoke should not skip to the next word window: ${JSON.stringify(lyricProgressAfterOffset.wordProgress)}`);
   assert(lyricProgressAfterOffset.scrollAllowedForced === true, `${label} forced lyric scroll should remain available`);
+  assert(lyricProgressAfterResumeRefresh.activeIndex === 1, `${label} lyric resume refresh should restore the active lyric immediately, got ${lyricProgressAfterResumeRefresh.activeIndex}`);
+  assert(lyricProgressAfterResumeRefresh.wordProgress?.[1] > 0, `${label} lyric resume refresh should immediately light the partial word: ${JSON.stringify(lyricProgressAfterResumeRefresh.wordProgress)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 
