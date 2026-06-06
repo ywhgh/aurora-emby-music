@@ -1473,7 +1473,7 @@ function runLyricProgressScenario() {
     name: "Browser Smoke Enhanced Lyric Track",
     durationSeconds: 10,
     lyricsText: [
-      "[00:00.00]<00:00.00>Alpha <00:00.60>beta <00:01.20>gamma",
+      "[00:00.00]<0.00>Alpha <0.60>beta <1.20>gamma",
       "[00:04.00]下一句",
     ].join("\n"),
   });

@@ -50,7 +50,7 @@ function parseLyrics(text) {
   const timedLines = [];
   const plainLines = [];
   const timePattern = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
-  const inlineTimePattern = /<(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?>/g;
+  const inlineTimePattern = /<((?:(?:\d{1,2}:){1,2})?\d{1,2}(?:[.:]\d{1,3})?)>/g;
   const metadataPattern = /^\[[a-z]+:.+\]$/i;
 
   rawLines.forEach((rawLine) => {
@@ -142,10 +142,23 @@ function parseInlineLyricWordTimeline(text, inlineTimePattern) {
 }
 
 function parseInlineTimeMatch(match) {
-  const hours = Number(match[1] || 0);
-  const minutes = Number(match[2] || 0);
-  const seconds = Number(match[3] || 0);
-  const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
+  const parts = String(match[1] || "")
+    .split(":")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const secondsPart = parts.pop() || "0";
+  const minutesPart = parts.pop() || "0";
+  const hoursPart = parts.pop() || "0";
+  const secondMatch = secondsPart.match(/^(\d{1,2})(?:[.:](\d{1,3}))?$/);
+
+  if (!secondMatch) {
+    return NaN;
+  }
+
+  const hours = Number(hoursPart || 0);
+  const minutes = Number(minutesPart || 0);
+  const seconds = Number(secondMatch[1] || 0);
+  const fraction = secondMatch[2] ? Number(`0.${secondMatch[2].padEnd(3, "0").slice(0, 3)}`) : 0;
   return hours * 3600 + minutes * 60 + seconds + fraction;
 }
 
