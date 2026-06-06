@@ -625,6 +625,7 @@ function checkPageState(check, page) {
   assert(lyricProgressAfterResumeRefresh.wordProgress?.[1] > 0, `${label} lyric resume refresh should immediately light the partial word: ${JSON.stringify(lyricProgressAfterResumeRefresh.wordProgress)}`);
   assert(lyricLongGapProgress.activeIndex === 0, `${label} long-gap lyric should still focus the first line, got ${lyricLongGapProgress.activeIndex}`);
   assert(lyricLongGapProgress.wordProgress?.every((progress) => progress === 100), `${label} long-gap lyric words should finish within the capped line duration: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
+  assert(lyricProgress.longGapIdleResumeDelayMs > 10000, `${label} long-gap lyric should idle the RAF until near the next line, got ${lyricProgress.longGapIdleResumeDelayMs || 0}ms`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

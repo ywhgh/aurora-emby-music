@@ -174,8 +174,12 @@ function checkLyrics() {
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
   assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap long line durations");
+  assert(app.includes("LYRIC_PROGRESS_RESUME_LEAD_MS"), "Lyric word progress should resume shortly before the next line after idling");
+  assert(app.includes("lyricProgressResumeTimer"), "Lyric word progress should have a low-frequency idle timer");
   assert(app.includes("function getLyricWordProgressEndSeconds"), "Lyric word progress should centralize line end timing");
+  assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
   assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use capped line end timing");
+  assert(/scheduleLyricProgressResumeIfIdle\(lineRatio, lyricSeconds, nextEntry\);/.test(app), "Lyric word progress should idle after a line is fully highlighted");
   assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getLyricPlaybackTimeSeconds\(\)\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock");
   assert(!/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\)\);/.test(app), "RAF lyric progress should not depend on discrete audio.currentTime reads");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?refreshLyricsForPlaybackResume\(\);/.test(app), "Audio play should immediately refresh lyrics from the smooth playback clock");
@@ -217,6 +221,7 @@ function checkLyrics() {
   assert(app.includes("function refreshActiveTrackRowsCache"), "Track-row fluid animation should have an explicit active-row cache refresh");
   assert(!/function getActiveTrackRows\(\) \{[\s\S]*?document\.querySelectorAll\("\.track-row\.active"\)/.test(app), "Track-row fluid animation should not query all active rows on every animation frame");
   assert(app.includes("function setLyricWordProgress"), "Lyric word progress should avoid redundant DOM writes");
+  assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;[\s\S]*?will-change: background;/.test(css), "Immersive lyric word highlights should use paint containment hints");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
   assert(app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
@@ -278,6 +283,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
+  assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
 }
 
 function checkAppFunctionReferences() {

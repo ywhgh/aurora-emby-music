@@ -120,6 +120,8 @@ const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
 const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
+const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
+const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -782,6 +784,7 @@ let progressRenderSignature = "";
 let homeStartProgressSignature = "";
 let playerNextPreviewSignature = "";
 let lyricProgressFrame = 0;
+let lyricProgressResumeTimer = 0;
 let lyricProgressActiveIndex = -1;
 let lyricProgressFullWordCount = -1;
 let lyricProgressPartialWordIndex = -1;
@@ -1463,6 +1466,7 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(4.8, true);
   const longGapProgress = collectBrowserSmokeLyricState();
+  const longGapIdleResumeDelayMs = getLyricProgressIdleResumeDelayMs(1, getAdjustedLyricSeconds(4.8), { time: 20 });
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1470,6 +1474,7 @@ function runLyricProgressScenario() {
     afterOffset,
     afterResumeRefresh,
     longGapProgress,
+    longGapIdleResumeDelayMs,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -6870,6 +6875,8 @@ function saveLyricOffsetSeconds(seconds) {
 }
 
 function updateLyricsHighlight(currentSeconds, forceScroll = false) {
+  clearLyricProgressResumeTimer();
+
   if (!state.isLyricSynced || !state.lyricTimeline.length) {
     stopLyricProgressLoop();
     renderStaticLyricFocusIfNeeded();
@@ -7256,6 +7263,7 @@ function syncImmersiveLyricActiveClass(activeItem, activeIndex) {
 }
 
 function resetLyricProgressState() {
+  clearLyricProgressResumeTimer();
   lyricProgressActiveIndex = -1;
   lyricProgressFullWordCount = -1;
   lyricProgressPartialWordIndex = -1;
@@ -7284,27 +7292,40 @@ function syncLyricProgressLoop() {
     return;
   }
 
+  if (lyricProgressResumeTimer) {
+    return;
+  }
+
   if (!lyricProgressFrame) {
     lyricProgressFrame = requestAnimationFrame(updateLyricProgressFrame);
   }
 }
 
 function stopLyricProgressLoop() {
-  if (!lyricProgressFrame) {
+  clearLyricProgressResumeTimer();
+
+  if (lyricProgressFrame) {
+    cancelAnimationFrame(lyricProgressFrame);
+    lyricProgressFrame = 0;
+  }
+}
+
+function clearLyricProgressResumeTimer() {
+  if (!lyricProgressResumeTimer) {
     return;
   }
 
-  cancelAnimationFrame(lyricProgressFrame);
-  lyricProgressFrame = 0;
+  window.clearTimeout(lyricProgressResumeTimer);
+  lyricProgressResumeTimer = 0;
 }
 
 function updateLyricProgressFrame() {
+  lyricProgressFrame = 0;
+
   if (!shouldRunLyricProgressLoop()) {
-    lyricProgressFrame = 0;
     return;
   }
 
-  lyricProgressFrame = requestAnimationFrame(updateLyricProgressFrame);
   updateLyricsHighlight(getLyricPlaybackTimeSeconds());
 }
 
@@ -7343,6 +7364,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     : 1;
   const litWords = lineRatio * words.length;
   updateLyricWordProgressWindow(words, litWords);
+  scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry);
 }
 
 function getLyricWordProgressEndSeconds(start, nextEntry, wordCount) {
@@ -7355,6 +7377,53 @@ function getLyricWordProgressEndSeconds(start, nextEntry, wordCount) {
   );
 
   return start + duration;
+}
+
+function scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry) {
+  if (lineRatio < 1 || !Number.isFinite(nextEntry?.time) || !shouldRunLyricProgressLoop()) {
+    return;
+  }
+
+  const delayMs = getLyricProgressIdleResumeDelayMs(lineRatio, lyricSeconds, nextEntry);
+  if (!delayMs) {
+    return;
+  }
+
+  if (lyricProgressFrame) {
+    cancelAnimationFrame(lyricProgressFrame);
+    lyricProgressFrame = 0;
+  }
+
+  lyricProgressResumeTimer = window.setTimeout(resumeLyricProgressAfterIdle, delayMs);
+}
+
+function getLyricProgressIdleResumeDelayMs(lineRatio, lyricSeconds, nextEntry) {
+  if (lineRatio < 1 || !Number.isFinite(nextEntry?.time)) {
+    return 0;
+  }
+
+  const secondsUntilNextLine = nextEntry.time - lyricSeconds;
+  if (!Number.isFinite(secondsUntilNextLine) || secondsUntilNextLine <= 0) {
+    return 0;
+  }
+
+  const delayMs = Math.max(0, (secondsUntilNextLine * 1000) - LYRIC_PROGRESS_RESUME_LEAD_MS);
+  if (delayMs < LYRIC_PROGRESS_IDLE_MIN_DELAY_MS) {
+    return 0;
+  }
+
+  return Math.round(delayMs);
+}
+
+function resumeLyricProgressAfterIdle() {
+  lyricProgressResumeTimer = 0;
+  if (!shouldRunLyricProgressLoop()) {
+    return;
+  }
+
+  syncLyricPlaybackClock();
+  updateLyricsHighlight(getLyricPlaybackTimeSeconds());
+  syncLyricProgressLoop();
 }
 
 function updateLyricWordProgressWindow(words, litWords) {

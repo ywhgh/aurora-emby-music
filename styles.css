@@ -9635,6 +9635,7 @@ body.action-sheet-open .content {
 .immersive-lyric-list .word {
   display: inline;
   color: transparent;
+  contain: paint;
   background:
     linear-gradient(
       90deg,
@@ -9645,6 +9646,7 @@ body.action-sheet-open .content {
     );
   -webkit-background-clip: text;
   background-clip: text;
+  will-change: background;
 }
 
 .immersive-lyric-list .lyric-line.active .immersive-lyric-translated,
