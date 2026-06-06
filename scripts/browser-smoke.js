@@ -234,6 +234,27 @@ function createLyricOffsetSmokeScript() {
   })()`;
 }
 
+function createLyricProgressSmokeScript() {
+  return `(() => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runLyricProgressScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...hooks.runLyricProgressScenario(),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
+
 function killProcessTree(pid) {
   if (!pid) {
     return;
@@ -465,7 +486,7 @@ async function runBrowserCheck(cdp, check) {
             ? { width: Math.round(bounds.width), height: Math.round(bounds.height), top: Math.round(bounds.top), bottom: Math.round(bounds.bottom) }
             : null;
         };
-        return {
+        const pageState = {
           title: document.title,
           readyState: document.readyState,
           appReady: Boolean(window.EmbyMusicAppReady),
@@ -498,6 +519,11 @@ async function runBrowserCheck(cdp, check) {
           lyricOffset,
           storageKeys: Object.keys(localStorage).filter((key) => key.startsWith("emby-music-web/")).sort(),
         };
+
+        return {
+          ...pageState,
+          lyricProgress: ${createLyricProgressSmokeScript()},
+        };
       })()`,
     });
 
@@ -519,6 +545,9 @@ async function runBrowserCheck(cdp, check) {
 function checkPageState(check, page) {
   const label = `[${check.name}]`;
   const lyricOffset = page.lyricOffset || {};
+  const lyricProgress = page.lyricProgress || {};
+  const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
+  const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -571,6 +600,25 @@ function checkPageState(check, page) {
   assert(labelsEqual(lyricOffset.afterResetLabels, "+0.18s"), `${label} reset click did not restore labels: ${JSON.stringify(lyricOffset.afterResetLabels)}`);
   assert(lyricOffset.afterResetStorage === "0.18", `${label} reset click did not persist 0.18, got ${lyricOffset.afterResetStorage || "-"}`);
   assert(resetStatesEqual(lyricOffset.afterResetDisabled, true), `${label} lyric offset reset should disable after reset`);
+  assert(lyricProgress.hasHook, `${label} missing browser-smoke lyric progress hook`);
+  assert(!lyricProgress.error, `${label} lyric progress smoke failed: ${lyricProgress.error || "-"}`);
+  assert(lyricProgress.activeView === "immersivePlayer", `${label} lyric progress smoke did not open immersive player`);
+  assert(lyricProgress.loginHidden === true && lyricProgress.mainHidden === false, `${label} lyric progress smoke did not show the main app`);
+  assert(lyricProgressBeforeOffset.isSynced, `${label} synthetic lyrics should be synced`);
+  assert(lyricProgressBeforeOffset.lyricCount === 3, `${label} synthetic lyrics should render 3 lines, got ${lyricProgressBeforeOffset.lyricCount || 0}`);
+  assert(lyricProgressBeforeOffset.activeIndex === 1, `${label} lyric progress before offset should focus line 1, got ${lyricProgressBeforeOffset.activeIndex}`);
+  assert(lyricProgressBeforeOffset.wordCount === 3, `${label} lyric progress before offset should split 3 words, got ${lyricProgressBeforeOffset.wordCount || 0}`);
+  assert(lyricProgressBeforeOffset.wordProgress?.[0] === 100, `${label} first word should be fully highlighted before offset`);
+  assert(lyricProgressBeforeOffset.wordProgress?.[1] > 0 && lyricProgressBeforeOffset.wordProgress?.[1] < 100, `${label} second word should be partially highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
+  assert(lyricProgressBeforeOffset.wordProgress?.[2] === 0, `${label} third word should not be highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
+  assert(lyricProgressBeforeOffset.cssWordProgress?.[1]?.endsWith("%"), `${label} partial word should expose CSS progress before offset`);
+  assert(/Delta epsilon zeta/.test(lyricProgressBeforeOffset.activeLineText || ""), `${label} active lyric line text mismatch before offset: ${lyricProgressBeforeOffset.activeLineText || "-"}`);
+  assert(lyricProgressBeforeOffset.activeLineClass?.includes("active"), `${label} active lyric line should have active class before offset`);
+  assert(lyricProgressAfterOffset.offsetLabel === "+0.68s", `${label} lyric offset smoke should adjust to +0.68s, got ${lyricProgressAfterOffset.offsetLabel || "-"}`);
+  assert(lyricProgressAfterOffset.activeIndex === 1, `${label} lyric progress after offset should stay on line 1, got ${lyricProgressAfterOffset.activeIndex}`);
+  assert(lyricProgressAfterOffset.wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1], `${label} lyric offset should advance partial word progress: before ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}, after ${JSON.stringify(lyricProgressAfterOffset.wordProgress)}`);
+  assert(lyricProgressAfterOffset.wordProgress?.[2] === 0, `${label} lyric offset smoke should not skip to the next word window: ${JSON.stringify(lyricProgressAfterOffset.wordProgress)}`);
+  assert(lyricProgressAfterOffset.scrollAllowedForced === true, `${label} forced lyric scroll should remain available`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

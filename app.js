@@ -1351,11 +1351,122 @@ function init() {
   syncBrowserNetworkStatus({ silent: true });
   setupMediaSession();
   registerServiceWorker();
+  installBrowserSmokeHooks();
   switchViewFromHash();
 
   if (pendingCredentialLogin) {
     startPendingCredentialLogin(pendingCredentialLogin);
   }
+}
+
+function installBrowserSmokeHooks() {
+  if (!isBrowserSmokeRun()) {
+    return;
+  }
+
+  window.EmbyMusicBrowserSmoke = {
+    runLyricProgressScenario,
+  };
+}
+
+function isBrowserSmokeRun() {
+  const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  return isLocalHost && new URLSearchParams(window.location.search).has("browser-smoke");
+}
+
+function createBrowserSmokeTrack() {
+  return {
+    Id: "browser-smoke-lyric-track",
+    Type: "Audio",
+    MediaType: "Audio",
+    Name: "Browser Smoke Lyric Track",
+    Album: "Smoke Tests",
+    AlbumId: "browser-smoke-album",
+    Artists: ["Emby Music Web"],
+    ArtistItems: [{ Id: "browser-smoke-artist", Name: "Emby Music Web" }],
+    RunTimeTicks: secondsToTicks(12),
+    UserData: {},
+    LyricsText: [
+      "[00:00.00]Alpha beta gamma",
+      "[00:03.00]Delta epsilon zeta",
+      "[00:06.00]Eta theta iota",
+    ].join("\n"),
+    MediaSources: [
+      {
+        Id: "browser-smoke-source",
+        Container: "mp3",
+        MediaStreams: [{ Type: "Audio", Codec: "mp3", BitRate: 320000 }],
+      },
+    ],
+  };
+}
+
+function runLyricProgressScenario() {
+  const track = createBrowserSmokeTrack();
+  const originalOffsetSeconds = state.lyricOffsetSeconds;
+
+  state.session = {
+    sourceMode: "emby",
+    serverUrl: "http://browser-smoke.local",
+    userId: "browser-smoke-user",
+    userName: "Browser Smoke",
+    serverName: "Browser Smoke",
+    version: APP_VERSION,
+  };
+  state.tracks = [track];
+  state.filteredTracks = [track];
+  state.queue = [track];
+  state.currentTrack = track;
+  state.currentTrackIndex = 0;
+  state.isLibraryLoaded = true;
+  state.savedPlaybackPositionSeconds = 0;
+  state.lyricOffsetSeconds = DEFAULT_LYRIC_OFFSET_SECONDS;
+  state.lastProgressReportAt = Date.now();
+  applyFilters();
+  showMain();
+  renderSession(state.session);
+  renderLibrary();
+  updatePlayerMeta(track);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+
+  updateLyricsHighlight(4.12, true);
+  const beforeOffset = collectBrowserSmokeLyricState();
+  setLyricOffsetSeconds(0.68);
+  updateLyricsHighlight(4.12, true);
+  const afterOffset = collectBrowserSmokeLyricState();
+  setLyricOffsetSeconds(originalOffsetSeconds);
+
+  return {
+    beforeOffset,
+    afterOffset,
+    activeView: getActiveView(),
+    mainHidden: mainView.hidden,
+    loginHidden: loginView.hidden,
+  };
+}
+
+function collectBrowserSmokeLyricState() {
+  const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
+  const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
+  const wordProgress = words.map((word) => Number(word.dataset.wordProgress || 0));
+  const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
+
+  return {
+    activeIndex: state.activeLyricIndex,
+    timelineIndex: state.activeLyricTimelineIndex,
+    lyricCount: state.lyricLines.length,
+    isSynced: state.isLyricSynced,
+    currentText: nowLyricCurrent?.textContent?.trim() || "",
+    nextText: nowLyricNext?.textContent?.trim() || "",
+    activeLineText: activeLine?.textContent?.trim() || "",
+    activeLineClass: activeLine?.className || "",
+    wordCount: words.length,
+    wordProgress,
+    cssWordProgress,
+    offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
+    scrollAllowedForced: shouldScrollLyricLine(true),
+  };
 }
 
 function shouldIgnoreExternalCloseEvent(event) {

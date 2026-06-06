@@ -189,6 +189,11 @@ function checkLyrics() {
   assert(app.includes("function shouldScrollLyricLine"), "Lyric auto-scroll should use a shared throttle helper");
   assert(/if \(activeItem && shouldScrollLyricLine\(forceScroll\)\) \{[\s\S]*?activeItem\.scrollIntoView\(\{ block: "center", behavior: forceScroll \? "auto" : "smooth" \}\);/.test(app), "Now-playing lyric auto-scroll should be throttled without blocking forced scrolls");
   assert(/if \(activeItem && shouldScroll && shouldScrollLyricLine\(instantScroll\)\) \{[\s\S]*?activeItem\.scrollIntoView\(\{ block: "center", behavior: instantScroll \? "auto" : "smooth" \}\);/.test(app), "Immersive lyric auto-scroll should be throttled without blocking instant scrolls");
+  assert(app.includes("function installBrowserSmokeHooks"), "Browser smoke should expose guarded lyric progress hooks");
+  assert(/function installBrowserSmokeHooks\(\) \{[\s\S]*?if \(!isBrowserSmokeRun\(\)\) \{[\s\S]*?return;[\s\S]*?window\.EmbyMusicBrowserSmoke = \{[\s\S]*?runLyricProgressScenario,/.test(app), "Browser smoke lyric hooks should only be exposed during browser-smoke runs");
+  assert(app.includes('["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)'), "Browser smoke lyric hooks should only be available on local test hosts");
+  assert(app.includes("function runLyricProgressScenario"), "Browser smoke should be able to run a real synthetic lyric progress scenario");
+  assert(app.includes("function collectBrowserSmokeLyricState"), "Browser smoke should collect actual word progress state from rendered lyrics");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
@@ -259,6 +264,12 @@ function checkLyrics() {
     !/state\.activeLyricIndex = activeIndex;[\s\S]*?renderImmersiveLyricFocus\(\);[\s\S]*?lyricsList\.querySelectorAll\("\.lyric-line"\)/.test(app),
     "Active lyric changes should not rebuild the immersive lyric DOM"
   );
+
+  const browserSmoke = read("scripts/browser-smoke.js");
+  assert(browserSmoke.includes("createLyricProgressSmokeScript"), "Browser smoke should include a real lyric progress scenario");
+  assert(browserSmoke.includes("runLyricProgressScenario"), "Browser smoke should call the guarded lyric progress hook");
+  assert(browserSmoke.includes("wordProgress?.[1] > 0"), "Browser smoke should verify partial word progress");
+  assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
 }
 
 function checkAppFunctionReferences() {
