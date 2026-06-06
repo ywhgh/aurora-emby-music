@@ -201,8 +201,10 @@ function checkLyrics() {
   assert(app.includes("function refreshActiveTrackRowsCache"), "Track-row fluid animation should have an explicit active-row cache refresh");
   assert(!/function getActiveTrackRows\(\) \{[\s\S]*?document\.querySelectorAll\("\.track-row\.active"\)/.test(app), "Track-row fluid animation should not query all active rows on every animation frame");
   assert(app.includes("function setLyricWordProgress"), "Lyric word progress should avoid redundant DOM writes");
-  assert(app.includes("LYRIC_PROGRESS_EPSILON"), "Lyric word progress should be diffed before style updates");
+  assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
+  assert(app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
+  assert(!app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should not be quantized to whole-percent steps");
   assert(app.includes("lyricProgressFullWordCount"), "Lyric word progress should cache the previous fully-lit word count");
   assert(app.includes("lyricProgressPartialWordIndex"), "Lyric word progress should cache the previous partial word index");
   assert(!/words\.forEach\(\(word,\s*index\)\s*=>\s*\{\s*const wordRatio = clamp\(litWords - index, 0, 1\)/.test(app), "Lyric word progress should not recalculate every word on each animation frame");

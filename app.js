@@ -115,7 +115,7 @@ const QUALITY_FILTER_LABELS = {
   lossy: "有损",
 };
 const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
-const LYRIC_PROGRESS_EPSILON = 0.15;
+const LYRIC_PROGRESS_EPSILON = 0.04;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
@@ -7192,7 +7192,7 @@ function updateLyricWordProgressWindow(words, litWords) {
   const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
   const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
   const nextPartialProgress = nextPartialWordIndex >= 0
-    ? Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)
+    ? Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10
     : 0;
   const previousFullWordCount = lyricProgressFullWordCount;
   const previousPartialWordIndex = lyricProgressPartialWordIndex;
