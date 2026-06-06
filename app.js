@@ -117,6 +117,7 @@ const QUALITY_FILTER_LABELS = {
 const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
 const LYRIC_PROGRESS_EPSILON = 0.15;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
+const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
 const LIBRARY_ALPHABET_KEYS = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "#"];
@@ -900,6 +901,8 @@ const state = {
   lastProgressReportAt: 0,
   lastQueuePositionSaveAt: 0,
   lastQueuePositionSaveSeconds: initialQueueState.positionSeconds || 0,
+  shuffleHistory: [],
+  shuffleUpcomingIds: [],
   lastPlaybackProbe: "",
   audioUnlocked: false,
   pendingAutoplayResume: false,
@@ -1505,6 +1508,7 @@ function discardSavedSessionForCredentialLogin() {
   state.currentTrackIndex = -1;
   state.queueUndoSnapshot = null;
   state.recentUndoSnapshot = null;
+  resetShufflePlaybackState();
   state.savedPlaybackPositionSeconds = 0;
   state.queueSavedAt = "";
   state.currentMediaSourceId = "";
@@ -2037,6 +2041,7 @@ async function loadMusicLibrary(session) {
   state.lastQueuePositionSaveSeconds = savedQueueState.positionSeconds;
   state.lastQueuePositionSaveAt = Date.now();
   state.queueSavedAt = savedQueueState.savedAt;
+  resetShufflePlaybackState();
   searchInput.disabled = true;
   clearSearchButton.disabled = true;
   refreshButton.disabled = true;
@@ -5351,7 +5356,7 @@ function getNextPreviewTrack() {
   }
 
   if (state.playMode === "shuffle" && state.queue.length > 1) {
-    return state.queue.find((track) => track.Id !== state.currentTrack.Id) || null;
+    return getQueueTrackById(getNextShuffleTrackId());
   }
 
   if (currentIndex < state.queue.length - 1) {
@@ -7291,6 +7296,14 @@ function locateCurrentImmersiveQueueTrack() {
 function getUpcomingTracks(limit) {
   if (!state.queue.length || state.currentTrackIndex < 0) {
     return [];
+  }
+
+  if (state.playMode === "shuffle" && state.queue.length > 1) {
+    refillShuffleUpcomingQueue(Math.min(limit, state.queue.length - 1));
+    return state.shuffleUpcomingIds
+      .map(getQueueTrackById)
+      .filter((track) => track && track.Id !== state.currentTrack?.Id)
+      .slice(0, limit);
   }
 
   const tracks = [];
@@ -10972,6 +10985,7 @@ function shuffleQueueRemainder() {
   ];
 
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   renderQueue();
   updateActiveRows();
   preloadNextTrack();
@@ -11002,6 +11016,7 @@ function organizeQueueRemainder() {
   ];
 
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   saveQueueState();
   renderQueue();
   updateActiveRows();
@@ -11046,6 +11061,141 @@ function getCurrentQueueIndex() {
   return state.queue.findIndex((track) => track.Id === state.currentTrack.Id);
 }
 
+function resetShufflePlaybackState() {
+  state.shuffleHistory = [];
+  state.shuffleUpcomingIds = [];
+}
+
+function pruneShufflePlaybackState() {
+  if (!state.queue.length) {
+    resetShufflePlaybackState();
+    return;
+  }
+
+  const queueIds = new Set(state.queue.map((track) => track.Id).filter(Boolean));
+  state.shuffleHistory = state.shuffleHistory
+    .filter((id) => queueIds.has(id) && id !== state.currentTrack?.Id)
+    .slice(-SHUFFLE_HISTORY_LIMIT);
+  state.shuffleUpcomingIds = state.shuffleUpcomingIds
+    .filter((id) => queueIds.has(id) && id !== state.currentTrack?.Id);
+}
+
+function getQueueTrackById(trackId) {
+  return trackId ? state.queue.find((track) => track.Id === trackId) || null : null;
+}
+
+function rememberShuffleHistory(track) {
+  if (state.playMode !== "shuffle" || !track?.Id || !state.queue.some((item) => item.Id === track.Id)) {
+    return;
+  }
+
+  state.shuffleHistory = [
+    ...state.shuffleHistory.filter((id) => id !== track.Id),
+    track.Id,
+  ].slice(-SHUFFLE_HISTORY_LIMIT);
+}
+
+function forgetShuffleUpcomingTrack(trackId) {
+  if (!trackId) {
+    return;
+  }
+
+  state.shuffleUpcomingIds = state.shuffleUpcomingIds.filter((id) => id !== trackId);
+}
+
+function getShuffleCandidateTracks() {
+  const currentId = state.currentTrack?.Id || "";
+  return state.queue.filter((track) => track?.Id && track.Id !== currentId);
+}
+
+function refillShuffleUpcomingQueue(limit = 1) {
+  pruneShufflePlaybackState();
+
+  const neededCount = Math.max(0, limit - state.shuffleUpcomingIds.length);
+  if (!neededCount) {
+    return;
+  }
+
+  const candidates = getShuffleCandidateTracks()
+    .filter((track) => !state.shuffleUpcomingIds.includes(track.Id));
+
+  if (!candidates.length) {
+    return;
+  }
+
+  shuffleTracks(candidates);
+
+  const nextIds = candidates.slice(0, neededCount).map((track) => track.Id);
+  state.shuffleUpcomingIds = [...state.shuffleUpcomingIds, ...nextIds];
+}
+
+function getNextShuffleTrackId() {
+  if (state.playMode !== "shuffle" || state.queue.length < 2) {
+    return "";
+  }
+
+  refillShuffleUpcomingQueue(1);
+  return state.shuffleUpcomingIds[0] || "";
+}
+
+function takeShuffleHistoryTrack() {
+  pruneShufflePlaybackState();
+
+  while (state.shuffleHistory.length) {
+    const trackId = state.shuffleHistory.pop();
+    const track = getQueueTrackById(trackId);
+
+    if (track && track.Id !== state.currentTrack?.Id) {
+      forgetShuffleUpcomingTrack(track.Id);
+      return track;
+    }
+  }
+
+  return null;
+}
+
+function prioritizeShuffleUpcomingTracks(trackIds) {
+  if (!Array.isArray(trackIds) || !trackIds.length) {
+    return;
+  }
+
+  const queueIds = new Set(state.queue.map((track) => track.Id));
+  const currentId = state.currentTrack?.Id || "";
+  const nextIds = trackIds.filter((id, index) => id && id !== currentId && queueIds.has(id) && trackIds.indexOf(id) === index);
+  const nextIdSet = new Set(nextIds);
+
+  state.shuffleUpcomingIds = [
+    ...nextIds,
+    ...state.shuffleUpcomingIds.filter((id) => !nextIdSet.has(id)),
+  ];
+}
+
+function areQueuesSameById(leftQueue, rightQueue) {
+  if (!Array.isArray(leftQueue) || !Array.isArray(rightQueue) || leftQueue.length !== rightQueue.length) {
+    return false;
+  }
+
+  return leftQueue.every((track, index) => track?.Id === rightQueue[index]?.Id);
+}
+
+function syncShufflePlaybackStateForTrackChange(previousTrack, nextTrack, nextQueue, options = {}) {
+  const queueChanged = !areQueuesSameById(state.queue, nextQueue);
+
+  if (queueChanged || options.resetShuffleHistory) {
+    resetShufflePlaybackState();
+  } else {
+    pruneShufflePlaybackState();
+  }
+
+  if (previousTrack?.Id && nextTrack?.Id && previousTrack.Id !== nextTrack.Id) {
+    if (!options.fromShuffleHistory && !options.skipShuffleHistory) {
+      rememberShuffleHistory(previousTrack);
+    }
+
+    forgetShuffleUpcomingTrack(nextTrack.Id);
+  }
+}
+
 function clearPlayedQueueTracks() {
   closeQuickQueue({ restoreFocus: false });
   const currentIndex = getCurrentQueueIndex();
@@ -11058,6 +11208,7 @@ function clearPlayedQueueTracks() {
   const undoSnapshot = saveQueueUndoSnapshot("clear-played");
   state.queue = state.queue.slice(currentIndex);
   state.currentTrackIndex = 0;
+  pruneShufflePlaybackState();
   saveQueueState();
   renderQueue();
   updateActiveRows();
@@ -11087,6 +11238,7 @@ function clearQueue() {
   state.isChangingTrack = false;
   state.fallbackAttempted = false;
   state.qualityFallbackAttempted = false;
+  resetShufflePlaybackState();
   clearQueueState();
   resetPlayerMeta();
   renderQueue();
@@ -11125,6 +11277,8 @@ function createQueueUndoSnapshot(reason) {
     savedPlaybackPositionSeconds: getQueuePositionSeconds(),
     queueSavedAt: state.queueSavedAt,
     currentPlaybackMode: state.currentPlaybackMode,
+    shuffleHistory: [...state.shuffleHistory],
+    shuffleUpcomingIds: [...state.shuffleUpcomingIds],
   };
 }
 
@@ -11167,6 +11321,9 @@ function restoreQueueUndoSnapshot(snapshotId) {
   state.currentTrackIndex = restoredIndex >= 0 ? restoredIndex : fallbackIndex;
   state.savedPlaybackPositionSeconds = Number(snapshot.savedPlaybackPositionSeconds) || 0;
   state.queueSavedAt = snapshot.queueSavedAt || "";
+  state.shuffleHistory = Array.isArray(snapshot.shuffleHistory) ? [...snapshot.shuffleHistory] : [];
+  state.shuffleUpcomingIds = Array.isArray(snapshot.shuffleUpcomingIds) ? [...snapshot.shuffleUpcomingIds] : [];
+  pruneShufflePlaybackState();
 
   if (activePlayback.hasAudio && activePlayback.trackId === restoredTrack.Id && activePlayback.hasReportedPlaybackStart) {
     state.currentPlaybackMode = activePlayback.mode;
@@ -11210,6 +11367,7 @@ function addTrackToQueue(track) {
 
   state.queue = [...state.queue, track];
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   saveQueueState();
   renderQueue();
   setPlayerEnabled(true);
@@ -11234,6 +11392,7 @@ function addTrackToPlayNext(track) {
     state.fallbackAttempted = false;
     state.qualityFallbackAttempted = false;
     state.savedPlaybackPositionSeconds = 0;
+    resetShufflePlaybackState();
     updatePlayerMeta(track);
     setPlayerEnabled(true);
     renderQueue();
@@ -11268,6 +11427,7 @@ function addTrackToPlayNext(track) {
   queueWithoutTrack.splice(insertIndex, 0, queuedTrack);
   state.queue = queueWithoutTrack;
   syncCurrentTrackIndex();
+  prioritizeShuffleUpcomingTracks([queuedTrack.Id]);
   renderQueue();
   setPlayerEnabled(true);
   updateActiveRows();
@@ -11295,6 +11455,7 @@ function playTrackCollectionNext(tracks, label) {
     state.fallbackAttempted = false;
     state.qualityFallbackAttempted = false;
     state.savedPlaybackPositionSeconds = 0;
+    resetShufflePlaybackState();
     updatePlayerMeta(state.currentTrack);
     setPlayerEnabled(true);
     renderQueue();
@@ -11339,6 +11500,7 @@ function playTrackCollectionNext(tracks, label) {
   queueWithoutTracks.splice(insertIndex, 0, ...nextTracks);
   state.queue = queueWithoutTracks;
   syncCurrentTrackIndex();
+  prioritizeShuffleUpcomingTracks(nextIds);
   renderQueue();
   setPlayerEnabled(true);
   updateActiveRows();
@@ -11366,6 +11528,7 @@ function queueTrackCollection(tracks, label) {
     state.fallbackAttempted = false;
     state.qualityFallbackAttempted = false;
     state.savedPlaybackPositionSeconds = 0;
+    resetShufflePlaybackState();
     updatePlayerMeta(state.currentTrack);
     setPlayerEnabled(true);
     renderQueue();
@@ -11386,6 +11549,7 @@ function queueTrackCollection(tracks, label) {
 
   state.queue = [...state.queue, ...nextTracks];
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   renderQueue();
   setPlayerEnabled(true);
   updateActiveRows();
@@ -11414,6 +11578,7 @@ function removeQueueTrack(index) {
 
   state.queue = state.queue.filter((_, itemIndex) => itemIndex !== index);
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   saveQueueState();
   renderQueue();
   setPlayerEnabled(Boolean(state.queue.length));
@@ -11448,6 +11613,7 @@ function reorderQueueTrack(fromIndex, toIndex, options = {}) {
   nextQueue.splice(toIndex, 0, movedTrack);
   state.queue = nextQueue;
   syncCurrentTrackIndex();
+  pruneShufflePlaybackState();
   saveQueueState();
   renderQueue();
   updateActiveRows();
@@ -12236,6 +12402,7 @@ async function playTrack(track, queue, options = {}) {
   activePlaybackLoadProfile = null;
   audioPlayer.pause();
 
+  syncShufflePlaybackStateForTrackChange(previousTrack, track, nextQueue, options);
   state.queue = nextQueue;
   state.currentTrackIndex = state.queue.findIndex((item) => item.Id === track.Id);
   state.currentTrack = track;
@@ -13001,6 +13168,21 @@ function playPrevious() {
     return;
   }
 
+  if (state.playMode === "shuffle") {
+    const previousTrack = takeShuffleHistoryTrack();
+
+    if (previousTrack) {
+      const currentTrack = state.currentTrack;
+
+      if (currentTrack?.Id && currentTrack.Id !== previousTrack.Id) {
+        prioritizeShuffleUpcomingTracks([currentTrack.Id]);
+      }
+
+      playTrack(previousTrack, state.queue, { fromShuffleHistory: true });
+      return;
+    }
+  }
+
   const index = getNextQueueIndex(-1, false);
 
   if (index >= 0) {
@@ -13041,13 +13223,12 @@ function getNextQueueIndex(direction, fromEnded) {
   }
 
   if (state.playMode === "shuffle" && state.queue.length > 1 && direction > 0) {
-    let nextIndex = state.currentTrackIndex;
+    const nextTrackId = getNextShuffleTrackId();
+    const nextIndex = nextTrackId
+      ? state.queue.findIndex((track) => track.Id === nextTrackId)
+      : -1;
 
-    while (nextIndex === state.currentTrackIndex) {
-      nextIndex = Math.floor(Math.random() * state.queue.length);
-    }
-
-    return nextIndex;
+    return nextIndex >= 0 ? nextIndex : 0;
   }
 
   const lastIndex = state.queue.length - 1;
@@ -13943,8 +14124,7 @@ function preloadNextTrack(options = {}) {
 }
 
 function getPreloadCandidateTrack() {
-  const nextIndex = getNextQueueIndex(1, true);
-  return nextIndex >= 0 ? state.queue[nextIndex] : null;
+  return getNextPreviewTrack();
 }
 
 async function preparePreloadedPlaybackSession(track, mode, playSessionId, mediaSourceId, source) {
@@ -15941,6 +16121,7 @@ function discardSavedSessionForLockedServer() {
   state.currentTrackIndex = -1;
   state.queueUndoSnapshot = null;
   state.recentUndoSnapshot = null;
+  resetShufflePlaybackState();
   state.savedPlaybackPositionSeconds = 0;
   state.currentMediaSourceId = "";
   state.currentPlaySessionId = "";
@@ -16897,6 +17078,7 @@ function clearSession() {
   state.currentTrackIndex = -1;
   state.queueUndoSnapshot = null;
   state.recentUndoSnapshot = null;
+  resetShufflePlaybackState();
   state.savedPlaybackPositionSeconds = 0;
   state.selectedAlbum = null;
   state.albumTracks = [];
