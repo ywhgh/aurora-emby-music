@@ -117,6 +117,7 @@ const QUALITY_FILTER_LABELS = {
 const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
 const LYRIC_PROGRESS_EPSILON = 0.04;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
+const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -786,6 +787,7 @@ let lyricClockAudioSeconds = 0;
 let lyricClockStartedAtMs = 0;
 let lyricClockPlaybackRate = 1;
 let lyricClockIsRunning = false;
+let lastLyricAutoScrollAt = 0;
 let activeLyricListIndex = -1;
 let lyricLineElements = [];
 let immersiveLyricActiveIndex = -1;
@@ -6752,11 +6754,26 @@ function updateLyricsHighlight(currentSeconds, forceScroll = false) {
 
   const activeItem = lyricLineElements[activeIndex];
 
-  if (activeItem) {
+  if (activeItem && shouldScrollLyricLine(forceScroll)) {
     activeItem.scrollIntoView({ block: "center", behavior: forceScroll ? "auto" : "smooth" });
   }
 
   syncLyricProgressLoop();
+}
+
+function shouldScrollLyricLine(isForced = false) {
+  if (isForced) {
+    lastLyricAutoScrollAt = getMonotonicNowMs();
+    return true;
+  }
+
+  const nowMs = getMonotonicNowMs();
+  if (nowMs - lastLyricAutoScrollAt < LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS) {
+    return false;
+  }
+
+  lastLyricAutoScrollAt = nowMs;
+  return true;
 }
 
 function resetLyricLineElementCache() {
@@ -7082,7 +7099,7 @@ function updateImmersiveLyricProgress(currentSeconds, shouldScroll = false, inst
   syncImmersiveLyricActiveClass(activeItem, activeIndex);
   updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds);
 
-  if (activeItem && shouldScroll) {
+  if (activeItem && shouldScroll && shouldScrollLyricLine(instantScroll)) {
     activeItem.scrollIntoView({ block: "center", behavior: instantScroll ? "auto" : "smooth" });
   }
 }
