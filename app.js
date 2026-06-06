@@ -1467,6 +1467,28 @@ function runLyricProgressScenario() {
   updateLyricsHighlight(4.8, true);
   const longGapProgress = collectBrowserSmokeLyricState();
   const longGapIdleResumeDelayMs = getLyricProgressIdleResumeDelayMs(1, getAdjustedLyricSeconds(4.8), { time: 20 });
+  state.lyricOffsetSeconds = 0;
+  const enhancedTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-enhanced-lyric-track",
+    name: "Browser Smoke Enhanced Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]<00:00.00>Alpha <00:00.60>beta <00:01.20>gamma",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = enhancedTrack;
+  state.queue = [enhancedTrack];
+  state.tracks = [enhancedTrack];
+  state.filteredTracks = [enhancedTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(enhancedTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.6, true);
+  const enhancedMidWordProgress = collectBrowserSmokeLyricState();
+  updateLyricsHighlight(1.45, true);
+  const enhancedLateWordProgress = collectBrowserSmokeLyricState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1475,6 +1497,8 @@ function runLyricProgressScenario() {
     afterResumeRefresh,
     longGapProgress,
     longGapIdleResumeDelayMs,
+    enhancedMidWordProgress,
+    enhancedLateWordProgress,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -7200,8 +7224,9 @@ function appendImmersiveLyricLineContent(container, line) {
   const original = document.createElement("span");
   original.className = line?.originalText ? "immersive-lyric-original" : "immersive-lyric-original-fallback";
   const words = [];
+  const wordParts = getLyricWordParts(line, originalText);
 
-  segmentLyricWords(originalText).forEach((part) => {
+  wordParts.forEach((part) => {
     if (part.type === "space") {
       original.append(document.createTextNode(part.value));
       return;
@@ -7210,6 +7235,9 @@ function appendImmersiveLyricLineContent(container, line) {
     const word = document.createElement("span");
     word.className = "word";
     word.textContent = part.value;
+    if (Number.isFinite(part.time)) {
+      word.dataset.wordTime = String(part.time);
+    }
     word.style.setProperty("--word-progress", "0%");
     original.append(word);
     words.push(word);
@@ -7225,6 +7253,36 @@ function appendImmersiveLyricLineContent(container, line) {
   translated.textContent = translatedText;
   container.replaceChildren(original, translated);
   return words;
+}
+
+function getLyricWordParts(line, fallbackText) {
+  const timeline = Array.isArray(line?.wordTimeline) ? line.wordTimeline : [];
+
+  if (!timeline.length) {
+    return segmentLyricWords(fallbackText);
+  }
+
+  return timeline.flatMap((entry) => {
+    const value = String(entry?.value || "");
+    const leadingSpace = value.match(/^\s+/)?.[0] || "";
+    const trailingSpace = value.match(/\s+$/)?.[0] || "";
+    const text = value.trim();
+    const parts = [];
+
+    if (leadingSpace) {
+      parts.push({ type: "space", value: leadingSpace });
+    }
+
+    if (text) {
+      parts.push({ type: "word", value: text, time: Number(entry.time) });
+    }
+
+    if (trailingSpace) {
+      parts.push({ type: "space", value: trailingSpace });
+    }
+
+    return parts;
+  });
 }
 
 function segmentLyricWords(text) {
@@ -7358,6 +7416,11 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     return;
   }
 
+  if (hasTimedLyricWords(words)) {
+    updateTimedLyricWordProgress(words, lyricSeconds, nextEntry);
+    return;
+  }
+
   const end = getLyricWordProgressEndSeconds(start, nextEntry, words.length);
   const lineRatio = end > start
     ? clamp((lyricSeconds - start) / (end - start), 0, 1)
@@ -7365,6 +7428,60 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
   const litWords = lineRatio * words.length;
   updateLyricWordProgressWindow(words, litWords);
   scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry);
+}
+
+function hasTimedLyricWords(words) {
+  return words.some((word) => Number.isFinite(Number(word?.dataset?.wordTime)));
+}
+
+function updateTimedLyricWordProgress(words, lyricSeconds, nextEntry) {
+  let completedWords = 0;
+  let activeWordIndex = -1;
+  let activeWordProgress = 0;
+
+  words.forEach((word, index) => {
+    const start = Number(word.dataset.wordTime);
+    const nextWordStart = Number(words[index + 1]?.dataset?.wordTime);
+    const end = Number.isFinite(nextWordStart)
+      ? nextWordStart
+      : (Number.isFinite(nextEntry?.time) ? nextEntry.time : start + Math.max(0.35, String(word.textContent || "").length * 0.14));
+
+    let progress = 0;
+    if (!Number.isFinite(start)) {
+      progress = 0;
+    } else if (lyricSeconds >= end) {
+      progress = 100;
+    } else if (lyricSeconds >= start && end > start) {
+      progress = Math.round(clamp((lyricSeconds - start) / (end - start), 0, 1) * 1000) / 10;
+    }
+
+    if (progress >= 100) {
+      completedWords += 1;
+    } else if (progress > 0 && activeWordIndex < 0) {
+      activeWordIndex = index;
+      activeWordProgress = progress;
+    }
+
+    setLyricWordProgress(word, progress);
+  });
+
+  lyricProgressFullWordCount = completedWords;
+  lyricProgressPartialWordIndex = activeWordIndex;
+  if (activeWordIndex >= 0) {
+    setLyricWordProgress(words[activeWordIndex], activeWordProgress);
+  }
+
+  scheduleTimedLyricProgressResumeIfIdle(words, lyricSeconds, nextEntry);
+}
+
+function scheduleTimedLyricProgressResumeIfIdle(words, lyricSeconds, nextEntry) {
+  const hasUnfinishedWord = words.some((word) => Number(word.dataset.wordProgress || 0) < 100);
+
+  if (hasUnfinishedWord) {
+    return;
+  }
+
+  scheduleLyricProgressResumeIfIdle(1, lyricSeconds, nextEntry);
 }
 
 function getLyricWordProgressEndSeconds(start, nextEntry, wordCount) {

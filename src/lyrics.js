@@ -50,6 +50,7 @@ function parseLyrics(text) {
   const timedLines = [];
   const plainLines = [];
   const timePattern = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+  const inlineTimePattern = /<(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?>/g;
   const metadataPattern = /^\[[a-z]+:.+\]$/i;
 
   rawLines.forEach((rawLine) => {
@@ -61,10 +62,14 @@ function parseLyrics(text) {
 
     const matches = [...line.matchAll(timePattern)];
     const textPart = line.replace(timePattern, "").trim();
-    const lyricText = parseLyricTextPart(textPart);
+    const wordTimeline = parseInlineLyricWordTimeline(textPart, inlineTimePattern);
+    const lyricText = parseLyricTextPart(wordTimeline.text);
+    const lyricPayload = wordTimeline.words.length
+      ? { ...lyricText, wordTimeline: wordTimeline.words }
+      : lyricText;
 
     if (!matches.length) {
-      plainLines.push({ time: null, ...parseLyricTextPart(line) });
+      plainLines.push({ time: null, ...parseLyricTextPart(line.replace(inlineTimePattern, "")) });
       return;
     }
 
@@ -75,7 +80,7 @@ function parseLyrics(text) {
       const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
       timedLines.push({
         time: hours * 3600 + minutes * 60 + seconds + fraction,
-        ...lyricText,
+        ...lyricPayload,
       });
     });
   });
@@ -95,6 +100,53 @@ function parseLyrics(text) {
 
 function parseLyricTextPart(text) {
   return splitInlineBilingualText(text) || { text: String(text || "").trim() };
+}
+
+function parseInlineLyricWordTimeline(text, inlineTimePattern) {
+  const value = String(text || "");
+  const matches = [...value.matchAll(inlineTimePattern)];
+
+  if (!matches.length) {
+    return { text: value.trim(), words: [] };
+  }
+
+  const words = [];
+  let cleanText = "";
+  let cursor = 0;
+
+  matches.forEach((match, index) => {
+    cleanText += value.slice(cursor, match.index);
+    cursor = match.index + match[0].length;
+
+    const nextMatch = matches[index + 1];
+    const rawValue = value.slice(cursor, nextMatch?.index ?? value.length);
+    const wordValue = rawValue;
+
+    if (!wordValue.trim()) {
+      return;
+    }
+
+    words.push({
+      time: parseInlineTimeMatch(match),
+      value: wordValue,
+    });
+  });
+
+  cleanText += value.slice(cursor);
+
+  const textValue = words.map((word) => word.value).join("");
+  return {
+    text: (cleanText.trim() || textValue).trim(),
+    words: words.filter((word) => Number.isFinite(word.time)),
+  };
+}
+
+function parseInlineTimeMatch(match) {
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
+  return hours * 3600 + minutes * 60 + seconds + fraction;
 }
 
 function splitInlineBilingualText(text) {
@@ -169,8 +221,14 @@ function mergeBilingualTimedLines(lines) {
       appendUniqueText(texts, line.text);
     });
 
+    const timedWordLine = group.find((line) => Array.isArray(line.wordTimeline) && line.wordTimeline.length);
+
     if (texts.length <= 1) {
-      return { time: group[0].time, text: texts[0] || "" };
+      return {
+        time: group[0].time,
+        text: texts[0] || "",
+        ...(timedWordLine ? { wordTimeline: timedWordLine.wordTimeline } : {}),
+      };
     }
 
     const translatedText = findTranslatedText(texts);
@@ -182,6 +240,7 @@ function mergeBilingualTimedLines(lines) {
       time: group[0].time,
       text: translatedText,
       originalText,
+      ...(timedWordLine ? { wordTimeline: timedWordLine.wordTimeline } : {}),
     };
   }).filter((line) => line.text);
 }

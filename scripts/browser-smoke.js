@@ -550,6 +550,8 @@ function checkPageState(check, page) {
   const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
   const lyricProgressAfterResumeRefresh = lyricProgress.afterResumeRefresh || {};
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
+  const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
+  const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -626,6 +628,10 @@ function checkPageState(check, page) {
   assert(lyricLongGapProgress.activeIndex === 0, `${label} long-gap lyric should still focus the first line, got ${lyricLongGapProgress.activeIndex}`);
   assert(lyricLongGapProgress.wordProgress?.every((progress) => progress === 100), `${label} long-gap lyric words should finish within the capped line duration: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
   assert(lyricProgress.longGapIdleResumeDelayMs > 10000, `${label} long-gap lyric should idle the RAF until near the next line, got ${lyricProgress.longGapIdleResumeDelayMs || 0}ms`);
+  assert(enhancedMidWordProgress.wordProgress?.[0] === 100, `${label} enhanced lyric first word should complete at the second word timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
+  assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
+  assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
+  assert(enhancedLateWordProgress.wordProgress?.[2] > 0 && enhancedLateWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric third word should be partially highlighted from inline timing: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

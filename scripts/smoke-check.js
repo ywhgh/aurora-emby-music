@@ -146,6 +146,12 @@ function checkLyrics() {
     assert(line?.text === text, `${name} text expected ${text}, got ${line?.text}`);
   });
 
+  const enhancedLine = parseLyrics("[00:00.00]<00:00.00>Alpha <00:00.60>beta <00:01.20>gamma").lines[0];
+  assert(enhancedLine?.text === "Alpha beta gamma", `Enhanced LRC text expected Alpha beta gamma, got ${enhancedLine?.text}`);
+  assert(Array.isArray(enhancedLine?.wordTimeline), "Enhanced LRC should expose wordTimeline");
+  assert(enhancedLine.wordTimeline.length === 3, `Enhanced LRC should expose 3 timed words, got ${enhancedLine.wordTimeline?.length || 0}`);
+  assert(enhancedLine.wordTimeline[1]?.time === 0.6, `Enhanced LRC second word time expected 0.6, got ${enhancedLine.wordTimeline[1]?.time}`);
+
   const app = read("app.js");
   assert(app.includes("function appendLyricLineContent"), "Missing shared lyric line renderer");
   assert(app.includes("renderNowLyricFocusLine"), "Missing now lyric focus renderer");
@@ -204,6 +210,10 @@ function checkLyrics() {
   assert(app.includes('["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)'), "Browser smoke lyric hooks should only be available on local test hosts");
   assert(app.includes("function runLyricProgressScenario"), "Browser smoke should be able to run a real synthetic lyric progress scenario");
   assert(app.includes("function collectBrowserSmokeLyricState"), "Browser smoke should collect actual word progress state from rendered lyrics");
+  assert(app.includes("function getLyricWordParts"), "Immersive lyrics should render enhanced LRC timed words");
+  assert(app.includes("word.dataset.wordTime"), "Immersive lyrics should persist enhanced LRC word times on word nodes");
+  assert(app.includes("function updateTimedLyricWordProgress"), "Immersive lyrics should use enhanced LRC word timing when available");
+  assert(app.includes("function hasTimedLyricWords"), "Immersive lyrics should detect timed word nodes");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
@@ -284,6 +294,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
+  assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
 }
 
 function checkAppFunctionReferences() {
