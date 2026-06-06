@@ -118,6 +118,8 @@ const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
 const LYRIC_PROGRESS_EPSILON = 0.04;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
+const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
+const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -1374,23 +1376,25 @@ function isBrowserSmokeRun() {
   return isLocalHost && new URLSearchParams(window.location.search).has("browser-smoke");
 }
 
-function createBrowserSmokeTrack() {
+function createBrowserSmokeTrack(options = {}) {
+  const lyricsText = options.lyricsText || [
+    "[00:00.00]Alpha beta gamma",
+    "[00:03.00]Delta epsilon zeta",
+    "[00:06.00]Eta theta iota",
+  ].join("\n");
+
   return {
-    Id: "browser-smoke-lyric-track",
+    Id: options.id || "browser-smoke-lyric-track",
     Type: "Audio",
     MediaType: "Audio",
-    Name: "Browser Smoke Lyric Track",
+    Name: options.name || "Browser Smoke Lyric Track",
     Album: "Smoke Tests",
     AlbumId: "browser-smoke-album",
     Artists: ["Emby Music Web"],
     ArtistItems: [{ Id: "browser-smoke-artist", Name: "Emby Music Web" }],
-    RunTimeTicks: secondsToTicks(12),
+    RunTimeTicks: secondsToTicks(options.durationSeconds || 12),
     UserData: {},
-    LyricsText: [
-      "[00:00.00]Alpha beta gamma",
-      "[00:03.00]Delta epsilon zeta",
-      "[00:06.00]Eta theta iota",
-    ].join("\n"),
+    LyricsText: lyricsText,
     MediaSources: [
       {
         Id: "browser-smoke-source",
@@ -1440,12 +1444,32 @@ function runLyricProgressScenario() {
   resetLyricProgressState();
   refreshLyricsForPlaybackResume(4.12);
   const afterResumeRefresh = collectBrowserSmokeLyricState();
+  const longGapTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-long-gap-lyric-track",
+    name: "Browser Smoke Long Gap Lyric Track",
+    durationSeconds: 30,
+    lyricsText: [
+      "[00:00.00]Long gap lyric phrase",
+      "[00:20.00]Next line arrives later",
+    ].join("\n"),
+  });
+  state.currentTrack = longGapTrack;
+  state.queue = [longGapTrack];
+  state.tracks = [longGapTrack];
+  state.filteredTracks = [longGapTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(longGapTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(4.8, true);
+  const longGapProgress = collectBrowserSmokeLyricState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
     beforeOffset,
     afterOffset,
     afterResumeRefresh,
+    longGapProgress,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -7313,13 +7337,24 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     return;
   }
 
-  const fallbackEnd = start + Math.max(2.4, words.length * 0.22);
-  const end = Number.isFinite(nextEntry?.time) ? nextEntry.time : fallbackEnd;
+  const end = getLyricWordProgressEndSeconds(start, nextEntry, words.length);
   const lineRatio = end > start
     ? clamp((lyricSeconds - start) / (end - start), 0, 1)
     : 1;
   const litWords = lineRatio * words.length;
   updateLyricWordProgressWindow(words, litWords);
+}
+
+function getLyricWordProgressEndSeconds(start, nextEntry, wordCount) {
+  const fallbackDuration = Math.max(2.4, wordCount * 0.22);
+  const actualDuration = Number.isFinite(nextEntry?.time) ? nextEntry.time - start : fallbackDuration;
+  const duration = clamp(
+    Number.isFinite(actualDuration) && actualDuration > 0 ? actualDuration : fallbackDuration,
+    LYRIC_WORD_MIN_LINE_DURATION_SECONDS,
+    LYRIC_WORD_MAX_LINE_DURATION_SECONDS
+  );
+
+  return start + duration;
 }
 
 function updateLyricWordProgressWindow(words, litWords) {

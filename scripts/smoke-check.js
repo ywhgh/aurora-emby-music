@@ -172,6 +172,10 @@ function checkLyrics() {
   assert(app.includes("function syncLyricPlaybackClock"), "Lyric playback clock should be explicitly synchronized");
   assert(app.includes("function getLyricPlaybackTimeSeconds"), "Lyric word progress should read from a smooth playback clock");
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
+  assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
+  assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap long line durations");
+  assert(app.includes("function getLyricWordProgressEndSeconds"), "Lyric word progress should centralize line end timing");
+  assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use capped line end timing");
   assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getLyricPlaybackTimeSeconds\(\)\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock");
   assert(!/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\)\);/.test(app), "RAF lyric progress should not depend on discrete audio.currentTime reads");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?refreshLyricsForPlaybackResume\(\);/.test(app), "Audio play should immediately refresh lyrics from the smooth playback clock");
@@ -238,7 +242,7 @@ function checkLyrics() {
   assert(/if \(!state\.isLyricSynced \|\| !state\.lyricTimeline\.length\) \{\s*stopLyricProgressLoop\(\);\s*renderStaticLyricFocusIfNeeded\(\);\s*return;/m.test(app), "Unsynced lyric updates should not rebuild lyric DOM on every tick");
   assert(app.includes("function getNextLyricTimelineEntry"), "Lyric word progress should reuse the lyric timeline for next-line timing");
   assert(!/state\.lyricLines\s*\.\s*slice\(activeIndex \+ 1\)\s*\.\s*find/.test(app), "Lyric word progress should not allocate slices on every frame");
-  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricWordProgressWindow\(words, words\.length\);[\s\S]*?return;[\s\S]*?const fallbackEnd = start \+/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
+  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricWordProgressWindow\(words, words\.length\);[\s\S]*?return;[\s\S]*?const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
   assert(app.includes("lyricLineElements"), "Now-playing lyric lines should be cached for active updates");
   assert(app.includes("function syncLyricListActiveClass"), "Now-playing lyric active class should be updated without scanning the list");
   assert(!app.includes('lyricsList.querySelectorAll(".lyric-line")'), "Now-playing lyric active updates should not query every lyric line");
@@ -273,6 +277,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("wordProgress?.[1] > 0"), "Browser smoke should verify partial word progress");
   assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
+  assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
 }
 
 function checkAppFunctionReferences() {

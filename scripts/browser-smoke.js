@@ -549,6 +549,7 @@ function checkPageState(check, page) {
   const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
   const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
   const lyricProgressAfterResumeRefresh = lyricProgress.afterResumeRefresh || {};
+  const lyricLongGapProgress = lyricProgress.longGapProgress || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -622,6 +623,8 @@ function checkPageState(check, page) {
   assert(lyricProgressAfterOffset.scrollAllowedForced === true, `${label} forced lyric scroll should remain available`);
   assert(lyricProgressAfterResumeRefresh.activeIndex === 1, `${label} lyric resume refresh should restore the active lyric immediately, got ${lyricProgressAfterResumeRefresh.activeIndex}`);
   assert(lyricProgressAfterResumeRefresh.wordProgress?.[1] > 0, `${label} lyric resume refresh should immediately light the partial word: ${JSON.stringify(lyricProgressAfterResumeRefresh.wordProgress)}`);
+  assert(lyricLongGapProgress.activeIndex === 0, `${label} long-gap lyric should still focus the first line, got ${lyricLongGapProgress.activeIndex}`);
+  assert(lyricLongGapProgress.wordProgress?.every((progress) => progress === 100), `${label} long-gap lyric words should finish within the capped line duration: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 
