@@ -9249,6 +9249,8 @@ body.action-sheet-open .content {
   --immersive-lyric-secondary: inherit;
   --immersive-lyric-hover: rgba(255, 244, 229, 0.66);
   --immersive-lyric-hint: rgba(255, 244, 229, 0.42);
+  --immersive-lyric-active-bg: rgba(7, 10, 13, 0.42);
+  --immersive-lyric-active-edge: rgba(255, 244, 229, 0.06);
   --immersive-control-color: rgba(255, 244, 229, 0.64);
   --immersive-control-active: rgba(255, 244, 229, 0.94);
   --immersive-control-fill: rgba(255, 244, 229, 0.14);
@@ -9558,16 +9560,20 @@ body.action-sheet-open .content {
   overflow: hidden;
   padding-left: 60px;
   mask-image: linear-gradient(180deg, transparent, #000 12%, #000 84%, transparent);
+  transform: translateY(-2rem);
 }
 
 .immersive-lyric-list {
-  display: flex;
   height: 100%;
   overflow-y: auto;
-  flex-direction: column;
-  gap: 24px;
   padding: 42px 0;
+  overscroll-behavior: contain;
   scroll-behavior: smooth;
+}
+
+.immersive-lyric-list .lyric-line + .lyric-line,
+.immersive-lyric-list p + p {
+  margin-top: 24px;
 }
 
 .immersive-lyric-list .lyric-line,
@@ -9580,6 +9586,8 @@ body.action-sheet-open .content {
   line-height: 1.18;
   transform-origin: left center;
   transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
     color 0.2s ease,
     opacity 0.2s ease,
     transform 0.2s ease;
@@ -9597,6 +9605,10 @@ body.action-sheet-open .content {
 
 .immersive-lyric-list .lyric-line.active,
 .immersive-lyric-list p.active {
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, var(--immersive-lyric-active-bg), rgba(7, 10, 13, 0.26));
+  box-shadow: inset 0 0 0 1px var(--immersive-lyric-active-edge);
   opacity: 1;
   color: var(--immersive-lyric-active);
   transform: translateX(0.1rem);
@@ -10333,6 +10345,14 @@ body.action-sheet-open .content {
 
 .track-just-changed .playerbar {
   animation: none;
+}
+
+body.immersive-player-open {
+  overflow: hidden;
+}
+
+body.immersive-player-open .content {
+  overflow: hidden;
 }
 
 body.immersive-player-open .playerbar {
@@ -12302,11 +12322,16 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     height: min(34vh, 15rem);
     min-height: 8rem;
     padding: 0 0.4rem;
+    transform: translateY(-0.65rem);
   }
 
   .immersive-lyric-list {
-    gap: 1rem;
     padding: 1.5rem 0;
+  }
+
+  .immersive-lyric-list .lyric-line + .lyric-line,
+  .immersive-lyric-list p + p {
+    margin-top: 1rem;
   }
 
   .immersive-lyric-list p {

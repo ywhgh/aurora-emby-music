@@ -552,6 +552,7 @@ function checkPageState(check, page) {
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
   const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
+  const endScrollLayout = lyricProgress.endScrollLayout || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -632,6 +633,15 @@ function checkPageState(check, page) {
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[2] > 0 && enhancedLateWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric third word should be partially highlighted from inline timing: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
+  assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
+  assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
+  assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.lyricListMaxScrollTop >= endScrollLayout.lyricListScrollTop, `${label} immersive lyric list scrollTop should be clamped: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.windowScrollY === 0 && endScrollLayout.documentScrollTop === 0, `${label} immersive lyric scrolling should not move the document: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.contentScrollTop === 0, `${label} immersive lyric scrolling should not move the app content: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.shellPinned === true, `${label} immersive player should remain pinned to the viewport: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.shellBottomGapPx <= 1, `${label} immersive player should not reveal a bottom gap: ${JSON.stringify(endScrollLayout)}`);
+  assert(endScrollLayout.activeLineInsideList === true, `${label} active ending lyric should remain inside the lyric list viewport: ${JSON.stringify(endScrollLayout)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

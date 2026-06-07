@@ -46,7 +46,20 @@ function extractLyricsText(track) {
 }
 
 function parseLyrics(text) {
-  const rawLines = String(text || "").split(/\r?\n/);
+  const rawText = String(text || "");
+  const ttmlLyrics = parseTtmlLyrics(rawText);
+
+  if (ttmlLyrics) {
+    return ttmlLyrics;
+  }
+
+  const rawLines = rawText.split(/\r?\n/);
+  const yrcLyrics = parseYrcLyrics(rawLines);
+
+  if (yrcLyrics) {
+    return yrcLyrics;
+  }
+
   const timedLines = [];
   const plainLines = [];
   const timePattern = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
@@ -110,6 +123,244 @@ function parseLyrics(text) {
 
 function parseLyricTextPart(text) {
   return splitInlineBilingualText(text) || { text: String(text || "").trim() };
+}
+
+function parseYrcLyrics(rawLines) {
+  const lines = [];
+  const linePattern = /^\[(\d+),(\d+)\](.+)$/;
+
+  rawLines.forEach((rawLine) => {
+    const line = String(rawLine || "").trim();
+    const match = line.match(linePattern);
+
+    if (!match) {
+      return;
+    }
+
+    const lineStartMs = Number(match[1]);
+    const lineDurationMs = Number(match[2]);
+    const body = match[3] || "";
+    const parsedLine = parseYrcLineBody(body, lineStartMs, lineDurationMs);
+
+    if (!parsedLine.text || !parsedLine.wordTimeline.length) {
+      return;
+    }
+
+    lines.push({
+      time: lineStartMs / 1000,
+      text: parsedLine.text,
+      wordTimeline: parsedLine.wordTimeline,
+      ...(Number.isFinite(lineDurationMs) && lineDurationMs > 0 ? { endTime: (lineStartMs + lineDurationMs) / 1000 } : {}),
+    });
+  });
+
+  if (!lines.length) {
+    return null;
+  }
+
+  return {
+    isSynced: true,
+    lines: mergeBilingualTimedLines(lines),
+  };
+}
+
+function parseYrcLineBody(body, lineStartMs, lineDurationMs) {
+  const wordPattern = /\((\d+),(\d+)(?:,\d+)?\)([^(]*)/g;
+  const rawWords = [];
+  let match;
+
+  while ((match = wordPattern.exec(String(body || "")))) {
+    const startMs = Number(match[1]);
+    const wordValue = String(match[3] || "");
+
+    if (!wordValue.trim()) {
+      continue;
+    }
+
+    rawWords.push({
+      startMs,
+      durationMs: Number(match[2]),
+      value: wordValue,
+    });
+  }
+
+  const useAbsoluteWordTimes = shouldUseAbsoluteYrcWordTimes(rawWords, lineStartMs, lineDurationMs);
+  const words = rawWords.map((word) => ({
+    time: (useAbsoluteWordTimes ? word.startMs : lineStartMs + word.startMs) / 1000,
+    ...(Number.isFinite(word.durationMs) && word.durationMs > 0
+      ? { endTime: ((useAbsoluteWordTimes ? word.startMs : lineStartMs + word.startMs) + word.durationMs) / 1000 }
+      : {}),
+    value: word.value,
+  }));
+
+  return {
+    text: words.map((word) => word.value).join("").trim(),
+    wordTimeline: words,
+  };
+}
+
+function shouldUseAbsoluteYrcWordTimes(words, lineStartMs, lineDurationMs) {
+  if (!words.length || !Number.isFinite(lineStartMs) || lineStartMs <= 0) {
+    return false;
+  }
+
+  const starts = words.map((word) => Number(word.startMs)).filter(Number.isFinite);
+  const minStart = Math.min(...starts);
+  const maxStart = Math.max(...starts);
+
+  return minStart >= lineStartMs
+    && Number.isFinite(lineDurationMs)
+    && lineDurationMs > 0
+    && maxStart > lineDurationMs;
+}
+
+function parseTtmlLyrics(text) {
+  const value = String(text || "").trim();
+
+  if (!/<(?:tt|p|span)\b/i.test(value) || !/<p\b/i.test(value)) {
+    return null;
+  }
+
+  const lines = [];
+  const paragraphPattern = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
+  let match;
+
+  while ((match = paragraphPattern.exec(value))) {
+    const attrs = match[1] || "";
+    const body = match[2] || "";
+    const lineStart = parseTtmlTime(readXmlAttribute(attrs, "begin") || readXmlAttribute(attrs, "start"));
+    const lineEnd = parseTtmlTime(readXmlAttribute(attrs, "end"));
+    const parsedLine = parseTtmlParagraph(body, lineStart, lineEnd);
+
+    if (parsedLine?.text) {
+      lines.push(parsedLine);
+    }
+  }
+
+  if (!lines.length) {
+    return null;
+  }
+
+  return {
+    isSynced: true,
+    lines: mergeBilingualTimedLines(lines),
+  };
+}
+
+function parseTtmlParagraph(body, lineStart, lineEnd) {
+  const spans = [];
+  const spanPattern = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+  let match;
+
+  while ((match = spanPattern.exec(body))) {
+    const attrs = match[1] || "";
+    const text = decodeXmlEntities(stripXmlTags(match[2] || "")).trim();
+    const start = parseTtmlTime(readXmlAttribute(attrs, "begin") || readXmlAttribute(attrs, "start"));
+    const end = parseTtmlTime(readXmlAttribute(attrs, "end"));
+
+    if (!text) {
+      continue;
+    }
+
+    spans.push({
+      value: text,
+      time: Number.isFinite(start) ? start : NaN,
+      endTime: Number.isFinite(end) ? end : NaN,
+    });
+  }
+
+  const text = spans.length
+    ? spans.map((span) => span.value).join("")
+    : decodeXmlEntities(stripXmlTags(body)).trim();
+  const firstWordTime = spans.find((span) => Number.isFinite(span.time))?.time;
+  const time = Number.isFinite(lineStart)
+    ? lineStart
+    : (Number.isFinite(firstWordTime) ? firstWordTime : NaN);
+
+  if (!text || !Number.isFinite(time)) {
+    return null;
+  }
+
+  const wordTimeline = spans
+    .filter((span) => Number.isFinite(span.time))
+    .map((span) => ({
+      time: span.time,
+      value: span.value,
+      ...(Number.isFinite(span.endTime) ? { endTime: span.endTime } : {}),
+    }));
+
+  return {
+    time,
+    text,
+    ...(wordTimeline.length ? { wordTimeline } : {}),
+    ...(Number.isFinite(lineEnd) ? { endTime: lineEnd } : {}),
+  };
+}
+
+function readXmlAttribute(attrs, name) {
+  const match = String(attrs || "").match(new RegExp(`(?:^|\\s)(?:[\\w:-]+:)?${name}\\s*=\\s*["']([^"']+)["']`, "i"));
+  return match ? decodeXmlEntities(match[1]) : "";
+}
+
+function stripXmlTags(value) {
+  return String(value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+}
+
+function decodeXmlEntities(value) {
+  const named = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: "\"",
+    apos: "'",
+    nbsp: " ",
+  };
+
+  return String(value || "").replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (entity, token) => {
+    const key = String(token || "").toLowerCase();
+
+    if (key[0] === "#") {
+      const code = key[1] === "x" ? parseInt(key.slice(2), 16) : parseInt(key.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : entity;
+    }
+
+    return Object.prototype.hasOwnProperty.call(named, key) ? named[key] : entity;
+  });
+}
+
+function parseTtmlTime(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return NaN;
+  }
+
+  const clock = raw.match(/^(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?$/);
+  if (clock) {
+    const hours = Number(clock[1] || 0);
+    const minutes = Number(clock[2] || 0);
+    const seconds = Number(clock[3] || 0);
+    const fraction = clock[4] ? Number(`0.${clock[4].padEnd(3, "0").slice(0, 3)}`) : 0;
+    return hours * 3600 + minutes * 60 + seconds + fraction;
+  }
+
+  const shortClock = raw.match(/^(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))$/);
+  if (shortClock) {
+    const minutes = Number(shortClock[1] || 0);
+    const seconds = Number(shortClock[2] || 0);
+    const fraction = Number(`0.${shortClock[3].padEnd(3, "0").slice(0, 3)}`);
+    return minutes * 60 + seconds + fraction;
+  }
+
+  const unit = raw.match(/^([+-]?\d+(?:\.\d+)?)(ms|s)?$/i);
+  if (unit) {
+    const number = Number(unit[1]);
+    return unit[2]?.toLowerCase() === "ms" ? number / 1000 : number;
+  }
+
+  return NaN;
 }
 
 function findLyricOffsetSeconds(lines) {

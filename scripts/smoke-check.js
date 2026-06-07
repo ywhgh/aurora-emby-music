@@ -155,6 +155,17 @@ function checkLyrics() {
   const enhancedSecondOnlyLine = parseLyrics("[00:00.00]<0.00>你<0.30>好").lines[0];
   assert(enhancedSecondOnlyLine?.text === "你好", `Second-only enhanced LRC text expected 你好, got ${enhancedSecondOnlyLine?.text}`);
   assert(enhancedSecondOnlyLine.wordTimeline?.[1]?.time === 0.3, `Second-only enhanced LRC second word time expected 0.3, got ${enhancedSecondOnlyLine.wordTimeline?.[1]?.time}`);
+  const yrcLine = parseLyrics("[1000,1800](0,500,0)你(500,500,0)好(1000,800,0)啊").lines[0];
+  assert(yrcLine?.text === "你好啊", `YRC text expected 你好啊, got ${yrcLine?.text}`);
+  assert(yrcLine.wordTimeline?.length === 3, `YRC should expose 3 timed words, got ${yrcLine.wordTimeline?.length || 0}`);
+  assert(yrcLine.wordTimeline?.[0]?.time === 1, `YRC first word time expected 1, got ${yrcLine.wordTimeline?.[0]?.time}`);
+  assert(yrcLine.wordTimeline?.[0]?.endTime === 1.5, `YRC first word endTime expected 1.5, got ${yrcLine.wordTimeline?.[0]?.endTime}`);
+  assert(yrcLine.wordTimeline?.[2]?.time === 2, `YRC third word time expected 2, got ${yrcLine.wordTimeline?.[2]?.time}`);
+  const ttmlLine = parseLyrics('<tt><body><div><p begin="00:00:01.000" end="00:00:03.000"><span begin="00:00:01.000" end="00:00:01.500">你</span><span begin="00:00:01.500" end="00:00:02.000">好</span></p></div></body></tt>').lines[0];
+  assert(ttmlLine?.text === "你好", `TTML text expected 你好, got ${ttmlLine?.text}`);
+  assert(ttmlLine.wordTimeline?.length === 2, `TTML should expose 2 timed words, got ${ttmlLine.wordTimeline?.length || 0}`);
+  assert(ttmlLine.wordTimeline?.[1]?.time === 1.5, `TTML second word time expected 1.5, got ${ttmlLine.wordTimeline?.[1]?.time}`);
+  assert(ttmlLine.wordTimeline?.[1]?.endTime === 2, `TTML second word endTime expected 2, got ${ttmlLine.wordTimeline?.[1]?.endTime}`);
   const offsetLine = parseLyrics("[offset:500]\n[00:01.00]Offset lyric").lines[0];
   assert(offsetLine?.time === 0.5, `LRC positive offset should shift line time earlier to 0.5, got ${offsetLine?.time}`);
   const lateOffsetLine = parseLyrics("[00:01.00]Offset lyric\n[offset:+500]").lines[0];
@@ -214,18 +225,26 @@ function checkLyrics() {
   assert(app.includes("LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS"), "Lyric auto-scroll should have a minimum interval to avoid stacked smooth scrolls");
   assert(app.includes("lastLyricAutoScrollAt"), "Lyric auto-scroll should track the previous automatic scroll time");
   assert(app.includes("function shouldScrollLyricLine"), "Lyric auto-scroll should use a shared throttle helper");
-  assert(/if \(activeItem && shouldScrollLyricLine\(forceScroll\)\) \{[\s\S]*?activeItem\.scrollIntoView\(\{ block: "center", behavior: forceScroll \? "auto" : "smooth" \}\);/.test(app), "Now-playing lyric auto-scroll should be throttled without blocking forced scrolls");
-  assert(/if \(activeItem && shouldScroll && shouldScrollLyricLine\(instantScroll\)\) \{[\s\S]*?activeItem\.scrollIntoView\(\{ block: "center", behavior: instantScroll \? "auto" : "smooth" \}\);/.test(app), "Immersive lyric auto-scroll should be throttled without blocking instant scrolls");
+  assert(app.includes("function scrollElementIntoContainerView"), "Lyric auto-scroll should use a container-scoped scroll helper");
+  assert(/getActiveView\(\) === "nowPlaying"[\s\S]*?scrollElementIntoContainerView\(lyricsList, activeItem, \{[\s\S]*?behavior: forceScroll \? "auto" : "smooth"/.test(app), "Now-playing lyric auto-scroll should stay inside the lyrics list");
+  assert(/scrollElementIntoContainerView\(immersiveLyricList, activeItem, \{[\s\S]*?behavior: instantScroll \? "auto" : "smooth"/.test(app), "Immersive lyric auto-scroll should stay inside the immersive lyric list");
+  assert(!/activeItem\.scrollIntoView\(\{ block: "center", behavior: instantScroll \? "auto" : "smooth" \}\);/.test(app), "Immersive lyric auto-scroll should not scroll the whole page");
+  assert(css.includes("body.immersive-player-open .content"), "Immersive playback should lock the background app scroller");
+  assert(css.includes("overscroll-behavior: contain;"), "Immersive lyric list should contain scroll chaining");
   assert(app.includes("function installBrowserSmokeHooks"), "Browser smoke should expose guarded lyric progress hooks");
   assert(/function installBrowserSmokeHooks\(\) \{[\s\S]*?if \(!isBrowserSmokeRun\(\)\) \{[\s\S]*?return;[\s\S]*?window\.EmbyMusicBrowserSmoke = \{[\s\S]*?runLyricProgressScenario,/.test(app), "Browser smoke lyric hooks should only be exposed during browser-smoke runs");
   assert(app.includes('["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)'), "Browser smoke lyric hooks should only be available on local test hosts");
   assert(app.includes("function runLyricProgressScenario"), "Browser smoke should be able to run a real synthetic lyric progress scenario");
   assert(app.includes("function collectBrowserSmokeLyricState"), "Browser smoke should collect actual word progress state from rendered lyrics");
   assert(app.includes("function getLyricWordParts"), "Immersive lyrics should render enhanced LRC timed words");
+  assert(lyricsCode.includes("function parseYrcLyrics"), "Lyrics parser should support YRC word-timed lyrics");
+  assert(lyricsCode.includes("function parseTtmlLyrics"), "Lyrics parser should support TTML word-timed lyrics");
   assert(app.includes("word.dataset.wordTime"), "Immersive lyrics should persist enhanced LRC word times on word nodes");
+  assert(app.includes("word.dataset.wordEndTime"), "Immersive lyrics should persist explicit word end times on word nodes");
   assert(app.includes("function updateTimedLyricWordProgress"), "Immersive lyrics should use enhanced LRC word timing when available");
   assert(app.includes("function hasTimedLyricWords"), "Immersive lyrics should detect timed word nodes");
   assert(app.includes("immersiveLyricWordTimings"), "Enhanced LRC word timings should be cached with rendered word nodes");
+  assert(app.includes("immersiveLyricWordEndTimings"), "Enhanced LRC word end timings should be cached with rendered word nodes");
   assert(app.includes("function findTimedLyricWordIndex"), "Enhanced LRC word progress should locate the current word by timing search");
   assert(app.includes("function getTimedLyricWordProgress"), "Enhanced LRC word progress should calculate the current word fill from exact timestamps");
   assert(app.includes("updateLyricWordProgressWindow(words, litWords)"), "Enhanced LRC word progress should reuse the changed-word update window");
@@ -316,6 +335,10 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
+  assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
+  assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");
+  assert(browserSmoke.includes("documentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the document");
+  assert(browserSmoke.includes("contentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the app content");
 }
 
 async function checkExternalSourceLyrics() {

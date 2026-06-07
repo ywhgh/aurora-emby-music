@@ -799,6 +799,7 @@ let immersiveLyricActiveIndex = -1;
 let immersiveLyricLineElements = [];
 let immersiveLyricWordElements = [];
 let immersiveLyricWordTimings = [];
+let immersiveLyricWordEndTimings = [];
 let lastStaticLyricRenderSignature = "";
 let lyricRenderRevision = 0;
 let libraryAlphabetScrubber = null;
@@ -1490,6 +1491,35 @@ function runLyricProgressScenario() {
   const enhancedMidWordProgress = collectBrowserSmokeLyricState();
   updateLyricsHighlight(1.45, true);
   const enhancedLateWordProgress = collectBrowserSmokeLyricState();
+  state.lyricOffsetSeconds = 0;
+  const endScrollTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-end-scroll-lyric-track",
+    name: "Browser Smoke End Scroll Lyric Track",
+    durationSeconds: 96,
+    lyricsText: Array.from({ length: 46 }, (_, index) => {
+      const seconds = index * 2;
+      const minutesLabel = String(Math.floor(seconds / 60)).padStart(2, "0");
+      const secondsLabel = String(seconds % 60).padStart(2, "0");
+      return `[${minutesLabel}:${secondsLabel}.00]End scroll line ${index + 1}`;
+    }).join("\n"),
+  });
+  state.currentTrack = endScrollTrack;
+  state.queue = [endScrollTrack];
+  state.tracks = [endScrollTrack];
+  state.filteredTracks = [endScrollTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(endScrollTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  window.scrollTo(0, 0);
+  if (document.scrollingElement) {
+    document.scrollingElement.scrollTop = 0;
+  }
+  if (content) {
+    content.scrollTop = 0;
+  }
+  updateLyricsHighlight(88.2, true);
+  const endScrollLayout = collectBrowserSmokeImmersiveLayoutState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1500,6 +1530,7 @@ function runLyricProgressScenario() {
     longGapIdleResumeDelayMs,
     enhancedMidWordProgress,
     enhancedLateWordProgress,
+    endScrollLayout,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -1526,6 +1557,55 @@ function collectBrowserSmokeLyricState() {
     cssWordProgress,
     offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
     scrollAllowedForced: shouldScrollLyricLine(true),
+  };
+}
+
+function collectBrowserSmokeImmersiveLayoutState() {
+  const shell = document.querySelector(".immersive-player-shell");
+  const shellRect = shell?.getBoundingClientRect();
+  const listRect = immersiveLyricList?.getBoundingClientRect();
+  const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
+  const activeRect = activeLine?.getBoundingClientRect();
+  const activeOffsetTop = activeLine && immersiveLyricList
+    ? getElementOffsetWithinContainer(immersiveLyricList, activeLine)
+    : null;
+  const scrollingElement = document.scrollingElement || document.documentElement;
+  const viewportHeight = window.innerHeight;
+  const shellTop = shellRect ? Math.round(shellRect.top) : null;
+  const shellBottom = shellRect ? Math.round(shellRect.bottom) : null;
+
+  return {
+    activeIndex: state.activeLyricIndex,
+    lyricCount: state.lyricLines.length,
+    activeLineText: activeLine?.textContent?.trim() || "",
+    windowScrollY: Math.round(window.scrollY || 0),
+    documentScrollTop: Math.round(scrollingElement?.scrollTop || 0),
+    contentScrollTop: Math.round(content?.scrollTop || 0),
+    viewportHeight,
+    shellTop,
+    shellBottom,
+    shellHeight: shellRect ? Math.round(shellRect.height) : null,
+    shellTopGapPx: shellRect ? Math.round(Math.max(0, shellRect.top)) : null,
+    shellBottomGapPx: shellRect ? Math.round(Math.max(0, viewportHeight - shellRect.bottom)) : null,
+    shellPinned: Boolean(shellRect && Math.abs(shellRect.top) <= 1 && Math.abs(shellRect.bottom - viewportHeight) <= 1),
+    lyricListClientHeight: Math.round(immersiveLyricList?.clientHeight || 0),
+    lyricListScrollHeight: Math.round(immersiveLyricList?.scrollHeight || 0),
+    lyricListTop: listRect ? Math.round(listRect.top) : null,
+    lyricListBottom: listRect ? Math.round(listRect.bottom) : null,
+    lyricListScrollTop: Math.round(immersiveLyricList?.scrollTop || 0),
+    lyricListMaxScrollTop: immersiveLyricList
+      ? Math.round(Math.max(0, immersiveLyricList.scrollHeight - immersiveLyricList.clientHeight))
+      : 0,
+    activeLineTop: activeRect ? Math.round(activeRect.top) : null,
+    activeLineBottom: activeRect ? Math.round(activeRect.bottom) : null,
+    activeLineHeight: activeRect ? Math.round(activeRect.height) : null,
+    activeOffsetTop: Number.isFinite(activeOffsetTop) ? Math.round(activeOffsetTop) : null,
+    activeLineInsideList: Boolean(
+      activeRect
+      && listRect
+      && activeRect.top >= listRect.top - 1
+      && activeRect.bottom <= listRect.bottom + 1
+    ),
   };
 }
 
@@ -6927,11 +7007,70 @@ function updateLyricsHighlight(currentSeconds, forceScroll = false) {
 
   const activeItem = lyricLineElements[activeIndex];
 
-  if (activeItem && shouldScrollLyricLine(forceScroll)) {
-    activeItem.scrollIntoView({ block: "center", behavior: forceScroll ? "auto" : "smooth" });
+  if (getActiveView() === "nowPlaying" && activeItem && shouldScrollLyricLine(forceScroll)) {
+    scrollElementIntoContainerView(lyricsList, activeItem, {
+      behavior: forceScroll ? "auto" : "smooth",
+    });
   }
 
   syncLyricProgressLoop();
+}
+
+function scrollElementIntoContainerView(container, element, options = {}) {
+  if (!container || !element || !container.contains(element)) {
+    return false;
+  }
+
+  const behavior = options.behavior || "smooth";
+  const block = options.block || "center";
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const elementOffsetTop = getElementOffsetWithinContainer(container, element);
+  const centeredTop = elementOffsetTop - ((container.clientHeight - elementRect.height) / 2);
+  const nearestTop = elementRect.top < containerRect.top
+    ? elementOffsetTop
+    : elementOffsetTop + elementRect.height - container.clientHeight;
+  const targetTop = block === "nearest"
+    && elementRect.top >= containerRect.top
+    && elementRect.bottom <= containerRect.bottom
+    ? container.scrollTop
+    : block === "nearest"
+    ? nearestTop
+    : centeredTop;
+  const nextScrollTop = clamp(targetTop, 0, maxScrollTop);
+  const previousScrollTop = container.scrollTop;
+
+  if (behavior === "auto" || behavior === "instant") {
+    const previousScrollBehavior = container.style.scrollBehavior;
+    container.style.scrollBehavior = "auto";
+    container.scrollTop = nextScrollTop;
+    container.style.scrollBehavior = previousScrollBehavior;
+  } else {
+    container.scrollTo({
+      top: nextScrollTop,
+      behavior,
+    });
+  }
+  return true;
+}
+
+function getElementOffsetWithinContainer(container, element) {
+  let offsetTop = 0;
+  let current = element;
+
+  while (current && current !== container) {
+    offsetTop += current.offsetTop || 0;
+    current = current.offsetParent;
+  }
+
+  if (current === container) {
+    return offsetTop;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  return elementRect.top - containerRect.top + container.scrollTop;
 }
 
 function shouldScrollLyricLine(isForced = false) {
@@ -7142,10 +7281,20 @@ function focusActiveLyricLine() {
     return;
   }
 
+  if (getActiveView() === "immersivePlayer") {
+    const immersiveActiveItem = immersiveLyricLineElements[state.activeLyricIndex];
+
+    if (immersiveActiveItem) {
+      scrollElementIntoContainerView(immersiveLyricList, immersiveActiveItem);
+      immersiveActiveItem.focus?.({ preventScroll: true });
+    }
+    return;
+  }
+
   const activeItem = lyricLineElements[state.activeLyricIndex];
 
   if (activeItem) {
-    activeItem.scrollIntoView({ block: "center", behavior: "smooth" });
+    scrollElementIntoContainerView(lyricsList, activeItem);
     activeItem.focus?.({ preventScroll: true });
   }
 }
@@ -7157,6 +7306,7 @@ function renderImmersiveLyricFocus() {
   immersiveLyricLineElements = [];
   immersiveLyricWordElements = [];
   immersiveLyricWordTimings = [];
+  immersiveLyricWordEndTimings = [];
 
   const appendLine = (text, className = "") => {
     const line = document.createElement("p");
@@ -7175,6 +7325,7 @@ function renderImmersiveLyricFocus() {
     const lineContent = appendImmersiveLyricLineContent(line, lyricLine);
     immersiveLyricWordElements[index] = lineContent.words;
     immersiveLyricWordTimings[index] = lineContent.timings;
+    immersiveLyricWordEndTimings[index] = lineContent.endTimings;
     immersiveLyricLineElements[index] = line;
     if (state.isLyricSynced && Number.isFinite(lyricLine.time)) {
       line.tabIndex = 0;
@@ -7229,6 +7380,7 @@ function appendImmersiveLyricLineContent(container, line) {
   original.className = line?.originalText ? "immersive-lyric-original" : "immersive-lyric-original-fallback";
   const words = [];
   const timings = [];
+  const endTimings = [];
   const wordParts = getLyricWordParts(line, originalText);
 
   wordParts.forEach((part) => {
@@ -7243,22 +7395,26 @@ function appendImmersiveLyricLineContent(container, line) {
     if (Number.isFinite(part.time)) {
       word.dataset.wordTime = String(part.time);
     }
+    if (Number.isFinite(part.endTime)) {
+      word.dataset.wordEndTime = String(part.endTime);
+    }
     word.style.setProperty("--word-progress", "0%");
     original.append(word);
     words.push(word);
     timings.push(Number.isFinite(part.time) ? Number(part.time) : NaN);
+    endTimings.push(Number.isFinite(part.endTime) ? Number(part.endTime) : NaN);
   });
 
   if (!translatedText) {
     container.replaceChildren(original);
-    return { words, timings };
+    return { words, timings, endTimings };
   }
 
   const translated = document.createElement("strong");
   translated.className = "immersive-lyric-translated";
   translated.textContent = translatedText;
   container.replaceChildren(original, translated);
-  return { words, timings };
+  return { words, timings, endTimings };
 }
 
 function getLyricWordParts(line, fallbackText) {
@@ -7280,7 +7436,12 @@ function getLyricWordParts(line, fallbackText) {
     }
 
     if (text) {
-      parts.push({ type: "word", value: text, time: Number(entry.time) });
+      parts.push({
+        type: "word",
+        value: text,
+        time: Number(entry.time),
+        endTime: Number(entry.endTime),
+      });
     }
 
     if (trailingSpace) {
@@ -7312,7 +7473,9 @@ function updateImmersiveLyricProgress(currentSeconds, shouldScroll = false, inst
   updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds);
 
   if (activeItem && shouldScroll && shouldScrollLyricLine(instantScroll)) {
-    activeItem.scrollIntoView({ block: "center", behavior: instantScroll ? "auto" : "smooth" });
+    scrollElementIntoContainerView(immersiveLyricList, activeItem, {
+      behavior: instantScroll ? "auto" : "smooth",
+    });
   }
 }
 
@@ -7445,6 +7608,7 @@ function hasTimedLyricWords(activeIndex, words) {
 
 function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry) {
   const timings = getTimedLyricWordTimings(activeIndex, words);
+  const endTimings = getTimedLyricWordEndTimings(activeIndex, words);
   const activeWordIndex = findTimedLyricWordIndex(timings, lyricSeconds);
 
   if (activeWordIndex < 0) {
@@ -7454,7 +7618,10 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
 
   const start = timings[activeWordIndex];
   const nextWordStart = timings[activeWordIndex + 1];
-  const end = Number.isFinite(nextWordStart)
+  const explicitEnd = endTimings[activeWordIndex];
+  const end = Number.isFinite(explicitEnd) && explicitEnd > start
+    ? explicitEnd
+    : Number.isFinite(nextWordStart)
     ? nextWordStart
     : getTimedLyricWordEndSeconds(words[activeWordIndex], start, nextEntry);
   const activeWordProgress = getTimedLyricWordProgress(lyricSeconds, start, end);
@@ -7472,6 +7639,16 @@ function getTimedLyricWordTimings(activeIndex, words) {
   }
 
   return words.map((word) => Number(word?.dataset?.wordTime));
+}
+
+function getTimedLyricWordEndTimings(activeIndex, words) {
+  const cached = immersiveLyricWordEndTimings[activeIndex] || [];
+
+  if (cached.length === words.length) {
+    return cached;
+  }
+
+  return words.map((word) => Number(word?.dataset?.wordEndTime));
 }
 
 function areTimedLyricWordTimingsUsable(timings) {
