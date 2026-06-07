@@ -122,13 +122,15 @@ const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
-const TOP_LYRIC_SHARD_MIN_COUNT = 12;
-const TOP_LYRIC_SHARD_MAX_COUNT = 18;
-const TOP_LYRIC_SHARD_PADDING = 12;
-const TOP_LYRIC_SHARD_DRAG = 0.94;
-const TOP_LYRIC_SHARD_GRAVITY = 0.075;
-const TOP_LYRIC_SHARD_FADE = 0.055;
+const TOP_LYRIC_SHARD_MIN_COUNT = 10;
+const TOP_LYRIC_SHARD_MAX_COUNT = 14;
+const TOP_LYRIC_SHARD_PADDING = 16;
+const TOP_LYRIC_SHARD_DRAG = 0.965;
+const TOP_LYRIC_SHARD_GRAVITY = 0.045;
+const TOP_LYRIC_SHARD_FADE = 0.036;
 const TOP_LYRIC_SHARD_MAX_DPR = 2;
+const TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS = 2;
+const TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS = 9;
 const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
 const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 177, 74, 0.9)";
 const TOP_LYRIC_SHARD_GLOW_COLOR = "rgba(236, 65, 65, 0.55)";
@@ -7665,10 +7667,14 @@ function updateTopLyricShardFrame() {
   const nextIndex = findTopLyricShardIndex(lyricSeconds);
 
   if (nextIndex >= 0) {
-    for (let index = topLyricTriggeredWordIndex + 1; index <= nextIndex; index += 1) {
+    const triggerEndIndex = Math.min(
+      nextIndex,
+      topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS
+    );
+    for (let index = topLyricTriggeredWordIndex + 1; index <= triggerEndIndex; index += 1) {
       triggerNextWord(index);
     }
-    topLyricTriggeredWordIndex = Math.max(topLyricTriggeredWordIndex, nextIndex);
+    topLyricTriggeredWordIndex = Math.max(topLyricTriggeredWordIndex, triggerEndIndex);
   }
 
   syncTopLyricShardLoop();
@@ -7705,7 +7711,9 @@ function triggerNextWord(index) {
   }
 
   span.classList.add("is-sharded");
-  spawnTopLyricShardCanvas(span);
+  if (span.textContent?.trim()) {
+    spawnTopLyricShardCanvas(span);
+  }
 }
 
 function alignTopLyricShardStateToTime(lyricSeconds) {
@@ -7722,6 +7730,8 @@ function spawnTopLyricShardCanvas(span) {
   if (!topLyricFocus || !topLyricFocus.isConnected || !span.isConnected) {
     return;
   }
+
+  trimTopLyricShardEffects();
 
   const spanRect = span.getBoundingClientRect();
   const focusRect = topLyricFocus.getBoundingClientRect();
@@ -7774,7 +7784,7 @@ function spawnTopLyricShardCanvas(span) {
 function getTopLyricShardPadding(spanRect, focusRect) {
   return {
     x: Math.min(TOP_LYRIC_SHARD_PADDING, Math.max(6, focusRect.width / 24)),
-    y: Math.min(TOP_LYRIC_SHARD_PADDING, Math.max(6, spanRect.height * 0.62)),
+    y: Math.min(TOP_LYRIC_SHARD_PADDING, Math.max(8, spanRect.height * 0.78)),
   };
 }
 
@@ -7787,7 +7797,7 @@ function getTopLyricShardColor(span) {
 }
 
 function getTopLyricShardAccentColor() {
-  return "rgba(255, 164, 92, 0.72)";
+  return "rgba(255, 160, 91, 0.68)";
 }
 
 function getTopLyricShardGlowColor() {
@@ -7795,7 +7805,7 @@ function getTopLyricShardGlowColor() {
     .getPropertyValue("--now-accent-rgb")
     .trim();
 
-  return rgb ? `rgba(${rgb}, 0.32)` : TOP_LYRIC_SHARD_GLOW_COLOR;
+  return rgb ? `rgba(${rgb}, 0.24)` : TOP_LYRIC_SHARD_GLOW_COLOR;
 }
 
 // Shard System：从字形像素中取样，生成少量带速度、旋转、寿命的不规则碎片。
@@ -7819,16 +7829,18 @@ function createTopLyricShards(character, rect, fontStyle, options) {
   });
 
   return points.map((point) => {
-    const size = Math.max(1.4, Math.min(rect.width || fontSize, rect.height || fontSize) * (0.1 + Math.random() * 0.12));
-    const burst = Math.random();
+    const glyphScale = Math.min(rect.width || fontSize, rect.height || fontSize);
+    const size = Math.max(1.15, glyphScale * (0.075 + Math.random() * 0.095));
+    const distanceFromCenter = (point.x - centerX) / Math.max(1, rect.width);
+    const burst = 0.45 + Math.random() * 0.65;
 
     return {
       x: point.x,
       y: point.y,
-      vx: 0.45 + (burst * 1.6),
-      vy: -(0.65 + (Math.random() * 1.35)),
+      vx: 0.28 + (burst * 1.1) + Math.max(0, distanceFromCenter) * 0.32,
+      vy: -((0.28 + (Math.random() * 0.72)) + Math.max(0, -distanceFromCenter) * 0.16),
       angle: Math.random() * Math.PI * 2,
-      vAngle: (Math.random() - 0.5) * 0.22,
+      vAngle: (Math.random() - 0.5) * 0.16,
       alpha: 1,
       size,
       color,
@@ -7930,6 +7942,12 @@ function syncTopLyricShardAnimationLoop() {
   }
 
   topLyricShardAnimationFrame = requestAnimationFrame(updateTopLyricShardEffectsFrame);
+}
+
+function trimTopLyricShardEffects() {
+  while (topLyricShardEffects.length >= TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS) {
+    cleanupTopLyricShardEffect(topLyricShardEffects[0]);
+  }
 }
 
 function updateTopLyricShardEffectsFrame() {
@@ -18725,8 +18743,74 @@ function sanitizeQueueTrack(track) {
     RunTimeTicks: track.RunTimeTicks,
     SortName: track.SortName,
     UserData: track.UserData,
-    ExternalSource: track.ExternalSource,
+    ExternalSource: sanitizeExternalSourceForPersistence(track.ExternalSource),
   };
+}
+
+function sanitizeExternalSourceForPersistence(external) {
+  if (!external || typeof external !== "object") {
+    return external;
+  }
+
+  const restore = sanitizeExternalRestoreSnapshot(external.restore);
+  return {
+    apiUrl: external.apiUrl,
+    id: external.id,
+    platform: external.platform,
+    mediaKind: external.mediaKind,
+    isVideo: external.isVideo,
+    codec: external.codec,
+    bitrate: external.bitrate,
+    sourceQuality: external.sourceQuality,
+    qualityLabel: external.qualityLabel,
+    resolution: external.resolution,
+    qualityState: external.qualityState,
+    qualityVerified: external.qualityVerified,
+    contentType: external.contentType,
+    artwork: external.artwork,
+    mediaUrl: external.mediaUrl,
+    lyric: external.lyric,
+    lyrics: external.lyrics,
+    raw: getExternalSourceRawForPersistence(external.raw, restore),
+    restore,
+  };
+}
+
+function sanitizeExternalRestoreSnapshot(restore) {
+  if (!restore || typeof restore !== "object" || !restore.raw || typeof restore.raw !== "object") {
+    return null;
+  }
+
+  return {
+    id: restore.id || restore.sourceId || "",
+    pluginKey: restore.pluginKey || "",
+    pluginName: restore.pluginName || "",
+    sourceId: restore.sourceId || restore.id || "",
+    mediaKind: restore.mediaKind || "",
+    sourceQuality: restore.sourceQuality || "",
+    qualityLabel: restore.qualityLabel || "",
+    resolution: restore.resolution || "",
+    qualityVerified: Boolean(restore.qualityVerified),
+    raw: restore.raw,
+  };
+}
+
+function getExternalSourceRawForPersistence(raw, restore) {
+  if (restore?.raw) {
+    return {
+      pluginKey: restore.pluginKey,
+      pluginName: restore.pluginName,
+      sourceId: restore.sourceId,
+      mediaKind: restore.mediaKind,
+      sourceQuality: restore.sourceQuality,
+      qualityLabel: restore.qualityLabel,
+      resolution: restore.resolution,
+      qualityVerified: Boolean(restore.qualityVerified),
+      raw: restore.raw,
+    };
+  }
+
+  return raw;
 }
 
 function clearSession() {

@@ -755,11 +755,15 @@ function checkAppFunctionReferences() {
   assert(app.includes("topLyricShardAnimationFrame"), "Topbar shard canvas animation should use one shared RAF scheduler");
   assert(app.includes("requestAnimationFrame(updateTopLyricShardEffectsFrame)"), "Topbar shard canvas animation should be RAF-driven");
   assert(!app.includes("requestAnimationFrame(() => animateTopLyricShardEffect(effect))"), "Topbar shard canvases should not each schedule their own RAF loop");
-  assert(/vx:\s*0\.45 \+ \(burst \* 1\.6\)/.test(app), "Topbar shard physics should launch particles to the right with a restrained burst");
-  assert(/vy:\s*-\(0\.65 \+ \(Math\.random\(\) \* 1\.35\)\)/.test(app), "Topbar shard physics should launch particles upward without overshooting the topbar");
+  assert(app.includes("TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS"), "Topbar shard timeline should throttle catch-up triggers");
+  assert(app.includes("TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS"), "Topbar shard canvases should have a bounded active effect count");
+  assert(/if \(span\.textContent\?\.trim\(\)\) \{\s*spawnTopLyricShardCanvas\(span\);/.test(app), "Topbar shard trigger should not spawn particles for whitespace");
+  assert(/vx:\s*0\.28 \+ \(burst \* 1\.1\)/.test(app), "Topbar shard physics should launch particles to the right with a soft sweep");
+  assert(/vy:\s*-\(\(0\.28 \+ \(Math\.random\(\) \* 0\.72\)\)/.test(app), "Topbar shard physics should drift upward without overshooting the topbar");
   assert(app.includes("shard.vx *= TOP_LYRIC_SHARD_DRAG"), "Topbar shard physics should apply air drag");
   assert(app.includes("shard.vy += TOP_LYRIC_SHARD_GRAVITY"), "Topbar shard physics should apply gravity");
   assert(app.includes("shard.alpha -= TOP_LYRIC_SHARD_FADE"), "Topbar shard physics should fade particles out");
+  assert(app.includes("function trimTopLyricShardEffects"), "Topbar shard effects should trim old canvases under dense word timing");
   assert(app.includes("effect.canvas.remove()"), "Topbar shard cleanup should remove canvases");
   assert(app.includes("topTabs?.addEventListener(\"pointerenter\", handleTopbarMenuInteractionStart)"), "Topbar menu hover should pause shard lyrics");
   assert(app.includes("prefers-reduced-motion: reduce"), "Topbar shard effect should respect reduced motion");
@@ -772,6 +776,9 @@ function checkAppFunctionReferences() {
   assert(/function loadQueueState\(session\) \{[\s\S]*?queueState\.queue\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?markRestoredQueueTrackForFreshResolve\(queueState\.currentTrack\);/.test(app), "Loaded external queue tracks should be marked as restored cache entries");
   assert(/function shouldForceResolveExternalTrack\(track, options = \{\}, queue = \[\]\) \{[\s\S]*?restoredQueueTrack\?\._restoredQueueNeedsFreshResolve[\s\S]*?\}/.test(app), "Any restored external queue item should bypass stale inline URLs when played");
   assert(/applyExternalMediaMetadata\(track, media\);\s*clearRestoredQueueFreshResolveMarker\(track\);\s*syncExternalTrackReference\(track\);/.test(app), "Fresh external media resolution should clear the restored queue fresh-resolve marker");
+  assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
+  assert(app.includes("function sanitizeExternalSourceForPersistence"), "External source queue persistence should have an explicit sanitizer");
+  assert(/function getExternalSourceRawForPersistence\(raw, restore\) \{[\s\S]*?pluginKey: restore\.pluginKey[\s\S]*?raw: restore\.raw/.test(app), "External source persistence should keep a restorable raw plugin snapshot");
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");
   assert(/function takePreloadedPlaybackSession\(track, mode, options = \{\}\) \{[\s\S]*?if \(options\.forceExternalResolve\) \{[\s\S]*?clearPreload\(\);[\s\S]*?return null;/.test(app), "Preloaded sessions should be cleared and ignored during forced external media refreshes");
   assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");

@@ -962,21 +962,24 @@ input:disabled {
   display: inline-block;
   opacity: 0.6;
   transition:
-    opacity 0.16s ease,
-    transform 0.16s cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: opacity;
+    opacity 0.24s ease,
+    filter 0.24s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: opacity, transform, filter;
 }
 
 .top-lyric-char.is-sharded {
   opacity: 0;
-  transform: translate3d(0.02rem, -0.02rem, 0) scale(0.98);
+  filter: blur(1.2px);
+  transform: translate3d(0.04rem, -0.015rem, 0) scale(0.985);
 }
 
 .top-lyric-shard-canvas {
   position: absolute;
   z-index: 2;
   pointer-events: none;
-  mix-blend-mode: multiply;
+  filter: saturate(1.08) brightness(1.04);
+  mix-blend-mode: normal;
 }
 
 body.topbar-lyric-active .top-tabs .tab {
