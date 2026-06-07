@@ -42,6 +42,7 @@ function checkVersions() {
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
+  assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174"'), "Default source bridge URL should point to the built-in local bridge");
   assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
   assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
   assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
@@ -310,9 +311,27 @@ function checkLyrics() {
 async function checkExternalSourceLyrics() {
   const externalSourceCode = read("src/external-source-api.js");
   const requests = [];
+  const timeoutContext = {
+    URL,
+    AbortController,
+    clearTimeout,
+    location: { href: "http://localhost:5174/" },
+    setTimeout,
+    fetch: async (_url, options = {}) => new Promise((_resolve, reject) => {
+      options.signal?.addEventListener("abort", () => {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        reject(error);
+      });
+    }),
+    window: {},
+  };
   const context = {
     URL,
+    AbortController,
+    clearTimeout,
     location: { href: "http://localhost:5174/" },
+    setTimeout,
     fetch: async (url) => {
       requests.push(String(url));
       return {
@@ -333,6 +352,7 @@ async function checkExternalSourceLyrics() {
     window: {},
   };
   vm.runInNewContext(externalSourceCode, context, { filename: "src/external-source-api.js" });
+  vm.runInNewContext(externalSourceCode, timeoutContext, { filename: "src/external-source-api.js" });
 
   const api = context.window.EmbyMusicExternalSource.createExternalSourceApi();
   const lyric = await api.fetchLyric("http://localhost:5174", {
@@ -348,12 +368,97 @@ async function checkExternalSourceLyrics() {
   assert(lyric.includes("[00:02.45]第二句"), `External lyric line array should convert tick time, got ${lyric}`);
   assert(lyric.includes("无时间歌词"), `External lyric line array should keep untimed text, got ${lyric}`);
 
+  const snapshotRequests = [];
+  const snapshotContext = {
+    URL,
+    AbortController,
+    clearTimeout,
+    location: { href: "http://localhost:5174/" },
+    setTimeout,
+    fetch: async (url) => {
+      snapshotRequests.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({ url: "https://example.test/song.mp3" }),
+      };
+    },
+    window: {},
+  };
+  vm.runInNewContext(externalSourceCode, snapshotContext, { filename: "src/external-source-api.js" });
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:wy-test-song",
+    ExternalSource: {
+      id: "plugin:wy-key:wy-test-song",
+      platform: "网易",
+      raw: {
+        pluginKey: "wy-key",
+        pluginName: "网易",
+        sourceId: "wy-test-song",
+        raw: { id: "wy-test-song", name: "可恢复歌曲", artist: "测试艺人" },
+      },
+    },
+  });
+  const snapshotUrl = new URL(snapshotRequests[0]);
+  const snapshot = JSON.parse(snapshotUrl.searchParams.get("track") || "{}");
+  assert(snapshotUrl.pathname === "/media", `External media request should call /media, got ${snapshotUrl.pathname}`);
+  assert(snapshot.pluginKey === "wy-key", `External media request should include pluginKey snapshot, got ${snapshot.pluginKey || "-"}`);
+  assert(snapshot.raw?.id === "wy-test-song", `External media request should include raw track snapshot, got ${JSON.stringify(snapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:wy-test-song-2",
+    ExternalSource: {
+      id: "plugin:wy-key:wy-test-song-2",
+      platform: "网易",
+      raw: {
+        id: "plugin:wy-key:wy-test-song-2",
+        raw: {
+          pluginKey: "wy-key",
+          pluginName: "网易",
+          sourceId: "wy-test-song-2",
+          raw: { id: "wy-test-song-2", name: "重进可恢复歌曲", url: "https://example.test/recovered.mp3" },
+        },
+      },
+    },
+  });
+  const nestedSnapshotUrl = new URL(snapshotRequests[1]);
+  const nestedSnapshot = JSON.parse(nestedSnapshotUrl.searchParams.get("track") || "{}");
+  assert(nestedSnapshot.pluginKey === "wy-key", `Nested external media snapshot should recover pluginKey, got ${nestedSnapshot.pluginKey || "-"}`);
+  assert(nestedSnapshot.raw?.url === "https://example.test/recovered.mp3", `Nested external media snapshot should preserve raw media url, got ${JSON.stringify(nestedSnapshot.raw)}`);
+
+  try {
+    await timeoutContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174", { timeoutMs: 5 });
+    assert(false, "External source requests should time out when the bridge does not respond");
+  } catch (error) {
+    assert(String(error?.message || "").includes("音源桥请求超时"), `External source timeout should be readable, got ${error?.message || "-"}`);
+  }
+
+  try {
+    const controller = new AbortController();
+    const cancelledRequest = timeoutContext.window.EmbyMusicExternalSource.createExternalSourceApi()
+      .fetchTracks("http://localhost:5174", { signal: controller.signal, timeoutMs: 1000 });
+    controller.abort();
+    await cancelledRequest;
+    assert(false, "External source requests should respect caller cancellation");
+  } catch (error) {
+    assert(String(error?.message || "").includes("音源桥请求已取消"), `External source cancellation should be readable, got ${error?.message || "-"}`);
+  }
+
   const bridge = read("scripts/source-bridge.js");
+  assert(bridge.includes("DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS"), "Source bridge should include built-in default manifests");
+  assert(bridge.includes("https://13413.kstore.vip/yuanli/yuanli.json"), "Source bridge should include the default yuanli manifest");
+  assert(bridge.includes("...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS"), "Source bridge should load the built-in manifest by default");
   assert(bridge.includes("function extractPluginLyricText"), "Source bridge should normalize plugin lyric payloads");
   assert(bridge.includes("formatPluginLyricLineArray"), "Source bridge should convert plugin lyric line arrays to LRC");
   assert(bridge.includes("payload.result?.sentences"), "Source bridge should inspect nested lyric sentence arrays");
   assert(bridge.includes("line?.StartPositionTicks"), "Source bridge should support Emby-style lyric tick fields");
   assert(bridge.includes("function formatLrcTimestamp"), "Source bridge should format converted lyric line timestamps");
+  assert(bridge.includes("function restorePluginTrackFromSnapshot"), "Source bridge should restore plugin tracks from persisted snapshots");
+  assert(bridge.includes("url.searchParams.get(\"track\")"), "Source bridge should read persisted track snapshots from media requests");
+  assert(bridge.includes("raw: track.raw"), "Source bridge API tracks should preserve plugin raw payloads for later playback");
+  assert(bridge.includes("function getPluginDirectMediaUrl"), "Source bridge should reuse direct plugin media URLs before plugin retries");
+  assert(bridge.includes("function getPluginQualityCandidates"), "Source bridge should retry plugin media quality candidates");
+  assert(bridge.includes("resolvePluginMediaPayload"), "Source bridge should resolve plugin media with fallback quality attempts");
 }
 
 function checkAppFunctionReferences() {

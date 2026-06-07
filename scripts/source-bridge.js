@@ -17,6 +17,9 @@ const LYRIC_EXTENSIONS = [".lrc", ".txt"];
 const BILIBILI_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 const ARTWORK_LOOKUP_TIMEOUT_MS = 6500;
 const ARTWORK_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS = [
+  "https://13413.kstore.vip/yuanli/yuanli.json",
+];
 const COVER_NAMES = [
   "cover.jpg",
   "cover.jpeg",
@@ -40,6 +43,7 @@ let manifestUrls = uniqueStrings([
   ...splitList(options.manifestUrl),
   ...splitList(process.env.SOURCE_MANIFEST_URL),
   ...splitList(process.env.SOURCE_BRIDGE_MANIFEST_URL),
+  ...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS,
 ]);
 
 const state = {
@@ -115,6 +119,7 @@ async function handleRequest(request, response) {
     const nextManifestUrls = uniqueStrings([
       ...splitList(payload.manifestUrl),
       ...splitList(payload.manifestUrls),
+      ...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS,
     ]);
 
     musicDirs = nextMusicDirs;
@@ -327,6 +332,7 @@ function toApiTrack(request, track) {
       qualityLabel: track.qualityLabel || "",
       resolution: track.resolution || "",
       qualityVerified: Boolean(track.qualityVerified),
+      raw: track.raw,
     } : undefined,
   };
 }
@@ -583,8 +589,6 @@ function createPluginTrack(plugin, item, index) {
 }
 
 async function resolvePluginMedia(track, quality) {
-  const runtime = await loadPluginRuntime(getPluginByKey(track.pluginKey));
-
   if (isBilibiliTrack(track)) {
     const media = await resolveBilibiliMedia(track, quality);
 
@@ -593,64 +597,111 @@ async function resolvePluginMedia(track, quality) {
     }
   }
 
-  const directUrl = normalizeRemoteUrl(track.mediaUrl || pickFirstString(track.raw?.streamUrl, track.raw?.src, track.raw?.playUrl));
+  const directUrl = getPluginDirectMediaUrl(track);
 
   if (directUrl) {
-    const directMediaKind = track.mediaKind || inferMediaKind(track.raw, directUrl);
-    const directCodec = track.codec || inferCodec(track.raw, { mediaKind: directMediaKind, mediaUrl: directUrl });
-    const directBitrate = track.bitrate || inferBitrate(track.raw) || 0;
-    const directResolution = track.resolution || inferResolution(track.raw, directUrl) || "";
-    const directSourceQuality = track.sourceQuality || inferSourceQuality(track.raw, {
-      mediaKind: directMediaKind,
-      codec: directCodec,
-      bitrate: directBitrate,
-      resolution: directResolution,
-    });
-    const directQualityLabel = track.qualityLabel || inferQualityLabel(track.raw, {
-      mediaKind: directMediaKind,
-      codec: directCodec,
-      bitrate: directBitrate,
-      resolution: directResolution,
-      sourceQuality: directSourceQuality,
-    });
-
-    return {
-      id: track.id,
+    return buildPluginMediaResponse(track, {
       url: directUrl,
-      streamUrl: directUrl,
-      mediaSourceId: `plugin-media:${track.pluginKey}:${track.sourceId}`,
-      mediaKind: directMediaKind,
-      codec: directCodec,
-      bitrate: directBitrate,
-      sourceQuality: directSourceQuality,
-      qualityLabel: directQualityLabel,
-      resolution: directResolution,
-      qualityVerified: hasResolvedBridgeQuality({
-        mediaKind: directMediaKind,
-        codec: directCodec,
-        bitrate: directBitrate,
-        sourceQuality: directSourceQuality,
-        qualityLabel: directQualityLabel,
-        resolution: directResolution,
-      }),
-    };
+      payload: track.raw,
+      quality,
+    });
   }
+
+  const runtime = await loadPluginRuntime(getPluginByKey(track.pluginKey));
 
   if (typeof runtime.module.getMediaSource !== "function") {
     throw new Error("这个插件没有提供播放地址解析。");
   }
 
-  const pluginQuality = mapPluginQuality(quality);
-  const payload = await callWithTimeout(runtime.module.getMediaSource(track.raw, pluginQuality), 18000, `${track.pluginName || track.pluginKey} media timeout`);
-  const mediaUrl = normalizeRemoteUrl(pickFirstString(
+  const resolved = await resolvePluginMediaPayload(runtime, track, quality);
+
+  return buildPluginMediaResponse(track, {
+    url: resolved.mediaUrl,
+    payload: resolved.payload,
+    quality: resolved.quality,
+  });
+}
+
+function getPluginDirectMediaUrl(track) {
+  return normalizeRemoteUrl(pickFirstString(
+    track.mediaUrl,
+    track.url,
+    track.streamUrl,
+    track.raw?.url,
+    track.raw?.streamUrl,
+    track.raw?.src,
+    track.raw?.playUrl,
+    track.raw?.play_url,
+    track.raw?.play_url128,
+    track.raw?.playUrl128,
+    track.raw?.data?.url,
+    track.raw?.data?.streamUrl,
+    track.raw?.data?.src,
+    track.raw?.data?.playUrl,
+    track.raw?.data?.play_url,
+  ));
+}
+
+async function resolvePluginMediaPayload(runtime, track, quality) {
+  const qualities = getPluginQualityCandidates(quality, track);
+  const errors = [];
+
+  for (const pluginQuality of qualities) {
+    try {
+      const payload = await callWithTimeout(
+        runtime.module.getMediaSource(track.raw, pluginQuality),
+        18000,
+        `${track.pluginName || track.pluginKey} media timeout`,
+      );
+      const mediaUrl = getPluginPayloadMediaUrl(payload);
+
+      if (mediaUrl) {
+        return {
+          payload,
+          mediaUrl,
+          quality: pluginQuality,
+        };
+      }
+
+      errors.push(`${pluginQuality}: empty media url`);
+    } catch (error) {
+      errors.push(`${pluginQuality}: ${error?.message || "media failed"}`);
+    }
+  }
+
+  const detail = errors.filter(Boolean).slice(0, 3).join("；");
+  throw new Error(`插件没有返回可播放地址${detail ? `（${detail}）` : ""}。`);
+}
+
+function getPluginPayloadMediaUrl(payload) {
+  return normalizeRemoteUrl(pickFirstString(
     payload?.url,
     payload?.streamUrl,
     payload?.src,
     payload?.playUrl,
+    payload?.play_url,
+    payload?.location,
+    payload?.link,
     payload?.data?.url,
     payload?.data?.streamUrl,
     payload?.data?.src,
+    payload?.data?.playUrl,
+    payload?.data?.play_url,
+    payload?.data?.location,
+    payload?.data?.link,
+    payload?.data?.data?.url,
+    payload?.data?.data?.playUrl,
+    payload?.data?.data?.play_url,
+    payload?.result?.url,
+    payload?.result?.streamUrl,
+    payload?.result?.playUrl,
+    payload?.result?.play_url,
   ));
+}
+
+function buildPluginMediaResponse(track, options = {}) {
+  const payload = options.payload || {};
+  const mediaUrl = normalizeRemoteUrl(options.url || getPluginPayloadMediaUrl(payload));
 
   if (!mediaUrl) {
     throw new Error("插件没有返回可播放地址。");
@@ -718,8 +769,28 @@ async function resolvePluginMedia(track, quality) {
     qualityLabel: track.qualityLabel || "",
     resolution: track.resolution || "",
     qualityVerified: Boolean(track.qualityVerified),
+    requestedQuality: options.quality || "",
     raw: payload,
   };
+}
+
+function getPluginQualityCandidates(value, track = {}) {
+  const requested = mapPluginQuality(value);
+  const mediaKind = String(track.mediaKind || "").toLowerCase();
+  const sourceText = `${value || ""} ${track.sourceQuality || ""} ${track.qualityLabel || ""}`.toLowerCase();
+  const candidates = [requested];
+
+  if (mediaKind === "video") {
+    candidates.push("1080p", "720p", "480p", "360p");
+  } else if (/(lossless|flac|hires|sq|无损|母带|master|super)/.test(sourceText)) {
+    candidates.push("super", "high", "standard", "low");
+  } else if (/(low|128|省流|低)/.test(sourceText)) {
+    candidates.push("low", "standard", "high");
+  } else {
+    candidates.push("high", "standard", "low", "super");
+  }
+
+  return uniqueStrings(candidates.filter(Boolean));
 }
 
 async function resolveBilibiliMedia(track, quality) {
@@ -2287,7 +2358,66 @@ function getTrackFromUrl(url) {
   return state.trackMap.get(id)
     || state.pluginTrackMap.get(id)
     || state.pluginTrackMap.get(decodeURIComponentSafe(id))
+    || restorePluginTrackFromSnapshot(url, id)
     || null;
+}
+
+function restorePluginTrackFromSnapshot(url, id) {
+  const snapshot = parsePluginTrackSnapshot(url.searchParams.get("track"));
+
+  if (!snapshot?.pluginKey || !snapshot.raw || typeof snapshot.raw !== "object") {
+    return null;
+  }
+
+  const plugin = getPluginByKeySafe(snapshot.pluginKey);
+
+  if (!plugin) {
+    return null;
+  }
+
+  const restored = createPluginTrack(plugin, snapshot.raw, 0);
+  const sourceId = String(snapshot.sourceId || snapshot.id || restored.sourceId || "").trim();
+  const requestedId = decodeURIComponentSafe(id);
+
+  restored.id = requestedId || restored.id;
+  restored.sourceId = sourceId || restored.sourceId;
+  restored.pluginName = snapshot.pluginName || restored.pluginName;
+  restored.mediaKind = snapshot.mediaKind || restored.mediaKind;
+  restored.sourceQuality = snapshot.sourceQuality || restored.sourceQuality;
+  restored.qualityLabel = snapshot.qualityLabel || restored.qualityLabel;
+  restored.resolution = snapshot.resolution || restored.resolution;
+  restored.qualityVerified = Boolean(snapshot.qualityVerified || restored.qualityVerified);
+
+  state.pluginTrackMap.set(restored.id, restored);
+  state.pluginTrackMap.set(restored.sourceId, restored);
+  state.pluginTrackMap.set(id, restored);
+  if (requestedId) {
+    state.pluginTrackMap.set(requestedId, restored);
+  }
+
+  return restored;
+}
+
+function parsePluginTrackSnapshot(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    try {
+      return JSON.parse(decodeURIComponent(raw));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function getPluginByKeySafe(key) {
+  return state.plugins.find((item) => item.key === key) || null;
 }
 
 function getRequestOrigin(request) {

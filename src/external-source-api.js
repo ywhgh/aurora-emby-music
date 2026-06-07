@@ -1,5 +1,6 @@
 (() => {
 const TICKS_PER_SECOND = 10000000;
+const EXTERNAL_SOURCE_REQUEST_TIMEOUT_MS = 18000;
 
 function createExternalSourceApi() {
   async function fetchHealth(apiUrl) {
@@ -28,7 +29,10 @@ function createExternalSourceApi() {
       url.searchParams.set("type", "music");
     }
 
-    const payload = await requestJson(url);
+    const payload = await requestJson(url, {
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    });
     const rawItems = extractItems(payload);
     const items = rawItems.map((item, index) => normalizeExternalTrack(item, {
       apiUrl,
@@ -108,7 +112,11 @@ function createExternalSourceApi() {
     if (options.videoQuality) {
       url.searchParams.set("videoQuality", options.videoQuality);
     }
-    const payload = await requestJson(url);
+    appendExternalTrackSnapshot(url, track);
+    const payload = await requestJson(url, {
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
+    });
     const streamUrl = normalizeUrl(
       payload?.url
         || payload?.streamUrl
@@ -205,6 +213,7 @@ function createExternalSourceApi() {
 
     const url = buildUrl(apiUrl, "/lyric");
     url.searchParams.set("id", externalId);
+    appendExternalTrackSnapshot(url, track);
 
     try {
       const payload = await requestJson(url);
@@ -227,6 +236,54 @@ function createExternalSourceApi() {
     rescanSourceBridge,
     normalizeApiUrl,
   };
+}
+
+function appendExternalTrackSnapshot(url, track) {
+  const snapshot = createExternalTrackSnapshot(track);
+
+  if (!snapshot) {
+    return;
+  }
+
+  url.searchParams.set("track", snapshot);
+}
+
+function createExternalTrackSnapshot(track) {
+  const external = track?.ExternalSource || {};
+  const raw = external.raw;
+
+  if (!raw || typeof raw !== "object") {
+    return "";
+  }
+
+  const pluginMeta = raw.pluginKey
+    ? raw
+    : (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey ? raw.raw : {});
+  const pluginRaw = pluginMeta.raw && typeof pluginMeta.raw === "object"
+    ? pluginMeta.raw
+    : (raw.raw?.raw && typeof raw.raw.raw === "object" ? raw.raw.raw : raw);
+  const snapshot = {
+    id: external.id || stripExternalTrackPrefix(track?.Id),
+    pluginKey: pluginMeta.pluginKey || external.pluginKey,
+    pluginName: pluginMeta.pluginName || external.platform,
+    sourceId: pluginMeta.sourceId || external.id,
+    mediaKind: pluginMeta.mediaKind || external.mediaKind,
+    sourceQuality: pluginMeta.sourceQuality || external.sourceQuality,
+    qualityLabel: pluginMeta.qualityLabel || external.qualityLabel,
+    resolution: pluginMeta.resolution || external.resolution,
+    qualityVerified: pluginMeta.qualityVerified || external.qualityVerified,
+    raw: pluginRaw,
+  };
+
+  if (!snapshot.pluginKey || !snapshot.raw) {
+    return "";
+  }
+
+  try {
+    return JSON.stringify(snapshot);
+  } catch {
+    return "";
+  }
 }
 
 function normalizeApiUrl(value) {
@@ -291,19 +348,42 @@ function isPluginManifest(payload) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
+  let response;
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs) || EXTERNAL_SOURCE_REQUEST_TIMEOUT_MS);
+  const abortState = createRequestAbortState(options.signal, timeoutMs);
+  const requestOptions = {
     ...options,
     headers: {
       Accept: "application/json",
       ...(options.headers || {}),
     },
-  });
+    signal: abortState.signal,
+  };
 
-  if (!response.ok) {
-    throw new Error(`音源桥返回 ${response.status} ${response.statusText || ""}`.trim());
+  delete requestOptions.timeoutMs;
+
+  try {
+    response = await fetch(url, requestOptions);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      if (!abortState.timedOut) {
+        throw new Error("音源桥请求已取消。");
+      }
+
+      throw new Error("音源桥请求超时，请检查音乐桥是否在线或插件源站是否响应。");
+    }
+
+    throw error;
+  } finally {
+    abortState.cleanup();
   }
 
   const text = await response.text();
+
+  if (!response.ok) {
+    const detail = extractErrorMessage(text);
+    throw new Error(detail || `音源桥返回 ${response.status} ${response.statusText || ""}`.trim());
+  }
 
   if (!text) {
     return {};
@@ -314,6 +394,63 @@ async function requestJson(url, options = {}) {
   } catch {
     throw new Error("音源桥没有返回 JSON。");
   }
+}
+
+function extractErrorMessage(text) {
+  const raw = String(text || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const payload = JSON.parse(raw);
+    const message = pickString(payload?.error, payload?.message, payload?.data?.error, payload?.data?.message);
+    return message ? `音源桥：${message}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function createRequestAbortState(externalSignal, timeoutMs) {
+  if (typeof AbortController !== "function") {
+    return {
+      signal: externalSignal,
+      get timedOut() {
+        return false;
+      },
+      cleanup() {},
+    };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const abortFromExternalSignal = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      abortFromExternalSignal();
+    } else if (typeof externalSignal.addEventListener === "function") {
+      externalSignal.addEventListener("abort", abortFromExternalSignal, { once: true });
+    }
+  }
+
+  return {
+    signal: controller.signal,
+    get timedOut() {
+      return timedOut;
+    },
+    cleanup() {
+      clearTimeout(timeoutId);
+      if (externalSignal && typeof externalSignal.removeEventListener === "function") {
+        externalSignal.removeEventListener("abort", abortFromExternalSignal);
+      }
+    },
+  };
 }
 
 function extractItems(payload) {
