@@ -168,6 +168,8 @@ function createExternalSourceApi() {
 
     return {
       streamUrl,
+      bridgeStreamUrl: normalizeUrl(payload?.bridgeStreamUrl || payload?.data?.bridgeStreamUrl, apiUrl),
+      directUrl: normalizeUrl(payload?.directUrl || payload?.data?.directUrl, apiUrl),
       mediaSourceId: payload?.mediaSourceId || payload?.id || track.Id,
       playSessionId: payload?.playSessionId || createExternalPlaySessionId(track),
       mediaKind,
@@ -181,6 +183,19 @@ function createExternalSourceApi() {
       contentType: pickString(payload?.contentType, payload?.mimeType, payload?.data?.contentType, payload?.data?.mimeType),
       dash: payload?.dash || payload?.data?.dash || null,
       raw: payload,
+      restore: normalizeExternalPluginRestoreSnapshot(payload?.restore || payload?.data?.restore, payload, {
+        id: track?.ExternalSource?.id || stripExternalTrackPrefix(track?.Id),
+        pluginKey: track?.ExternalSource?.pluginKey,
+        pluginName: track?.ExternalSource?.pluginName || track?.ExternalSource?.platform,
+        pluginUrl: track?.ExternalSource?.pluginUrl,
+        pluginPlatform: track?.ExternalSource?.pluginPlatform,
+        sourceId: track?.ExternalSource?.sourceId,
+        mediaKind,
+        sourceQuality,
+        qualityLabel,
+        resolution,
+        qualityVerified,
+      }),
     };
   }
 

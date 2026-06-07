@@ -153,6 +153,11 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (url.pathname === "/plugin-stream" && (request.method === "GET" || request.method === "HEAD")) {
+    await streamPluginMedia(request, response, url);
+    return;
+  }
+
   if (request.method !== "GET") {
     sendJson(request, response, 405, { error: "method not allowed" });
     return;
@@ -196,7 +201,7 @@ async function handleRequest(request, response) {
     if (track.source === "plugin") {
       const requestedQuality = String(url.searchParams.get("videoQuality") || url.searchParams.get("quality") || "standard");
       const media = await resolvePluginMedia(track, requestedQuality);
-      sendJson(request, response, 200, media);
+      sendJson(request, response, 200, createPluginBridgeMediaResponse(request, track, media, requestedQuality));
       return;
     }
 
@@ -1039,6 +1044,57 @@ function buildPluginMediaResponse(track, options = {}) {
       raw: track.raw,
       media: payload,
     },
+    restore: createPluginRestoreSnapshot(track),
+  };
+}
+
+function createPluginBridgeMediaResponse(request, track, media = {}, requestedQuality = "") {
+  const streamUrl = createPluginStreamUrl(request, track, requestedQuality);
+  const response = {
+    ...media,
+    url: streamUrl,
+    streamUrl,
+    bridgeStreamUrl: streamUrl,
+    directUrl: media.url || media.streamUrl || "",
+    requestedQuality: requestedQuality || media.requestedQuality || "",
+    restore: media.restore || createPluginRestoreSnapshot(track),
+  };
+
+  if (media.dash && typeof media.dash === "object") {
+    response.dash = {
+      ...media.dash,
+      directVideoUrl: media.dash.videoUrl || "",
+      directAudioUrl: media.dash.audioUrl || "",
+      videoUrl: streamUrl,
+      audioUrl: streamUrl,
+    };
+  }
+
+  return response;
+}
+
+function createPluginStreamUrl(request, track, requestedQuality = "") {
+  const streamUrl = new URL(`${getRequestOrigin(request)}/plugin-stream`);
+  streamUrl.searchParams.set("id", track.id);
+  if (requestedQuality) {
+    streamUrl.searchParams.set("quality", requestedQuality);
+  }
+  return streamUrl.toString();
+}
+
+function createPluginRestoreSnapshot(track) {
+  return {
+    pluginKey: track.pluginKey,
+    pluginName: track.pluginName,
+    pluginUrl: track.pluginUrl,
+    pluginPlatform: track.pluginPlatform,
+    sourceId: track.sourceId,
+    mediaKind: track.mediaKind || "audio",
+    sourceQuality: track.sourceQuality || "",
+    qualityLabel: track.qualityLabel || "",
+    resolution: track.resolution || "",
+    qualityVerified: Boolean(track.qualityVerified),
+    raw: track.raw,
   };
 }
 
@@ -2609,6 +2665,65 @@ function streamRemoteMedia(request, response, url) {
   });
 }
 
+async function streamPluginMedia(request, response, url) {
+  const track = getTrackFromUrl(url);
+
+  if (!track) {
+    sendJson(request, response, 404, { error: "track not found" });
+    return;
+  }
+
+  if (track.source !== "plugin") {
+    sendJson(request, response, 400, { error: "not a plugin track" });
+    return;
+  }
+
+  const requestedQuality = String(url.searchParams.get("videoQuality") || url.searchParams.get("quality") || "standard");
+  const media = await resolvePluginMedia(track, requestedQuality);
+  const mediaUrl = normalizeRemoteUrl(media.directUrl || media.url || media.streamUrl);
+
+  if (!mediaUrl || isLocalPluginStreamUrl(mediaUrl)) {
+    sendJson(request, response, 502, { error: "plugin media url unavailable" });
+    return;
+  }
+
+  if (isLocalRemoteStreamUrl(mediaUrl)) {
+    await streamRemoteMedia(request, response, new URL(mediaUrl));
+    return;
+  }
+
+  const proxyUrl = new URL(`http://${host}:${port}/remote-stream`);
+  proxyUrl.searchParams.set("url", mediaUrl);
+  const contentType = media.contentType || getAudioContentType(media.codec || track.codec);
+  if (contentType) {
+    proxyUrl.searchParams.set("type", contentType);
+  }
+
+  await streamRemoteMedia(request, response, proxyUrl);
+}
+
+function isLocalPluginStreamUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname === host
+      && Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)) === port
+      && parsed.pathname === "/plugin-stream";
+  } catch {
+    return false;
+  }
+}
+
+function isLocalRemoteStreamUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname === host
+      && Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)) === port
+      && parsed.pathname === "/remote-stream";
+  } catch {
+    return false;
+  }
+}
+
 function toHeaderName(value) {
   return String(value || "")
     .split("-")
@@ -3145,7 +3260,7 @@ function sendEmpty(request, response, statusCode) {
 
 function writeCorsHeaders(request, response) {
   response.setHeader("Access-Control-Allow-Origin", request.headers.origin || "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
   response.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type");
 }

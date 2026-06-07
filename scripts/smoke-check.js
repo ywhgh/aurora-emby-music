@@ -726,6 +726,48 @@ async function checkExternalSourceLyrics() {
   assert(freshMediaUrl.pathname === "/media", `Force-resolved external media should bypass stale inline URL and call /media, got ${freshMediaUrl.href}`);
   assert(freshMedia.streamUrl === "https://fresh.example.test/new-token.mp3", `Force-resolved external media should use the fresh bridge URL, got ${freshMedia.streamUrl}`);
 
+  const bridgedMediaRequests = [];
+  const bridgedMediaContext = {
+    URL,
+    AbortController,
+    clearTimeout,
+    location: { href: "http://localhost:5174/" },
+    setTimeout,
+    fetch: async (url) => {
+      bridgedMediaRequests.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({
+          streamUrl: "http://localhost:5174/plugin-stream?id=plugin%3Awy-key%3Abridge-song&quality=standard",
+          bridgeStreamUrl: "http://localhost:5174/plugin-stream?id=plugin%3Awy-key%3Abridge-song&quality=standard",
+          directUrl: "https://media.example.test/fresh-token.mp3",
+          restore: {
+            pluginKey: "wy-key",
+            pluginName: "网易",
+            sourceId: "bridge-song",
+            raw: { id: "bridge-song", name: "桥端稳定播放" },
+          },
+        }),
+      };
+    },
+    window: {},
+  };
+  vm.runInNewContext(externalSourceCode, bridgedMediaContext, { filename: "src/external-source-api.js" });
+  const bridgedMedia = await bridgedMediaContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:bridge-song",
+    ExternalSource: {
+      id: "plugin:wy-key:bridge-song",
+      platform: "网易",
+      pluginKey: "wy-key",
+    },
+  }, { forceResolve: true });
+  assert(bridgedMedia.streamUrl.includes("/plugin-stream"), `Bridged media should keep the stable plugin stream URL, got ${bridgedMedia.streamUrl || "-"}`);
+  assert(bridgedMedia.bridgeStreamUrl.includes("/plugin-stream"), `Bridged media should expose bridgeStreamUrl, got ${bridgedMedia.bridgeStreamUrl || "-"}`);
+  assert(bridgedMedia.directUrl === "https://media.example.test/fresh-token.mp3", `Bridged media should keep directUrl as metadata, got ${bridgedMedia.directUrl || "-"}`);
+  assert(bridgedMedia.restore?.pluginKey === "wy-key", `Bridged media should preserve restore snapshot, got ${JSON.stringify(bridgedMedia.restore)}`);
+
   try {
     await timeoutContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174", { timeoutMs: 5 });
     assert(false, "External source requests should time out when the bridge does not respond");
@@ -760,6 +802,12 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("function restorePluginTrackFromCache"), "Source bridge should restore plugin tracks from cache without requiring a new search");
   assert(bridge.includes("function restorePluginTrackFromId"), "Source bridge should rebuild plugin tracks from plugin ids when no cache snapshot exists");
   assert(/function getTrackFromUrl\(url\) \{[\s\S]*?restorePluginTrackFromSnapshot\(url, id\)[\s\S]*?restorePluginTrackFromCache\(id\)[\s\S]*?restorePluginTrackFromId\(id\)/.test(bridge), "Source bridge media lookup should restore plugin tracks before returning 404");
+  assert(bridge.includes('url.pathname === "/plugin-stream"'), "Source bridge should expose a stable local plugin stream endpoint");
+  assert(bridge.includes("function streamPluginMedia"), "Source bridge should stream plugin media through the local bridge");
+  assert(bridge.includes("function createPluginBridgeMediaResponse"), "Source bridge media responses should return stable local plugin stream URLs");
+  assert(/function createPluginBridgeMediaResponse\(request, track, media = \{\}, requestedQuality = ""\) \{[\s\S]*?bridgeStreamUrl: streamUrl[\s\S]*?directUrl: media\.url \|\| media\.streamUrl/.test(bridge), "Plugin media responses should keep the direct URL only as metadata while playing through the bridge");
+  assert(/function streamPluginMedia\(request, response, url\) \{[\s\S]*?const media = await resolvePluginMedia\(track, requestedQuality\)[\s\S]*?await streamRemoteMedia\(request, response, proxyUrl\)/.test(bridge), "Plugin stream endpoint should resolve fresh media and proxy it with range support");
+  assert(bridge.includes('"GET, HEAD, POST, OPTIONS"'), "Source bridge CORS should advertise HEAD for media probing");
   assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should recover persisted plugin tracks when the plugin key changes");
   assert(bridge.includes("function getPluginByUrlSafe"), "Source bridge should match restored plugin tracks by plugin URL");
   assert(bridge.includes("function getPluginByNameSafe"), "Source bridge should match restored plugin tracks by plugin name");
@@ -845,12 +893,16 @@ function checkAppFunctionReferences() {
   assert(/function shouldForceResolveExternalTrack\(track, options = \{\}, queue = \[\]\) \{[\s\S]*?restoredQueueTrack\?\._restoredQueueNeedsFreshResolve[\s\S]*?\}/.test(app), "Any restored external queue item should bypass stale inline URLs when played");
   assert(/applyExternalMediaMetadata\(track, media\);\s*clearRestoredQueueFreshResolveMarker\(track\);\s*syncExternalTrackReference\(track\);/.test(app), "Fresh external media resolution should clear the restored queue fresh-resolve marker");
   assert(/function applyExternalMediaMetadata\(track, media = \{\}, options = \{\}\) \{[\s\S]*?pluginUrl: mediaRestore\?\.pluginUrl \|\| mediaPluginMeta\.pluginUrl \|\| track\.ExternalSource\?\.pluginUrl/.test(app), "Fresh external media metadata should promote plugin restore fields for the next app restart");
+  assert(/function applyExternalMediaMetadata\(track, media = \{\}, options = \{\}\) \{[\s\S]*?bridgeStreamUrl[\s\S]*?mediaUrl: bridgeStreamUrl \|\| media\.streamUrl/.test(app), "Fresh external media metadata should prefer the stable bridge stream URL");
+  assert(/if \(isExternalSourceTrack\(track\)\) \{\s*saveQueueState\(getQueuePositionSeconds\(\)\);/.test(app), "Successful external playback should persist refreshed restore metadata immediately");
   assert(/function getExternalSourceApiUrlFromSession\(session\) \{[\s\S]*?return session\.externalSourceApiUrl \|\| session\.serverUrl \|\| "";/.test(app), "External source sessions should recover the bridge URL from legacy serverUrl-only sessions");
   assert(/function getSessionExternalSourceApiUrl\(session = state\.session\) \{[\s\S]*?getExternalSourceApiUrlFromSession\(session\)/.test(app), "External source API URL lookup should use the legacy-compatible session helper");
   assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
   assert(app.includes("function sanitizeExternalSourceForPersistence"), "External source queue persistence should have an explicit sanitizer");
   assert(app.includes("function isRestorableExternalSourcePlugin"), "External source persistence should detect plugin-backed tracks");
   assert(/mediaUrl:\s*isRestorablePlugin \? "" : external\.mediaUrl/.test(app), "Persisted plugin source tracks should not keep stale media URLs");
+  assert(/bridgeStreamUrl:\s*""/.test(app), "Persisted plugin source tracks should not keep stale bridge stream URLs");
+  assert(/directUrl:\s*""/.test(app), "Persisted plugin source tracks should not keep stale direct URLs");
   assert(/function getExternalSourceRawForPersistence\(raw, restore\) \{[\s\S]*?pluginKey: restore\.pluginKey[\s\S]*?raw: restore\.raw/.test(app), "External source persistence should keep a restorable raw plugin snapshot");
   assert(/function sanitizeExternalSourceForPersistence\(external\) \{[\s\S]*?pluginUrl: external\.pluginUrl/.test(app), "Persisted external source state should keep plugin URL restore metadata");
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");

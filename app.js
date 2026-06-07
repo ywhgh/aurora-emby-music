@@ -14156,6 +14156,9 @@ async function playTrack(track, queue, options = {}) {
         setPlaybackBuffering(false);
         state.externalResolveRetryTrackId = "";
         clearPlaybackErrorState();
+        if (isExternalSourceTrack(track)) {
+          saveQueueState(getQueuePositionSeconds());
+        }
         setLibraryStatus("");
         addRecentTrack(track);
         preloadNextTrack();
@@ -14250,6 +14253,7 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
   const mediaPluginMeta = mediaRaw?.pluginKey
     ? mediaRaw
     : (mediaRaw?.raw && typeof mediaRaw.raw === "object" && mediaRaw.raw.pluginKey ? mediaRaw.raw : {});
+  const bridgeStreamUrl = media.bridgeStreamUrl || (isSourceBridgeStreamUrl(media.streamUrl) ? media.streamUrl : "");
   const nextStream = {
     ...(currentStream || {}),
     Type: mediaKind === "video" ? "Video" : "Audio",
@@ -14259,7 +14263,9 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
 
   track.ExternalSource = {
     ...(track.ExternalSource || {}),
-    mediaUrl: media.streamUrl || track.ExternalSource?.mediaUrl || "",
+    mediaUrl: bridgeStreamUrl || media.streamUrl || track.ExternalSource?.mediaUrl || "",
+    bridgeStreamUrl,
+    directUrl: media.directUrl || track.ExternalSource?.directUrl || "",
     pluginKey: mediaRestore?.pluginKey || mediaPluginMeta.pluginKey || track.ExternalSource?.pluginKey,
     pluginName: mediaRestore?.pluginName || mediaPluginMeta.pluginName || track.ExternalSource?.pluginName,
     pluginUrl: mediaRestore?.pluginUrl || mediaPluginMeta.pluginUrl || track.ExternalSource?.pluginUrl,
@@ -17822,6 +17828,16 @@ function isExternalSourceTrack(track) {
   return Boolean(track?.ExternalSource || String(track?.Id || "").startsWith("external:"));
 }
 
+function isSourceBridgeStreamUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""), location.href);
+    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)
+      && ["/plugin-stream", "/remote-stream"].includes(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 function getExternalSourceQuality() {
   return getExternalSourceQualityOption().request;
 }
@@ -18963,6 +18979,8 @@ function sanitizeExternalSourceForPersistence(external) {
     contentType: external.contentType,
     artwork: external.artwork,
     mediaUrl: isRestorablePlugin ? "" : external.mediaUrl,
+    bridgeStreamUrl: "",
+    directUrl: "",
     lyric: external.lyric,
     lyrics: external.lyrics,
     raw: getExternalSourceRawForPersistence(external.raw, restore),
