@@ -324,16 +324,25 @@ function checkLyrics() {
   assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?updateProgress\(\);[\s\S]*?persistPlaybackPosition\(\);/.test(app), "Playback time updates should persist local resume position independently of server progress reports");
   assert(/document\.addEventListener\("visibilitychange"[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Backgrounding the page should force-save playback position");
   assert(app.includes('window.addEventListener("pagehide", () => {\n    persistPlaybackPosition({ force: true });\n  });'), "Pagehide should force-save playback position on mobile browsers");
+  assert(app.includes("serverSearchController: null"), "Server search should keep an abort controller for stale requests");
+  assert(app.includes("function abortActiveServerSearch"), "Server search should abort stale in-flight requests");
+  assert(/function scheduleServerSearch\(rawQuery\) \{[\s\S]*?clearTimeout\(state\.serverSearchTimer\);\s*abortActiveServerSearch\(\);/.test(app), "Typing a new search query should immediately abort the previous in-flight request");
+  assert(/function runServerSearch\(rawQuery\) \{[\s\S]*?abortActiveServerSearch\(\);[\s\S]*?signal: controller\?\.signal/.test(app), "Emby server search should cancel older in-flight requests");
+  assert(/function runExternalSourceSearch\(rawQuery\) \{[\s\S]*?abortActiveServerSearch\(\);[\s\S]*?signal: controller\?\.signal/.test(app), "External source search should cancel older in-flight requests");
+  assert(app.includes("function isAbortError"), "Canceled searches should be detected and ignored");
   assert(!/function resetPlayerMeta\(\) \{[\s\S]*?progressFill\.style\.width = "0";/.test(app), "Player reset should reuse cached progress rendering instead of direct progress DOM writes");
   assert(app.includes("activeTrackRowsCacheValid"), "Track-row fluid animation should cache active rows instead of querying every frame");
   assert(app.includes("function refreshActiveTrackRowsCache"), "Track-row fluid animation should have an explicit active-row cache refresh");
   assert(!/function getActiveTrackRows\(\) \{[\s\S]*?document\.querySelectorAll\("\.track-row\.active"\)/.test(app), "Track-row fluid animation should not query all active rows on every animation frame");
   assert(app.includes("function setLyricWordProgress"), "Lyric word progress should avoid redundant DOM writes");
   assert(app.includes("word._lyricProgress = normalizedPercent"), "Lyric word progress should cache hot-path progress in memory");
+  assert(app.includes("const lyricWordProgressCssCache = new Map()"), "Lyric word progress should cache formatted CSS values");
+  assert(app.includes("word._lyricProgressCss = cssValue"), "Lyric word progress should cache the last CSS progress string on each word");
   assert(!app.includes("word.dataset.wordProgress = String(normalizedPercent)"), "Lyric word progress should not write data attributes on every frame");
   assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
   assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
-  assert(app.includes('word.style.setProperty("--word-progress", formatLyricWordProgressPercent(normalizedPercent))'), "Lyric word progress should drive stable formatted text fill percentages");
+  assert(app.includes('word.style.setProperty("--word-progress", cssValue)'), "Lyric word progress should drive stable formatted text fill percentages");
+  assert(app.includes("function getLyricWordProgressCssValue"), "Lyric word progress should reuse formatted CSS percentage strings");
   assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not use transform ratios that visually compress glyphs");
   const wordAfterMatch = css.match(/\.immersive-lyric-list \.word::after \{[^}]*\}/);
   const wordAfterRule = wordAfterMatch?.[0] || "";
@@ -414,6 +423,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
   assert(browserSmoke.includes("relativeEnhancedProgress"), "Browser smoke should verify line-relative enhanced LRC timed word progress");
   assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
+  assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
+  assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
@@ -806,6 +817,8 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("function streamPluginMedia"), "Source bridge should stream plugin media through the local bridge");
   assert(bridge.includes("function createPluginBridgeMediaResponse"), "Source bridge media responses should return stable local plugin stream URLs");
   assert(/function createPluginBridgeMediaResponse\(request, track, media = \{\}, requestedQuality = ""\) \{[\s\S]*?bridgeStreamUrl: streamUrl[\s\S]*?directUrl: media\.url \|\| media\.streamUrl/.test(bridge), "Plugin media responses should keep the direct URL only as metadata while playing through the bridge");
+  assert(/function createPluginStreamUrl\(request, track, requestedQuality = ""\) \{[\s\S]*?appendPluginTrackSnapshot\(streamUrl, track\);[\s\S]*?return streamUrl\.toString\(\);/.test(bridge), "Plugin stream URLs should carry a restore snapshot for direct re-entry playback");
+  assert(bridge.includes("function appendPluginTrackSnapshot"), "Source bridge should append plugin restore snapshots to stable stream URLs");
   assert(/function streamPluginMedia\(request, response, url\) \{[\s\S]*?const media = await resolvePluginMedia\(track, requestedQuality\)[\s\S]*?await streamRemoteMedia\(request, response, proxyUrl\)/.test(bridge), "Plugin stream endpoint should resolve fresh media and proxy it with range support");
   assert(bridge.includes('"GET, HEAD, POST, OPTIONS"'), "Source bridge CORS should advertise HEAD for media probing");
   assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should recover persisted plugin tracks when the plugin key changes");
@@ -829,6 +842,7 @@ async function checkExternalSourceLyrics() {
 
 function checkAppFunctionReferences() {
   const app = read("app.js");
+  const embyApi = read("src/emby-api.js");
   [
     "getAlbumQualityBucket",
     "getTrackQualityBucket",
@@ -844,6 +858,9 @@ function checkAppFunctionReferences() {
   });
 
   assert(app.includes("Recommended action:"), "Diagnostics should include a recommended action");
+  assert(embyApi.includes("const hasExternalSignal = Boolean(options.signal)"), "Emby API requests should distinguish caller cancellation from timeout");
+  assert(embyApi.includes("function combineAbortSignals"), "Emby API requests should combine timeout and caller cancellation signals");
+  assert(/if \(error\?\.name === "AbortError"\) \{[\s\S]*?if \(hasExternalSignal && !timedOut\) \{[\s\S]*?throw error;/.test(embyApi), "Emby API should preserve external AbortError for canceled searches while keeping timeout errors readable");
   assert(app.includes("Playback recovery visible:"), "Diagnostics should include playback recovery visibility");
   assert(app.includes("window.EmbyMusicAppReady = true"), "Main app should mark itself ready after initialization");
   assert(app.includes("window.EmbyMusicAppError = readableError(error)"), "Main app should expose initialization errors to fallback diagnostics");
@@ -908,6 +925,9 @@ function checkAppFunctionReferences() {
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");
   assert(/function takePreloadedPlaybackSession\(track, mode, options = \{\}\) \{[\s\S]*?if \(options\.forceExternalResolve\) \{[\s\S]*?clearPreload\(\);[\s\S]*?return null;/.test(app), "Preloaded sessions should be cleared and ignored during forced external media refreshes");
   assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");
+  assert(app.includes("function shouldReloadExternalPlaybackBeforeResume"), "External source resume should detect stale direct playback sources");
+  assert(/function togglePlayback\(\) \{[\s\S]*?shouldReloadExternalPlaybackBeforeResume\(state\.currentTrack\)[\s\S]*?forceExternalResolve: true/.test(app), "Paused external source playback should refresh stale sources before native resume");
+  assert(/function handleResumePlayError\(error\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(track, "恢复播放失败，正在重新解析音源\.\.\."\)/.test(app), "External source resume failures should retry with a fresh bridge media URL");
   assert(/function resumeBlockedPlayback\(track, requestId = state\.playRequestId\) \{[\s\S]*?!track \|\| !audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(track \|\| state\.currentTrack\)/.test(app), "Autoplay resume reloads should refresh external source media URLs");
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");

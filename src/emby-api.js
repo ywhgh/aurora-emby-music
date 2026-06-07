@@ -379,22 +379,33 @@ async function requestText(url, options = {}) {
 async function requestRaw(url, options = {}) {
   let response;
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    timeoutController.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const hasExternalSignal = Boolean(options.signal);
+  const abortState = combineAbortSignals(options.signal, timeoutController.signal);
   const requestOptions = {
     ...options,
-    signal: options.signal || timeoutController.signal,
+    signal: abortState.signal,
   };
 
   try {
     response = await fetch(url, requestOptions);
   } catch (error) {
     if (error?.name === "AbortError") {
+      if (hasExternalSignal && !timedOut) {
+        throw error;
+      }
+
       throw new Error("连接服务器超时，请检查服务器是否在线、端口是否开放。");
     }
 
     throw new Error("网络请求失败，请检查地址、协议、端口和浏览器 CORS 限制。");
   } finally {
     clearTimeout(timeoutId);
+    abortState.cleanup();
   }
 
   if (!response.ok) {
@@ -410,6 +421,36 @@ async function requestRaw(url, options = {}) {
 
 function hasPrimaryImage(item) {
   return Boolean(item?.ImageTags?.Primary || item?.PrimaryImageTag);
+}
+
+function combineAbortSignals(externalSignal, timeoutSignal) {
+  if (!externalSignal) {
+    return {
+      signal: timeoutSignal,
+      cleanup() {},
+    };
+  }
+
+  if (externalSignal.aborted) {
+    return {
+      signal: externalSignal,
+      cleanup() {},
+    };
+  }
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+
+  externalSignal.addEventListener("abort", abort, { once: true });
+  timeoutSignal.addEventListener("abort", abort, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup() {
+      externalSignal.removeEventListener("abort", abort);
+      timeoutSignal.removeEventListener("abort", abort);
+    },
+  };
 }
 
 window.EmbyMusicApi = {

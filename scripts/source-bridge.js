@@ -1079,6 +1079,7 @@ function createPluginStreamUrl(request, track, requestedQuality = "") {
   if (requestedQuality) {
     streamUrl.searchParams.set("quality", requestedQuality);
   }
+  appendPluginTrackSnapshot(streamUrl, track);
   return streamUrl.toString();
 }
 
@@ -1096,6 +1097,20 @@ function createPluginRestoreSnapshot(track) {
     qualityVerified: Boolean(track.qualityVerified),
     raw: track.raw,
   };
+}
+
+function appendPluginTrackSnapshot(url, track) {
+  const snapshot = createPluginRestoreSnapshot(track);
+
+  if (!snapshot.pluginKey || !snapshot.raw || typeof snapshot.raw !== "object") {
+    return;
+  }
+
+  try {
+    url.searchParams.set("track", JSON.stringify(snapshot));
+  } catch {
+    // Keep the stream URL usable even if a plugin returns unserializable data.
+  }
 }
 
 function getPluginQualityCandidates(value, track = {}) {

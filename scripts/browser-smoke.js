@@ -276,6 +276,27 @@ function createLyricProgressSmokeScript() {
   })()`;
 }
 
+function createSearchAbortSmokeScript() {
+  return `(() => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runSearchAbortScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...hooks.runSearchAbortScenario(),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
+
 function killProcessTree(pid) {
   if (!pid) {
     return;
@@ -532,6 +553,7 @@ async function runBrowserCheck(cdp, check) {
         return {
           ...pageState,
           lyricProgress: ${createLyricProgressSmokeScript()},
+          searchAbort: ${createSearchAbortSmokeScript()},
         };
       })()`,
     });
@@ -565,6 +587,7 @@ function checkPageState(check, page) {
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
+  const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -617,6 +640,10 @@ function checkPageState(check, page) {
   assert(labelsEqual(lyricOffset.afterResetLabels, "+0.18s"), `${label} reset click did not restore labels: ${JSON.stringify(lyricOffset.afterResetLabels)}`);
   assert(lyricOffset.afterResetStorage === "0.18", `${label} reset click did not persist 0.18, got ${lyricOffset.afterResetStorage || "-"}`);
   assert(resetStatesEqual(lyricOffset.afterResetDisabled, true), `${label} lyric offset reset should disable after reset`);
+  assert(searchAbort.hasHook, `${label} missing browser-smoke search abort hook`);
+  assert(!searchAbort.error, `${label} search abort smoke failed: ${searchAbort.error || "-"}`);
+  assert(searchAbort.abortedImmediately === true, `${label} search should abort stale in-flight requests immediately: ${JSON.stringify(searchAbort)}`);
+  assert(searchAbort.timerScheduled === true, `${label} search abort smoke should still schedule the next debounced search: ${JSON.stringify(searchAbort)}`);
   assert(lyricProgress.hasHook, `${label} missing browser-smoke lyric progress hook`);
   assert(!lyricProgress.error, `${label} lyric progress smoke failed: ${lyricProgress.error || "-"}`);
   assert(lyricProgress.activeView === "immersivePlayer", `${label} lyric progress smoke did not open immersive player`);

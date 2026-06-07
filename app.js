@@ -819,6 +819,7 @@ let immersiveLyricWordElements = [];
 let immersiveLyricWordTimings = [];
 let immersiveLyricWordEndTimings = [];
 let immersiveLyricTimedWordUsable = [];
+const lyricWordProgressCssCache = new Map();
 let lastStaticLyricRenderSignature = "";
 let lyricRenderRevision = 0;
 let topLyricRenderedSignature = "";
@@ -925,6 +926,7 @@ const state = {
   lastServerSearchQuery: "",
   serverSearchRequestId: 0,
   serverSearchTimer: null,
+  serverSearchController: null,
   searchSuggestActiveIndex: -1,
   playRequestId: 0,
   currentTrack: initialQueueState.currentTrack,
@@ -1410,6 +1412,7 @@ function installBrowserSmokeHooks() {
 
   window.EmbyMusicBrowserSmoke = {
     runLyricProgressScenario,
+    runSearchAbortScenario,
   };
 }
 
@@ -1444,6 +1447,49 @@ function createBrowserSmokeTrack(options = {}) {
         MediaStreams: [{ Type: "Audio", Codec: "mp3", BitRate: 320000 }],
       },
     ],
+  };
+}
+
+function runSearchAbortScenario() {
+  const previousSession = state.session;
+  const previousIsLibraryLoaded = state.isLibraryLoaded;
+  const previousLastServerSearchQuery = state.lastServerSearchQuery;
+  const previousIsServerSearching = state.isServerSearching;
+  const previousController = state.serverSearchController;
+  const previousTimer = state.serverSearchTimer;
+  let abortedImmediately = false;
+
+  clearTimeout(state.serverSearchTimer);
+  state.session = {
+    sourceMode: "emby",
+    serverUrl: "http://browser-smoke.local",
+    userId: "browser-smoke-user",
+    userName: "Browser Smoke",
+    serverName: "Browser Smoke",
+    version: APP_VERSION,
+  };
+  state.isLibraryLoaded = true;
+  state.lastServerSearchQuery = "";
+  state.serverSearchController = {
+    abort() {
+      abortedImmediately = true;
+    },
+  };
+
+  scheduleServerSearch("browser smoke query");
+  const timerScheduled = Boolean(state.serverSearchTimer);
+
+  clearTimeout(state.serverSearchTimer);
+  state.serverSearchTimer = previousTimer;
+  state.serverSearchController = previousController;
+  state.session = previousSession;
+  state.isLibraryLoaded = previousIsLibraryLoaded;
+  state.lastServerSearchQuery = previousLastServerSearchQuery;
+  state.isServerSearching = previousIsServerSearching;
+
+  return {
+    abortedImmediately,
+    timerScheduled,
   };
 }
 
@@ -2647,6 +2693,7 @@ async function loadMusicLibrary(session) {
     state.lastServerSearchQuery = "";
     state.serverSearchRequestId += 1;
     clearTimeout(state.serverSearchTimer);
+    abortActiveServerSearch();
     state.isServerSearching = false;
     state.totalTracks = trackResponse.TotalRecordCount ?? state.tracks.length;
     state.totalAlbums = albumResponse.TotalRecordCount ?? state.albums.length;
@@ -2720,6 +2767,7 @@ async function loadExternalMusicLibrary(session) {
     state.lastServerSearchQuery = "";
     state.serverSearchRequestId += 1;
     clearTimeout(state.serverSearchTimer);
+    abortActiveServerSearch();
     state.isServerSearching = false;
     state.isLibraryLoaded = true;
 
@@ -2771,6 +2819,7 @@ function setEmptyExternalSourceLibrary() {
   state.lastServerSearchQuery = "";
   state.serverSearchRequestId += 1;
   clearTimeout(state.serverSearchTimer);
+  abortActiveServerSearch();
   state.isServerSearching = false;
   state.isLibraryLoaded = true;
   applyFilters();
@@ -8340,6 +8389,7 @@ function appendImmersiveLyricLineContent(container, line) {
       word.dataset.wordEndTime = String(part.endTime);
     }
     word._lyricProgress = 0;
+    word._lyricProgressCss = "0%";
     word.style.setProperty("--word-progress", "0%");
     original.append(word);
     words.push(word);
@@ -8845,7 +8895,9 @@ function setLyricWordProgress(word, percent) {
   }
 
   word._lyricProgress = normalizedPercent;
-  word.style.setProperty("--word-progress", formatLyricWordProgressPercent(normalizedPercent));
+  const cssValue = getLyricWordProgressCssValue(normalizedPercent);
+  word._lyricProgressCss = cssValue;
+  word.style.setProperty("--word-progress", cssValue);
 }
 
 function normalizeLyricWordProgressPercent(percent) {
@@ -8859,6 +8911,19 @@ function formatLyricWordProgressPercent(percent) {
   }
 
   return `${normalizedPercent.toFixed(1)}%`;
+}
+
+function getLyricWordProgressCssValue(normalizedPercent) {
+  const cacheKey = Math.round(normalizedPercent * 10);
+  const cached = lyricWordProgressCssCache.get(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  const cssValue = formatLyricWordProgressPercent(normalizedPercent);
+  lyricWordProgressCssCache.set(cacheKey, cssValue);
+  return cssValue;
 }
 
 function renderUpNext() {
@@ -9962,6 +10027,7 @@ function getSearchHistoryStorageKey() {
 
 function scheduleServerSearch(rawQuery) {
   clearTimeout(state.serverSearchTimer);
+  abortActiveServerSearch();
 
   if (!state.session || !state.isLibraryLoaded || rawQuery.length < SERVER_SEARCH_MIN_LENGTH) {
     state.isServerSearching = false;
@@ -9977,6 +10043,24 @@ function scheduleServerSearch(rawQuery) {
   }, SERVER_SEARCH_DEBOUNCE_MS);
 }
 
+function abortActiveServerSearch() {
+  if (!state.serverSearchController) {
+    return;
+  }
+
+  state.serverSearchController.abort();
+  state.serverSearchController = null;
+}
+
+function createAbortController() {
+  return typeof AbortController === "function" ? new AbortController() : null;
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError"
+    || /请求已取消|aborted|abort/i.test(String(error?.message || ""));
+}
+
 async function runServerSearch(rawQuery) {
   if (!state.session || !rawQuery || rawQuery.length < SERVER_SEARCH_MIN_LENGTH) {
     return;
@@ -9988,6 +10072,9 @@ async function runServerSearch(rawQuery) {
   }
 
   const requestId = ++state.serverSearchRequestId;
+  abortActiveServerSearch();
+  const controller = createAbortController();
+  state.serverSearchController = controller;
   state.isServerSearching = true;
   renderSearchResults();
   setLibraryStatus(`正在从 Emby 搜索“${rawQuery}”...`);
@@ -9997,6 +10084,8 @@ async function runServerSearch(rawQuery) {
       SearchTerm: rawQuery,
       SortBy: "SortName",
       SortOrder: "Ascending",
+    }, {
+      signal: controller?.signal,
     });
 
     if (requestId !== state.serverSearchRequestId || rawQuery.toLowerCase() !== searchInput.value.trim().toLowerCase()) {
@@ -10018,6 +10107,10 @@ async function runServerSearch(rawQuery) {
       return;
     }
 
+    if (isAbortError(error)) {
+      return;
+    }
+
     state.isServerSearching = false;
     renderLibrary();
     showNotice(`服务器搜索失败：${readableError(error)}`, {
@@ -10026,6 +10119,9 @@ async function runServerSearch(rawQuery) {
     });
   } finally {
     if (requestId === state.serverSearchRequestId) {
+      if (state.serverSearchController === controller) {
+        state.serverSearchController = null;
+      }
       state.isServerSearching = false;
     }
   }
@@ -10033,9 +10129,15 @@ async function runServerSearch(rawQuery) {
 
 async function runExternalSourceSearch(rawQuery) {
   const requestId = ++state.serverSearchRequestId;
+  abortActiveServerSearch();
+  const controller = createAbortController();
+  state.serverSearchController = controller;
   const apiUrl = getSessionExternalSourceApiUrl(state.session);
 
   if (!apiUrl) {
+    if (state.serverSearchController === controller) {
+      state.serverSearchController = null;
+    }
     state.isServerSearching = false;
     setLibraryStatus("音乐桥未配置服务地址，暂时不能搜索。");
     return;
@@ -10051,6 +10153,7 @@ async function runExternalSourceSearch(rawQuery) {
       query: rawQuery,
       startIndex: 0,
       limit: SERVER_SEARCH_LIMIT,
+      signal: controller?.signal,
     });
 
     if (requestId !== state.serverSearchRequestId || rawQuery.toLowerCase() !== searchInput.value.trim().toLowerCase()) {
@@ -10075,6 +10178,10 @@ async function runExternalSourceSearch(rawQuery) {
       return;
     }
 
+    if (isAbortError(error)) {
+      return;
+    }
+
     state.isServerSearching = false;
     renderLibrary();
     showNotice(`音源桥搜索失败：${readableError(error)}`, {
@@ -10083,6 +10190,9 @@ async function runExternalSourceSearch(rawQuery) {
     });
   } finally {
     if (requestId === state.serverSearchRequestId) {
+      if (state.serverSearchController === controller) {
+        state.serverSearchController = null;
+      }
       state.isServerSearching = false;
     }
   }
@@ -11139,6 +11249,7 @@ function syncBrowserNetworkStatus(options = {}) {
 function clearSearchAndFilters() {
   clearTimeout(state.serverSearchTimer);
   state.serverSearchRequestId += 1;
+  abortActiveServerSearch();
   state.isServerSearching = false;
   state.query = "";
   state.searchResultQuery = "";
@@ -11367,7 +11478,7 @@ async function loadMoreFavorites() {
   }
 }
 
-function fetchPagedItems(includeItemTypes, startIndex, limit, extraParams = {}) {
+function fetchPagedItems(includeItemTypes, startIndex, limit, extraParams = {}, requestOptions = {}) {
   return embyFetch(state.session, userItemsPath(state.session, {
     Recursive: true,
     IncludeItemTypes: includeItemTypes,
@@ -11377,7 +11488,7 @@ function fetchPagedItems(includeItemTypes, startIndex, limit, extraParams = {}) 
     EnableUserData: true,
     ...getLibraryScopeParams(),
     ...extraParams,
-  }));
+  }), requestOptions);
 }
 
 function updateLoadMoreButtons() {
@@ -14630,6 +14741,14 @@ function togglePlayback() {
   }
 
   if (audioPlayer.paused) {
+    if (shouldReloadExternalPlaybackBeforeResume(state.currentTrack)) {
+      playTrack(state.currentTrack, getPlaybackRetryQueue(state.currentTrack), {
+        positionSeconds: getRetryPositionSeconds(),
+        forceExternalResolve: true,
+      });
+      return;
+    }
+
     audioPlayer.play()
       .then(() => {
         triggerPlayerbarSweep();
@@ -14672,6 +14791,10 @@ function handleResumePlayError(error) {
       mode: "universal",
       positionSeconds: getRetryPositionSeconds(),
     });
+    return;
+  }
+
+  if (retryExternalPlaybackWithFreshMedia(track, "恢复播放失败，正在重新解析音源...")) {
     return;
   }
 
@@ -16349,6 +16472,20 @@ function getAudioErrorText() {
   return labels[error.code] || `${mediaLabel}元素错误 ${error.code}`;
 }
 
+function shouldReloadExternalPlaybackBeforeResume(track) {
+  if (!isExternalSourceTrack(track) || !audioPlayer.src) {
+    return false;
+  }
+
+  const source = audioPlayer.currentSrc || audioPlayer.src;
+  const isRestorablePlugin = isRestorableExternalSourcePlugin(track.ExternalSource, track.ExternalSource?.restore);
+
+  return Boolean(
+    track._restoredQueueNeedsFreshResolve
+      || (isRestorablePlugin && !isSourceBridgeStreamUrl(source))
+  );
+}
+
 function handlePlayError(error, track, requestId) {
   if (requestId !== state.playRequestId) {
     return;
@@ -17831,8 +17968,17 @@ function isExternalSourceTrack(track) {
 function isSourceBridgeStreamUrl(value) {
   try {
     const parsed = new URL(String(value || ""), location.href);
-    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)
-      && ["/plugin-stream", "/remote-stream"].includes(parsed.pathname);
+    if (!["/plugin-stream", "/remote-stream"].includes(parsed.pathname)) {
+      return false;
+    }
+
+    const bridgeUrl = getSessionExternalSourceApiUrl(state.session) || state.externalSourceApiUrl || "";
+    if (!bridgeUrl) {
+      return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+    }
+
+    const bridgeOrigin = new URL(bridgeUrl, location.href).origin;
+    return parsed.origin === bridgeOrigin;
   } catch {
     return false;
   }
