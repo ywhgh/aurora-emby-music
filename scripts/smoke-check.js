@@ -271,7 +271,14 @@ function checkLyrics() {
   assert(app.includes("function refreshActiveTrackRowsCache"), "Track-row fluid animation should have an explicit active-row cache refresh");
   assert(!/function getActiveTrackRows\(\) \{[\s\S]*?document\.querySelectorAll\("\.track-row\.active"\)/.test(app), "Track-row fluid animation should not query all active rows on every animation frame");
   assert(app.includes("function setLyricWordProgress"), "Lyric word progress should avoid redundant DOM writes");
-  assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;[\s\S]*?will-change: background;/.test(css), "Immersive lyric word highlights should use paint containment hints");
+  assert(app.includes("word._lyricProgress = normalizedPercent"), "Lyric word progress should cache hot-path progress in memory");
+  assert(!app.includes("word.dataset.wordProgress = String(normalizedPercent)"), "Lyric word progress should not write data attributes on every frame");
+  assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
+  assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
+  assert(app.includes('word.style.setProperty("--word-progress-ratio", String(normalizedPercent / 100))'), "Lyric word progress should update a transform ratio for smoother compositor-friendly highlights");
+  assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
+  assert(/\.immersive-lyric-list \.word::after \{[\s\S]*?content: attr\(data-word-text\);[\s\S]*?transform: scaleX\(var\(--word-progress-ratio, 0\)\);[\s\S]*?will-change: transform;/.test(css), "Immersive lyric word highlights should use transform-driven overlays");
+  assert(!/will-change: background;/.test(css), "Immersive lyric word highlights should not animate background gradients");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
   assert(app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10"), "Lyric word progress should keep 0.1% precision for smoother highlighting");

@@ -9645,20 +9645,24 @@ body.action-sheet-open .content {
 }
 
 .immersive-lyric-list .word {
-  display: inline;
-  color: transparent;
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
   contain: paint;
-  background:
-    linear-gradient(
-      90deg,
-      var(--immersive-lyric-active) 0%,
-      var(--immersive-lyric-active) var(--word-progress, 0%),
-      var(--immersive-lyric-primary) var(--word-progress, 0%),
-      var(--immersive-lyric-primary) 100%
-    );
-  -webkit-background-clip: text;
-  background-clip: text;
-  will-change: background;
+  color: var(--immersive-lyric-primary);
+  vertical-align: baseline;
+}
+
+.immersive-lyric-list .word::after {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--immersive-lyric-active);
+  content: attr(data-word-text);
+  pointer-events: none;
+  transform: scaleX(var(--word-progress-ratio, 0));
+  transform-origin: left center;
+  will-change: transform;
 }
 
 .immersive-lyric-list .lyric-line.active .immersive-lyric-translated,

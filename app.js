@@ -1540,7 +1540,7 @@ function runLyricProgressScenario() {
 function collectBrowserSmokeLyricState() {
   const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
-  const wordProgress = words.map((word) => Number(word.dataset.wordProgress || 0));
+  const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
 
   return {
@@ -7392,13 +7392,16 @@ function appendImmersiveLyricLineContent(container, line) {
     const word = document.createElement("span");
     word.className = "word";
     word.textContent = part.value;
+    word.dataset.wordText = part.value;
     if (Number.isFinite(part.time)) {
       word.dataset.wordTime = String(part.time);
     }
     if (Number.isFinite(part.endTime)) {
       word.dataset.wordEndTime = String(part.endTime);
     }
+    word._lyricProgress = 0;
     word.style.setProperty("--word-progress", "0%");
+    word.style.setProperty("--word-progress-ratio", "0");
     original.append(word);
     words.push(word);
     timings.push(Number.isFinite(part.time) ? Number(part.time) : NaN);
@@ -7857,14 +7860,15 @@ function setLyricWordProgress(word, percent) {
   }
 
   const normalizedPercent = clamp(Number(percent) || 0, 0, 100);
-  const lastPercent = Number(word.dataset.wordProgress || -1);
+  const lastPercent = Number.isFinite(word._lyricProgress) ? word._lyricProgress : -1;
 
   if (Math.abs(lastPercent - normalizedPercent) < LYRIC_PROGRESS_EPSILON) {
     return;
   }
 
-  word.dataset.wordProgress = String(normalizedPercent);
+  word._lyricProgress = normalizedPercent;
   word.style.setProperty("--word-progress", `${normalizedPercent}%`);
+  word.style.setProperty("--word-progress-ratio", String(normalizedPercent / 100));
 }
 
 function renderUpNext() {
