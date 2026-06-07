@@ -679,6 +679,9 @@ const nowLyricFocus = document.querySelector("#nowLyricFocus");
 const nowLyricStatus = document.querySelector("#nowLyricStatus");
 const nowLyricCurrent = document.querySelector("#nowLyricCurrent");
 const nowLyricNext = document.querySelector("#nowLyricNext");
+const topLyricFocus = document.querySelector("#topLyricFocus");
+const topLyricOriginal = document.querySelector("#topLyricOriginal");
+const topLyricCurrent = document.querySelector("#topLyricCurrent");
 const playButton = document.querySelector("#playButton");
 const playerbarSweepLayer = document.querySelector("#playerbarSweepLayer");
 const nowPlayButton = document.querySelector("#nowPlayButton");
@@ -7311,6 +7314,7 @@ function renderNowLyricFocus() {
     nowLyricNext.textContent = "同步歌词可点击跳转。";
     nowLyricFocus.disabled = true;
     nowLyricFocus.classList.remove("synced");
+    renderTopLyricFocus(null);
     return;
   }
 
@@ -7320,6 +7324,7 @@ function renderNowLyricFocus() {
     nowLyricNext.textContent = "可在 Emby 的歌曲元数据中添加歌词。";
     nowLyricFocus.disabled = true;
     nowLyricFocus.classList.remove("synced");
+    renderTopLyricFocus(null);
     return;
   }
 
@@ -7336,6 +7341,7 @@ function renderNowLyricFocus() {
     : (state.isLyricSynced ? "已到歌词末尾" : "当前歌词没有时间轴。");
   nowLyricFocus.disabled = !state.isLyricSynced;
   nowLyricFocus.classList.toggle("synced", state.isLyricSynced);
+  renderTopLyricFocus(currentLine);
 }
 
 function renderNowLyricFocusLine(line) {
@@ -7344,6 +7350,40 @@ function renderNowLyricFocusLine(line) {
     originalClassName: "now-lyric-original",
     translatedClassName: "now-lyric-translated",
   });
+}
+
+function renderTopLyricFocus(line) {
+  if (!topLyricFocus || !topLyricOriginal || !topLyricCurrent) {
+    return;
+  }
+
+  const shouldShow = Boolean(state.currentTrack && line?.text);
+  topLyricFocus.hidden = !shouldShow;
+
+  if (!shouldShow) {
+    topLyricOriginal.textContent = "";
+    topLyricCurrent.textContent = "播放歌曲后显示歌词。";
+    updateTopbarLyricState();
+    return;
+  }
+
+  topLyricOriginal.textContent = line.originalText || "";
+  topLyricOriginal.hidden = !line.originalText;
+  topLyricCurrent.textContent = line.text || line.originalText || "";
+  updateTopbarLyricState();
+}
+
+function updateTopbarLyricState() {
+  const shouldShowLyric = Boolean(
+    topLyricFocus
+      && !topLyricFocus.hidden
+      && state.currentTrack
+      && audioPlayer.src
+      && !audioPlayer.paused
+      && !audioPlayer.ended
+  );
+
+  document.body.classList.toggle("topbar-lyric-active", shouldShowLyric);
 }
 
 function focusActiveLyricLine() {
@@ -13649,6 +13689,7 @@ function togglePlayback() {
     if (state.currentTrack && state.queue.length) {
       playTrack(state.currentTrack, state.queue, {
         positionSeconds: state.savedPlaybackPositionSeconds,
+        forceExternalResolve: isExternalSourceTrack(state.currentTrack),
       });
       return;
     }
@@ -15437,6 +15478,7 @@ function resumeBlockedPlayback(track, requestId = state.playRequestId) {
   if (requestId !== state.playRequestId || !track || !audioPlayer.src) {
     playTrack(track || state.currentTrack, state.queue, {
       positionSeconds: getRetryPositionSeconds(),
+      forceExternalResolve: isExternalSourceTrack(track || state.currentTrack),
     });
     return;
   }
@@ -16149,6 +16191,7 @@ function updatePlaybackState() {
   immersivePlayButton.classList.toggle("playing", isPlaying);
   document.body.classList.toggle("is-audio-playing", isPlaying);
   document.body.classList.toggle("is-playback-buffering", state.isPlaybackBuffering);
+  updateTopbarLyricState();
   updatePlayButtonLabels();
   updateMediaSessionPlaybackState();
   updateDocumentTitle();

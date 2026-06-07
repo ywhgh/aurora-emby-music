@@ -152,6 +152,12 @@ function checkCss() {
   assert(/border-radius:\s*0;/.test(immersiveLyricBaseRule), "Immersive lyric rows should not use rounded rectangle backgrounds");
   assert(/width:\s*100%;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should span the full row width");
   assert(/box-shadow:\s*none;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should not add a framed shadow");
+  assert(css.includes("body.topbar-lyric-active .top-tabs .tab"), "Playing topbar should be able to hide menu tabs behind lyrics");
+  assert(css.includes("body.topbar-lyric-active .top-tabs:hover .tab"), "Hovering the topbar lyrics should restore the menu tabs");
+  assert(css.includes(".top-lyric-current"), "Topbar lyric text should have a dedicated translated/current line style");
+  assert(css.includes(".top-lyric-focus[hidden]"), "Hidden topbar lyrics should not leave an invisible overlay");
+  assert(/\.lyric-line \.lyric-original \{[\s\S]*?font-size:\s*0\.8rem;/.test(css), "Bilingual lyric original text should be smaller than the translated text");
+  assert(/\.lyric-line \.lyric-translated \{[\s\S]*?font-size:\s*1rem;/.test(css), "Bilingual lyric translated text should be larger than the original text");
 }
 
 function checkLyrics() {
@@ -662,11 +668,17 @@ function checkAppFunctionReferences() {
   assert(app.includes("const AUTO_DISMISS_NOTICE_MS = 1800"), "Actionless notices should auto-hide within 1-2 seconds");
   assert(app.includes("const AUTO_DISMISS_STATUS_MS = 1800"), "Transient status messages should auto-hide within 1-2 seconds");
   assert(app.includes("window.addEventListener(\"emby-music-hls-ready\", handleHlsReady)"), "hls.js loading should refresh playback capability without blocking init");
+  assert(app.includes("function renderTopLyricFocus"), "Topbar lyrics should reuse the current lyric render state");
+  assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state");
+  assert(app.includes("document.body.classList.toggle(\"topbar-lyric-active\", shouldShowLyric)"), "Playing lyrics should toggle the topbar lyric state class");
+  assert(/function updatePlaybackState\(\) \{[\s\S]*?updateTopbarLyricState\(\);[\s\S]*?updatePlayButtonLabels\(\);/.test(app), "Playback state updates should refresh the topbar lyric/menu mode");
   assert(app.includes("function clearPlaybackCache"), "Missing playback cache clearing action");
   assert(app.includes("function takePreloadedPlaybackSession"), "Missing playback preloaded session handoff");
   assert(app.includes("externalResolveRetryTrackId"), "External source playback should track one-shot fresh resolve retries");
   assert(app.includes("state.externalResolveRetryTrackId = \"\";\n        clearPlaybackErrorState();"), "Successful playback should clear the external fresh resolve retry marker");
   assert(app.includes("forceExternalResolve: isExternalSourceTrack(state.currentTrack)"), "Restored external queue playback should force a fresh bridge resolve");
+  assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");
+  assert(/function resumeBlockedPlayback\(track, requestId = state\.playRequestId\) \{[\s\S]*?!track \|\| !audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(track \|\| state\.currentTrack\)/.test(app), "Autoplay resume reloads should refresh external source media URLs");
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
@@ -704,6 +716,8 @@ function checkAppFunctionReferences() {
 
   const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
+  assert(index.includes("id=\"topLyricFocus\""), "Topbar should include a lyric display layer");
+  assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should include the translated/current lyric line");
   assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
   assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");

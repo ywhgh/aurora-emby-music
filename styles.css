@@ -878,7 +878,9 @@ input:disabled {
 
 .top-tabs {
   display: flex;
+  position: relative;
   min-width: 0;
+  min-height: 2.28rem;
   justify-content: center;
   gap: 0.18rem;
 }
@@ -892,6 +894,82 @@ input:disabled {
   color: var(--muted);
   font-size: 0.92rem;
   font-weight: 750;
+  transition:
+    opacity 0.24s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.top-lyric-focus {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  min-width: 0;
+  place-items: center;
+  align-content: center;
+  padding: 0 0.8rem;
+  overflow: hidden;
+  color: var(--text);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.22rem);
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.top-lyric-focus[hidden] {
+  display: none;
+}
+
+.top-lyric-original,
+.top-lyric-current {
+  display: block;
+  max-width: min(42rem, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-lyric-original {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 680;
+  line-height: 1.15;
+}
+
+.top-lyric-current {
+  color: var(--text);
+  font-size: 1.02rem;
+  font-weight: 850;
+  line-height: 1.22;
+}
+
+body.topbar-lyric-active .top-tabs .tab {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.18rem);
+}
+
+body.topbar-lyric-active .top-tabs .top-lyric-focus {
+  opacity: 1;
+  transform: none;
+}
+
+body.topbar-lyric-active .top-tabs:hover .tab,
+body.topbar-lyric-active .top-tabs:focus-within .tab {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+body.topbar-lyric-active .top-tabs:hover .top-lyric-focus,
+body.topbar-lyric-active .top-tabs:focus-within .top-lyric-focus {
+  opacity: 0;
+  transform: translateY(0.22rem);
 }
 
 .tab:hover {
@@ -8983,13 +9061,14 @@ body.action-sheet-open .content {
 
 .now-lyric-focus strong .now-lyric-original {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 740;
 }
 
 .now-lyric-focus strong .now-lyric-translated {
   margin-top: 0.14rem;
   color: #111827;
+  font-size: 1.08rem;
 }
 
 .now-lyric-focus em {
@@ -9156,14 +9235,14 @@ body.action-sheet-open .content {
 
 .lyric-line .lyric-original {
   color: var(--soft);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 650;
 }
 
 .lyric-line .lyric-translated {
   margin-top: 0.1rem;
   color: inherit;
-  font-size: 0.96rem;
+  font-size: 1rem;
   font-weight: inherit;
 }
 

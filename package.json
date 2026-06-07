@@ -1,6 +1,6 @@
 {
   "name": "emby-music-web",
-  "version": "0.93.108",
+  "version": "0.93.109",
   "private": true,
   "description": "Responsive web music player for Emby music libraries.",
   "scripts": {
