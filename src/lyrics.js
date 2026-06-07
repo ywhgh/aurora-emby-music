@@ -86,9 +86,6 @@ function parseLyrics(text) {
     const textPart = line.replace(timePattern, "").trim();
     const wordTimeline = parseInlineLyricWordTimeline(textPart, inlineTimePattern);
     const lyricText = parseLyricTextPart(wordTimeline.text);
-    const lyricPayload = wordTimeline.words.length
-      ? { ...lyricText, wordTimeline: wordTimeline.words }
-      : lyricText;
 
     if (!matches.length) {
       plainLines.push({ time: null, ...parseLyricTextPart(line.replace(inlineTimePattern, "")) });
@@ -101,6 +98,10 @@ function parseLyrics(text) {
       const seconds = Number(match[3] || 0);
       const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
       const baseTime = hours * 3600 + minutes * 60 + seconds + fraction;
+      const words = normalizeInlineLyricWordTimeline(wordTimeline.words, baseTime);
+      const lyricPayload = words.length
+        ? { ...lyricText, wordTimeline: words }
+        : lyricText;
       timedLines.push({
         time: applySourceLyricOffsetSeconds(baseTime, offsetSeconds),
         ...applyLyricPayloadSourceOffset(lyricPayload, offsetSeconds),
@@ -388,6 +389,7 @@ function applyLyricPayloadSourceOffset(payload, offsetSeconds) {
     wordTimeline: payload.wordTimeline.map((word) => ({
       ...word,
       time: applySourceLyricOffsetSeconds(word.time, offsetSeconds),
+      ...(Number.isFinite(word.endTime) ? { endTime: applySourceLyricOffsetSeconds(word.endTime, offsetSeconds) } : {}),
     })),
   };
 }
@@ -429,6 +431,41 @@ function parseInlineLyricWordTimeline(text, inlineTimePattern) {
     text: (cleanText.trim() || textValue).trim(),
     words: words.filter((word) => Number.isFinite(word.time)),
   };
+}
+
+function normalizeInlineLyricWordTimeline(words, lineTime) {
+  const items = Array.isArray(words)
+    ? words.filter((word) => Number.isFinite(word?.time))
+    : [];
+
+  if (!items.length) {
+    return [];
+  }
+
+  const useLineRelativeTime = shouldUseLineRelativeInlineTimes(items, lineTime);
+  return items.map((word) => ({
+    value: word.value,
+    time: useLineRelativeTime ? lineTime + word.time : word.time,
+    ...(Number.isFinite(word.endTime)
+      ? { endTime: useLineRelativeTime ? lineTime + word.endTime : word.endTime }
+      : {}),
+  }));
+}
+
+function shouldUseLineRelativeInlineTimes(words, lineTime) {
+  if (!Number.isFinite(lineTime) || lineTime <= 0 || !words.length) {
+    return false;
+  }
+
+  const times = words.map((word) => Number(word.time)).filter(Number.isFinite);
+  if (!times.length) {
+    return false;
+  }
+
+  const firstTime = times[0];
+  const maxTime = Math.max(...times);
+
+  return firstTime < lineTime - 0.25 && maxTime < lineTime + 8;
 }
 
 function parseInlineTimeMatch(match) {

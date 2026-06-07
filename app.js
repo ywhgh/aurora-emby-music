@@ -1496,6 +1496,25 @@ function runLyricProgressScenario() {
   const enhancedMidWordProgress = collectBrowserSmokeLyricState();
   updateLyricsHighlight(1.45, true);
   const enhancedLateWordProgress = collectBrowserSmokeLyricState();
+  const relativeEnhancedTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-relative-enhanced-lyric-track",
+    name: "Browser Smoke Relative Enhanced Lyric Track",
+    durationSeconds: 90,
+    lyricsText: [
+      "[01:20.00]<0.00>后 <0.50>半 <1.00>段",
+      "[01:24.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = relativeEnhancedTrack;
+  state.queue = [relativeEnhancedTrack];
+  state.tracks = [relativeEnhancedTrack];
+  state.filteredTracks = [relativeEnhancedTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(relativeEnhancedTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(80.75, true);
+  const relativeEnhancedProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
@@ -1536,6 +1555,7 @@ function runLyricProgressScenario() {
     longGapIdleResumeDelayMs,
     enhancedMidWordProgress,
     enhancedLateWordProgress,
+    relativeEnhancedProgress,
     denseWordPerformance,
     endScrollLayout,
     activeView: getActiveView(),
@@ -13936,7 +13956,10 @@ function seekToPosition(positionSeconds, options = {}) {
   }
 
   pauseLyricPlaybackClock();
-  updateProgress();
+  updateProgress({ syncLyrics: false });
+  state.activeLyricTimelineIndex = -1;
+  updateLyricsHighlight(position, true);
+  syncLyricProgressLoop();
 
   if (options.report !== false) {
     reportPlaybackProgress(true, options.eventName || "Seek");

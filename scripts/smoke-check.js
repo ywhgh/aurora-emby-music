@@ -186,6 +186,12 @@ function checkLyrics() {
   assert(Array.isArray(enhancedLine?.wordTimeline), "Enhanced LRC should expose wordTimeline");
   assert(enhancedLine.wordTimeline.length === 3, `Enhanced LRC should expose 3 timed words, got ${enhancedLine.wordTimeline?.length || 0}`);
   assert(enhancedLine.wordTimeline[1]?.time === 0.6, `Enhanced LRC second word time expected 0.6, got ${enhancedLine.wordTimeline[1]?.time}`);
+  const relativeEnhancedLine = parseLyrics("[01:20.00]<0.00>后<0.50>半<1.00>段").lines[0];
+  assert(relativeEnhancedLine.wordTimeline?.[0]?.time === 80, `Line-relative enhanced LRC first word time expected 80, got ${relativeEnhancedLine.wordTimeline?.[0]?.time}`);
+  assert(relativeEnhancedLine.wordTimeline?.[2]?.time === 81, `Line-relative enhanced LRC third word time expected 81, got ${relativeEnhancedLine.wordTimeline?.[2]?.time}`);
+  const absoluteEnhancedLine = parseLyrics("[01:20.00]<01:20.00>后<01:20.50>半<01:21.00>段").lines[0];
+  assert(absoluteEnhancedLine.wordTimeline?.[0]?.time === 80, `Absolute enhanced LRC first word time expected 80, got ${absoluteEnhancedLine.wordTimeline?.[0]?.time}`);
+  assert(absoluteEnhancedLine.wordTimeline?.[2]?.time === 81, `Absolute enhanced LRC third word time expected 81, got ${absoluteEnhancedLine.wordTimeline?.[2]?.time}`);
   const enhancedSecondOnlyLine = parseLyrics("[00:00.00]<0.00>你<0.30>好").lines[0];
   assert(enhancedSecondOnlyLine?.text === "你好", `Second-only enhanced LRC text expected 你好, got ${enhancedSecondOnlyLine?.text}`);
   assert(enhancedSecondOnlyLine.wordTimeline?.[1]?.time === 0.3, `Second-only enhanced LRC second word time expected 0.3, got ${enhancedSecondOnlyLine.wordTimeline?.[1]?.time}`);
@@ -271,6 +277,8 @@ function checkLyrics() {
   assert(app.includes("function runLyricProgressScenario"), "Browser smoke should be able to run a real synthetic lyric progress scenario");
   assert(app.includes("function collectBrowserSmokeLyricState"), "Browser smoke should collect actual word progress state from rendered lyrics");
   assert(app.includes("function getLyricWordParts"), "Immersive lyrics should render enhanced LRC timed words");
+  assert(lyricsCode.includes("function normalizeInlineLyricWordTimeline"), "Enhanced LRC parser should normalize line-relative word timings");
+  assert(lyricsCode.includes("function shouldUseLineRelativeInlineTimes"), "Enhanced LRC parser should detect line-relative inline word timings");
   assert(lyricsCode.includes("function parseYrcLyrics"), "Lyrics parser should support YRC word-timed lyrics");
   assert(lyricsCode.includes("function parseTtmlLyrics"), "Lyrics parser should support TTML word-timed lyrics");
   assert(app.includes("word.dataset.wordTime"), "Immersive lyrics should persist enhanced LRC word times on word nodes");
@@ -336,6 +344,7 @@ function checkLyrics() {
   assert(app.includes("LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Large lyric seeks should switch to timeline binary search");
   assert(app.includes("currentEntry.index === currentIndex"), "Lyric timeline fast path should verify the cached line index before reusing it");
   assert(app.includes("targetSeconds - currentEntry.time > LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Lyric timeline jumps should not be advanced line by line");
+  assert(/function seekToPosition\(positionSeconds, options = \{\}\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(position, true\);[\s\S]*?syncLyricProgressLoop\(\);/.test(app), "Manual seeks should immediately force-refresh lyric highlights");
   assert(/function handleAudioSeeked\(\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeks should reset lyric timeline cache and force-refresh lyric highlights without double-rendering");
   assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics\) \{\s*updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass");
   assert(!app.includes("state.lyricTimeline.findIndex"), "Lyric progress should not search the timeline every frame");
@@ -385,6 +394,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
+  assert(browserSmoke.includes("relativeEnhancedProgress"), "Browser smoke should verify line-relative enhanced LRC timed word progress");
   assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
