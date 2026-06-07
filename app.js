@@ -122,6 +122,16 @@ const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
+const TOP_LYRIC_SHARD_MIN_COUNT = 20;
+const TOP_LYRIC_SHARD_MAX_COUNT = 30;
+const TOP_LYRIC_SHARD_PADDING = 18;
+const TOP_LYRIC_SHARD_DRAG = 0.98;
+const TOP_LYRIC_SHARD_GRAVITY = 0.1;
+const TOP_LYRIC_SHARD_FADE = 0.02;
+const TOP_LYRIC_SHARD_MAX_DPR = 2;
+const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
+const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 177, 74, 0.9)";
+const TOP_LYRIC_SHARD_GLOW_COLOR = "rgba(236, 65, 65, 0.55)";
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -679,6 +689,7 @@ const nowLyricFocus = document.querySelector("#nowLyricFocus");
 const nowLyricStatus = document.querySelector("#nowLyricStatus");
 const nowLyricCurrent = document.querySelector("#nowLyricCurrent");
 const nowLyricNext = document.querySelector("#nowLyricNext");
+const topTabs = document.querySelector(".top-tabs");
 const topLyricFocus = document.querySelector("#topLyricFocus");
 const topLyricOriginal = document.querySelector("#topLyricOriginal");
 const topLyricCurrent = document.querySelector("#topLyricCurrent");
@@ -806,6 +817,14 @@ let immersiveLyricWordEndTimings = [];
 let immersiveLyricTimedWordUsable = [];
 let lastStaticLyricRenderSignature = "";
 let lyricRenderRevision = 0;
+let topLyricRenderedSignature = "";
+let topLyricCharacterSpans = [];
+let topLyricCharacterTimings = [];
+let topLyricTriggeredWordIndex = -1;
+let topLyricAlignPastOnNextLoop = false;
+let topLyricShardFrame = 0;
+let topLyricShardEffects = [];
+let topLyricShardOptions = {};
 let libraryAlphabetScrubber = null;
 let libraryAlphabetHoverZone = null;
 let libraryAlphabetHoverTimer = 0;
@@ -1337,6 +1356,14 @@ function init() {
   playerbarSweepLayer?.addEventListener("animationend", () => {
     playerbarSweepLayer.classList.remove("is-active");
   });
+  topTabs?.addEventListener("pointerenter", handleTopbarMenuInteractionStart);
+  topTabs?.addEventListener("pointerleave", handleTopbarMenuInteractionEnd);
+  topTabs?.addEventListener("focusin", handleTopbarMenuInteractionStart);
+  topTabs?.addEventListener("focusout", (event) => {
+    if (!topTabs.contains(event.relatedTarget)) {
+      handleTopbarMenuInteractionEnd();
+    }
+  });
   window.addEventListener("keydown", handleKeyboardShortcut);
   window.addEventListener("hashchange", () => switchViewFromHash());
   window.addEventListener("focus", () => requestAnimationFrame(ensureVisibleMainPanel));
@@ -1545,6 +1572,7 @@ function runLyricProgressScenario() {
   }
   updateLyricsHighlight(88.2, true);
   const endScrollLayout = collectBrowserSmokeImmersiveLayoutState();
+  const topLyricShard = collectBrowserSmokeTopLyricShardState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1558,9 +1586,52 @@ function runLyricProgressScenario() {
     relativeEnhancedProgress,
     denseWordPerformance,
     endScrollLayout,
+    topLyricShard,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
+  };
+}
+
+function collectBrowserSmokeTopLyricShardState() {
+  const track = createBrowserSmokeTrack({
+    id: "browser-smoke-top-lyric-shard-track",
+    name: "Browser Smoke Top Lyric Shard Track",
+    durationSeconds: 12,
+    lyricsText: [
+      "[00:00.00]<0.00>满<0.30>世<0.60>界<0.90>嘻<1.20>嘻<1.50>哈<1.80>哈",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+
+  state.lyricOffsetSeconds = 0;
+  state.currentTrack = track;
+  state.queue = [track];
+  state.tracks = [track];
+  state.filteredTracks = [track];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(track);
+  setPlayerEnabled(true);
+  switchView("home", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.95, true);
+
+  const text = topLyricCurrent?.textContent?.trim() || "";
+  const charCount = topLyricCharacterSpans.length;
+  const timingCount = topLyricCharacterTimings.filter(Number.isFinite).length;
+  triggerNextWord(0);
+  const firstSpanClass = topLyricCharacterSpans[0]?.className || "";
+  const canvasCountAfterTrigger = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  cancelTopLyricShardEffects();
+  const canvasCountAfterCleanup = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+
+  return {
+    text,
+    charCount,
+    timingCount,
+    firstSpanClass,
+    canvasCountAfterTrigger,
+    canvasCountAfterCleanup,
   };
 }
 
@@ -7383,13 +7454,14 @@ function renderTopLyricFocus(line) {
   if (!shouldShow) {
     topLyricOriginal.textContent = "";
     topLyricCurrent.textContent = "播放歌曲后显示歌词。";
+    resetTopLyricShardState();
     updateTopbarLyricState();
     return;
   }
 
   topLyricOriginal.textContent = line.originalText || "";
   topLyricOriginal.hidden = !line.originalText;
-  topLyricCurrent.textContent = line.text || line.originalText || "";
+  renderTopLyricCharacters(line);
   updateTopbarLyricState();
 }
 
@@ -7404,6 +7476,546 @@ function updateTopbarLyricState() {
   );
 
   document.body.classList.toggle("topbar-lyric-active", shouldShowLyric);
+  if (shouldShowLyric) {
+    syncTopLyricShardLoop();
+  } else {
+    resetTopLyricShardState({ keepText: true, alignOnResume: true });
+  }
+}
+
+// 顶栏歌词进入播放态时，将整句拆成单字 span，后续由时间轴逐字触发碎裂。
+function renderTopLyricCharacters(line) {
+  const text = line?.text || line?.originalText || "";
+  const signature = [
+    state.currentTrack?.Id || "",
+    state.activeLyricIndex,
+    line?.time ?? "",
+    text,
+    line?.wordTimeline?.map((word) => `${word.time}:${word.value}`).join("|") || "",
+  ].join("::");
+
+  if (signature === topLyricRenderedSignature) {
+    return;
+  }
+
+  cancelTopLyricShardEffects();
+  topLyricRenderedSignature = signature;
+  topLyricTriggeredWordIndex = -1;
+  topLyricAlignPastOnNextLoop = false;
+  topLyricCharacterSpans = [];
+  topLyricCharacterTimings = [];
+  topLyricCurrent.replaceChildren(buildTopLyricCharacterFragment(text, line));
+}
+
+// DOM 拆分：每个字符一个 span，CSS 默认 opacity 0.6，触发后切到 is-sharded。
+function buildTopLyricCharacterFragment(text, line) {
+  const wrapper = document.createElement("span");
+  wrapper.className = "top-lyric-text";
+  wrapper.setAttribute("aria-label", text);
+  wrapper.dataset.topLyricText = text;
+
+  Array.from(text || " ").forEach((character, index) => {
+    const span = document.createElement("span");
+    span.className = "top-lyric-char";
+    span.textContent = character;
+    span.dataset.charIndex = String(index);
+    span.setAttribute("aria-hidden", "true");
+    wrapper.append(span);
+    topLyricCharacterSpans[index] = span;
+  });
+
+  topLyricCharacterTimings = buildTopLyricCharacterTimings(text, line);
+  return wrapper;
+}
+
+// 优先使用增强 LRC 的逐字时间；没有逐字时间时按当前行时长均分。
+function buildTopLyricCharacterTimings(text, line) {
+  const characters = Array.from(text || " ");
+  if (!characters.length) {
+    return [];
+  }
+
+  const wordTimeline = Array.isArray(line?.wordTimeline) ? line.wordTimeline : [];
+  if (wordTimeline.length && doesTopLyricWordTimelineMatchText(text, wordTimeline)) {
+    return mapTopLyricWordTimelineToCharacters(characters, wordTimeline, Number(line?.time));
+  }
+
+  const start = Number(line?.time);
+  const timelineIndex = state.lyricTimelineIndexByLineIndex[state.activeLyricIndex] ?? -1;
+  const nextEntry = timelineIndex >= 0 ? state.lyricTimeline[timelineIndex + 1] : null;
+  const end = getLyricWordProgressEndSeconds(start, nextEntry, characters.length);
+  const duration = Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? end - start
+    : Math.max(1.2, characters.length * 0.12);
+
+  return characters.map((character, index) => (
+    character.trim()
+      ? start + ((duration * index) / Math.max(1, characters.length))
+      : NaN
+  ));
+}
+
+// 双语歌词可能显示译文，但 wordTimeline 来自原文；不匹配时回退到均分，避免错位。
+function doesTopLyricWordTimelineMatchText(text, wordTimeline) {
+  const timelineText = wordTimeline.map((word) => String(word?.value || "")).join("");
+  const normalize = (value) => String(value || "").replace(/\s+/g, "").trim();
+  return normalize(timelineText) === normalize(text);
+}
+
+function mapTopLyricWordTimelineToCharacters(characters, wordTimeline, fallbackStart) {
+  const timings = new Array(characters.length).fill(NaN);
+  let cursor = 0;
+
+  wordTimeline.forEach((word, wordIndex) => {
+    const value = String(word?.value || "");
+    const wordCharacters = Array.from(value.trim() || value);
+    const start = Number(word?.time);
+    const nextStart = Number(wordTimeline[wordIndex + 1]?.time);
+    const explicitEnd = Number(word?.endTime);
+    const end = Number.isFinite(explicitEnd) && explicitEnd > start
+      ? explicitEnd
+      : Number.isFinite(nextStart) && nextStart > start
+      ? nextStart
+      : start + Math.max(0.16, wordCharacters.length * 0.08);
+
+    while (cursor < characters.length && !characters[cursor].trim()) {
+      cursor += 1;
+    }
+
+    wordCharacters.forEach((character, characterIndex) => {
+      while (cursor < characters.length && characters[cursor] !== character && !characters[cursor].trim()) {
+        cursor += 1;
+      }
+
+      if (cursor >= characters.length) {
+        return;
+      }
+
+      timings[cursor] = Number.isFinite(start)
+        ? start + (((end - start) * characterIndex) / Math.max(1, wordCharacters.length))
+        : fallbackStart;
+      cursor += 1;
+    });
+  });
+
+  return timings.map((time, index) => (
+    Number.isFinite(time)
+      ? time
+      : (characters[index].trim() ? fallbackStart : NaN)
+  ));
+}
+
+// 顶栏专用轻量 RAF：只在播放、顶栏歌词可见、未开启 reduced-motion 时运行。
+function syncTopLyricShardLoop() {
+  if (!shouldRunTopLyricShardLoop()) {
+    stopTopLyricShardLoop();
+    return;
+  }
+
+  if (topLyricAlignPastOnNextLoop) {
+    alignTopLyricShardStateToTime(getAdjustedLyricSeconds(getLyricPlaybackTimeSeconds()));
+    topLyricAlignPastOnNextLoop = false;
+  }
+
+  if (!topLyricShardFrame) {
+    topLyricShardFrame = requestAnimationFrame(updateTopLyricShardFrame);
+  }
+}
+
+function shouldRunTopLyricShardLoop() {
+  return Boolean(
+    topLyricFocus
+      && !topLyricFocus.hidden
+      && document.body.classList.contains("topbar-lyric-active")
+      && topLyricCharacterSpans.length
+      && topLyricCharacterTimings.length
+      && state.currentTrack
+      && audioPlayer.src
+      && !audioPlayer.paused
+      && !audioPlayer.ended
+      && document.visibilityState !== "hidden"
+      && !isTopbarMenuInteractionActive()
+      && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function isTopbarMenuInteractionActive() {
+  return Boolean(
+    topTabs
+      && (
+        topTabs.matches(":hover")
+        || topTabs.contains(document.activeElement)
+      )
+  );
+}
+
+function updateTopLyricShardFrame() {
+  topLyricShardFrame = 0;
+
+  if (!shouldRunTopLyricShardLoop()) {
+    return;
+  }
+
+  const lyricSeconds = getAdjustedLyricSeconds(getLyricPlaybackTimeSeconds());
+  const nextIndex = findTopLyricShardIndex(lyricSeconds);
+
+  if (nextIndex >= 0) {
+    for (let index = topLyricTriggeredWordIndex + 1; index <= nextIndex; index += 1) {
+      triggerNextWord(index);
+    }
+    topLyricTriggeredWordIndex = Math.max(topLyricTriggeredWordIndex, nextIndex);
+  }
+
+  syncTopLyricShardLoop();
+}
+
+function findTopLyricShardIndex(lyricSeconds) {
+  if (!Number.isFinite(lyricSeconds)) {
+    return -1;
+  }
+
+  let result = topLyricTriggeredWordIndex;
+  for (let index = topLyricTriggeredWordIndex + 1; index < topLyricCharacterTimings.length; index += 1) {
+    const time = topLyricCharacterTimings[index];
+
+    if (!Number.isFinite(time)) {
+      continue;
+    }
+
+    if (time > lyricSeconds) {
+      break;
+    }
+
+    result = index;
+  }
+
+  return result;
+}
+
+// Timeline Controller：外部传入字符索引时，隐藏该字符并在原位置触发 Canvas 碎裂。
+function triggerNextWord(index) {
+  const span = topLyricCharacterSpans[index];
+  if (!span || span.classList.contains("is-sharded")) {
+    return;
+  }
+
+  span.classList.add("is-sharded");
+  spawnTopLyricShardCanvas(span);
+}
+
+function alignTopLyricShardStateToTime(lyricSeconds) {
+  const currentIndex = findTopLyricShardIndex(lyricSeconds);
+
+  topLyricCharacterSpans.forEach((span, index) => {
+    span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(topLyricCharacterTimings[index]));
+  });
+  topLyricTriggeredWordIndex = currentIndex;
+}
+
+// 为当前字符创建一个微型 canvas，覆盖在字符原位上方，动画结束后销毁。
+function spawnTopLyricShardCanvas(span) {
+  if (!topLyricFocus || !topLyricFocus.isConnected || !span.isConnected) {
+    return;
+  }
+
+  const spanRect = span.getBoundingClientRect();
+  const focusRect = topLyricFocus.getBoundingClientRect();
+  if (!spanRect.width || !spanRect.height || !focusRect.width || !focusRect.height) {
+    return;
+  }
+
+  const dpr = Math.min(window.devicePixelRatio || 1, TOP_LYRIC_SHARD_MAX_DPR);
+  const canvas = document.createElement("canvas");
+  const width = Math.ceil(spanRect.width + (TOP_LYRIC_SHARD_PADDING * 2));
+  const height = Math.ceil(spanRect.height + (TOP_LYRIC_SHARD_PADDING * 2));
+  canvas.className = "top-lyric-shard-canvas";
+  canvas.width = Math.ceil(width * dpr);
+  canvas.height = Math.ceil(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  canvas.style.left = `${spanRect.left - focusRect.left - TOP_LYRIC_SHARD_PADDING}px`;
+  canvas.style.top = `${spanRect.top - focusRect.top - TOP_LYRIC_SHARD_PADDING}px`;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return;
+  }
+
+  ctx.scale(dpr, dpr);
+  const fontStyle = window.getComputedStyle(span);
+  const shards = createTopLyricShards(span.textContent || "", spanRect, fontStyle, {
+    color: topLyricShardOptions.color || TOP_LYRIC_SHARD_DEFAULT_COLOR,
+    accentColor: topLyricShardOptions.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR,
+    glowColor: topLyricShardOptions.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR,
+    width,
+    height,
+  });
+
+  if (!shards.length) {
+    return;
+  }
+
+  topLyricFocus.append(canvas);
+  const effect = { canvas, ctx, shards, width, height };
+  topLyricShardEffects.push(effect);
+  requestAnimationFrame(() => animateTopLyricShardEffect(effect));
+}
+
+// Shard System：从字形像素中取样，生成 20-30 个带速度、旋转、寿命的不规则碎片。
+function createTopLyricShards(character, rect, fontStyle, options) {
+  const count = randomInteger(TOP_LYRIC_SHARD_MIN_COUNT, TOP_LYRIC_SHARD_MAX_COUNT);
+  const centerX = TOP_LYRIC_SHARD_PADDING + (rect.width / 2);
+  const centerY = TOP_LYRIC_SHARD_PADDING + (rect.height / 2);
+  const fontSize = parseFloat(fontStyle.fontSize) || rect.height || 16;
+  const color = options.color || TOP_LYRIC_SHARD_DEFAULT_COLOR;
+  const accentColor = options.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR;
+  const glowColor = options.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
+  const points = sampleTopLyricGlyphPoints(character, {
+    count,
+    width: options.width,
+    height: options.height,
+    centerX,
+    centerY,
+    font: `${fontStyle.fontWeight || 800} ${fontSize}px ${fontStyle.fontFamily || "system-ui"}`,
+  });
+
+  return points.map((point) => {
+    const size = Math.max(2.4, Math.min(rect.width || fontSize, rect.height || fontSize) * (0.16 + Math.random() * 0.2));
+
+    return {
+      x: point.x,
+      y: point.y,
+      vx: Math.random() * 3 + 1,
+      vy: -(Math.random() * 4 + 2),
+      angle: Math.random() * Math.PI * 2,
+      vAngle: (Math.random() - 0.5) * 0.36,
+      alpha: 1,
+      size,
+      color,
+      accentColor,
+      glowColor,
+      character,
+      centerX,
+      centerY,
+      font: `${fontStyle.fontWeight || 800} ${fontSize}px ${fontStyle.fontFamily || "system-ui"}`,
+      points: createTopLyricShardPolygon(size),
+    };
+  });
+}
+
+// 先把字符画到离屏 Canvas，再从不透明像素取样，让碎片起点贴合字形。
+function sampleTopLyricGlyphPoints(character, options) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(options.width));
+  canvas.height = Math.max(1, Math.ceil(options.height));
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  if (!ctx) {
+    return fallbackTopLyricShardPoints(options);
+  }
+
+  // 先把当前字符绘制到离屏 Canvas，再从不透明像素里取样，碎片就会贴合字形而不是随机散开。
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#fff";
+  ctx.font = options.font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(character, options.centerX, options.centerY);
+
+  const pixels = [];
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let y = 0; y < canvas.height; y += 2) {
+    for (let x = 0; x < canvas.width; x += 2) {
+      if (imageData[((y * canvas.width) + x) * 4 + 3] > 48) {
+        pixels.push({ x, y });
+      }
+    }
+  }
+
+  if (!pixels.length) {
+    return fallbackTopLyricShardPoints(options);
+  }
+
+  const picked = [];
+  const fallbackPoints = fallbackTopLyricShardPoints(options);
+  const minDistance = Math.max(2, Math.min(canvas.width, canvas.height) / 7);
+  while (picked.length < options.count && pixels.length) {
+    const candidateIndex = Math.floor(Math.random() * pixels.length);
+    const candidate = pixels.splice(candidateIndex, 1)[0];
+    const overlaps = picked.some((point) => {
+      const dx = point.x - candidate.x;
+      const dy = point.y - candidate.y;
+      return Math.sqrt((dx * dx) + (dy * dy)) < minDistance;
+    });
+
+    if (!overlaps || picked.length < 8) {
+      picked.push(candidate);
+    }
+  }
+
+  while (picked.length < options.count) {
+    picked.push(
+      pixels[Math.floor(Math.random() * pixels.length)]
+        || fallbackPoints[picked.length % fallbackPoints.length]
+        || { x: options.centerX, y: options.centerY }
+    );
+  }
+
+  return picked.slice(0, options.count);
+}
+
+function fallbackTopLyricShardPoints(options) {
+  return Array.from({ length: options.count || TOP_LYRIC_SHARD_MIN_COUNT }, () => ({
+    x: options.centerX + ((Math.random() - 0.5) * Math.max(4, options.width * 0.48)),
+    y: options.centerY + ((Math.random() - 0.5) * Math.max(4, options.height * 0.48)),
+  }));
+}
+
+function createTopLyricShardPolygon(size) {
+  const sides = randomInteger(3, 5);
+  return Array.from({ length: sides }, (_, index) => {
+    const angle = ((Math.PI * 2) / sides) * index + ((Math.random() - 0.5) * 0.45);
+    const radius = size * (0.42 + Math.random() * 0.45);
+    return {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    };
+  });
+}
+
+// Canvas 动画循环：位置、空气阻力、重力、自转和透明度全部逐帧更新。
+function animateTopLyricShardEffect(effect) {
+  if (!effect || !effect.canvas.isConnected) {
+    cleanupTopLyricShardEffect(effect);
+    return;
+  }
+
+  const { ctx, shards, width, height } = effect;
+  ctx.clearRect(0, 0, width, height);
+
+  for (let index = shards.length - 1; index >= 0; index -= 1) {
+    const shard = shards[index];
+    shard.x += shard.vx;
+    shard.y += shard.vy;
+    shard.vx *= TOP_LYRIC_SHARD_DRAG;
+    shard.vy *= TOP_LYRIC_SHARD_DRAG;
+    shard.vy += TOP_LYRIC_SHARD_GRAVITY;
+    shard.angle += shard.vAngle;
+    shard.alpha -= TOP_LYRIC_SHARD_FADE;
+
+    if (shard.alpha <= 0) {
+      shards.splice(index, 1);
+      continue;
+    }
+
+    renderTopLyricShard(ctx, shard);
+  }
+
+  if (shards.length) {
+    requestAnimationFrame(() => animateTopLyricShardEffect(effect));
+  } else {
+    cleanupTopLyricShardEffect(effect);
+  }
+}
+
+function renderTopLyricShard(ctx, shard) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, shard.alpha);
+  ctx.translate(shard.x, shard.y);
+  ctx.rotate(shard.angle);
+  ctx.shadowBlur = 4;
+  ctx.shadowColor = shard.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
+
+  const gradient = ctx.createLinearGradient(-shard.size, -shard.size, shard.size, shard.size);
+  gradient.addColorStop(0, shard.color);
+  gradient.addColorStop(0.62, shard.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR);
+  gradient.addColorStop(1, "rgba(255, 238, 214, 0.82)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  shard.points.forEach((point, index) => {
+    if (index === 0) {
+      ctx.moveTo(point.x, point.y);
+    } else {
+      ctx.lineTo(point.x, point.y);
+    }
+  });
+  ctx.closePath();
+  ctx.fill();
+
+  // 在碎片中心压一层极淡的字形采样感，避免碎片变成普通圆点或无意义色块。
+  ctx.globalAlpha = Math.max(0, shard.alpha * 0.16);
+  ctx.font = shard.font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.fillText(shard.character, 0, 0);
+  ctx.restore();
+}
+
+// 动画结束或顶栏退出歌词态时，移除 canvas 并清空粒子数组，避免内存泄漏。
+function cleanupTopLyricShardEffect(effect) {
+  if (!effect) {
+    return;
+  }
+
+  effect.canvas.remove();
+  effect.shards.length = 0;
+  topLyricShardEffects = topLyricShardEffects.filter((item) => item !== effect);
+}
+
+function stopTopLyricShardLoop() {
+  if (topLyricShardFrame) {
+    cancelAnimationFrame(topLyricShardFrame);
+    topLyricShardFrame = 0;
+  }
+}
+
+function resetTopLyricShardState(options = {}) {
+  stopTopLyricShardLoop();
+  cancelTopLyricShardEffects();
+  topLyricTriggeredWordIndex = -1;
+  topLyricAlignPastOnNextLoop = Boolean(options.alignOnResume);
+
+  topLyricCharacterSpans.forEach((span) => {
+    span?.classList?.remove("is-sharded");
+  });
+
+  if (!options.keepText) {
+    topLyricRenderedSignature = "";
+    topLyricCharacterSpans = [];
+    topLyricCharacterTimings = [];
+  }
+}
+
+function cancelTopLyricShardEffects() {
+  topLyricShardEffects.forEach((effect) => {
+    effect.canvas.remove();
+    effect.shards.length = 0;
+  });
+  topLyricShardEffects = [];
+}
+
+function randomInteger(min, max) {
+  return Math.floor(Math.random() * ((max - min) + 1)) + min;
+}
+
+function setTopLyricShardOptions(options = {}) {
+  topLyricShardOptions = {
+    ...topLyricShardOptions,
+    ...options,
+  };
+}
+
+function handleTopbarMenuInteractionStart() {
+  if (!document.body.classList.contains("topbar-lyric-active")) {
+    return;
+  }
+
+  resetTopLyricShardState({ keepText: true, alignOnResume: true });
+}
+
+function handleTopbarMenuInteractionEnd() {
+  requestAnimationFrame(updateTopbarLyricState);
 }
 
 function focusActiveLyricLine() {

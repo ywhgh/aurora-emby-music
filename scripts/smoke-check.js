@@ -156,6 +156,10 @@ function checkCss() {
   assert(css.includes("body.topbar-lyric-active .top-tabs:hover .tab"), "Hovering the topbar lyrics should restore the menu tabs");
   assert(css.includes(".top-lyric-current"), "Topbar lyric text should have a dedicated translated/current line style");
   assert(css.includes(".top-lyric-focus[hidden]"), "Hidden topbar lyrics should not leave an invisible overlay");
+  assert(css.includes(".top-lyric-char"), "Topbar lyric shard effect should split lyric text into character spans");
+  assert(/\.top-lyric-char\s*\{[\s\S]*?opacity:\s*0\.6;/.test(css), "Topbar lyric characters should start in the unplayed opacity state");
+  assert(css.includes(".top-lyric-char.is-sharded"), "Topbar lyric shard effect should hide triggered characters");
+  assert(css.includes(".top-lyric-shard-canvas"), "Topbar lyric shard effect should render temporary canvases");
   assert(/\.lyric-line \.lyric-original \{[\s\S]*?font-size:\s*0\.8rem;/.test(css), "Bilingual lyric original text should be smaller than the translated text");
   assert(/\.lyric-line \.lyric-translated \{[\s\S]*?font-size:\s*1rem;/.test(css), "Bilingual lyric translated text should be larger than the original text");
 }
@@ -682,6 +686,23 @@ function checkAppFunctionReferences() {
   assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state");
   assert(app.includes("document.body.classList.toggle(\"topbar-lyric-active\", shouldShowLyric)"), "Playing lyrics should toggle the topbar lyric state class");
   assert(/function updatePlaybackState\(\) \{[\s\S]*?updateTopbarLyricState\(\);[\s\S]*?updatePlayButtonLabels\(\);/.test(app), "Playback state updates should refresh the topbar lyric/menu mode");
+  assert(app.includes("function buildTopLyricCharacterFragment"), "Topbar lyric shard effect should split lyrics into character spans");
+  assert(app.includes("function triggerNextWord(index)"), "Topbar lyric shard effect should expose a triggerNextWord controller");
+  assert(app.includes("function spawnTopLyricShardCanvas"), "Topbar lyric shard effect should create a canvas over the active character");
+  assert(app.includes("function createTopLyricShards"), "Topbar lyric shard effect should create shard objects");
+  assert(app.includes("function sampleTopLyricGlyphPoints"), "Topbar lyric shard effect should sample glyph pixels before creating shards");
+  assert(app.includes('const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)"'), "Topbar shard particles should use the red brand color by default");
+  assert(app.includes("TOP_LYRIC_SHARD_ACCENT_COLOR"), "Topbar shard particles should include a colored accent instead of fading to plain white");
+  assert(app.includes("requestAnimationFrame(updateTopLyricShardFrame)"), "Topbar lyric shard timeline should be RAF-driven");
+  assert(app.includes("requestAnimationFrame(() => animateTopLyricShardEffect(effect))"), "Topbar shard canvas animation should be RAF-driven");
+  assert(/vx:\s*Math\.random\(\) \* 3 \+ 1/.test(app), "Topbar shard physics should launch particles to the right");
+  assert(/vy:\s*-\(Math\.random\(\) \* 4 \+ 2\)/.test(app), "Topbar shard physics should launch particles upward");
+  assert(app.includes("shard.vx *= TOP_LYRIC_SHARD_DRAG"), "Topbar shard physics should apply air drag");
+  assert(app.includes("shard.vy += TOP_LYRIC_SHARD_GRAVITY"), "Topbar shard physics should apply gravity");
+  assert(app.includes("shard.alpha -= TOP_LYRIC_SHARD_FADE"), "Topbar shard physics should fade particles out");
+  assert(app.includes("effect.canvas.remove()"), "Topbar shard cleanup should remove canvases");
+  assert(app.includes("topTabs?.addEventListener(\"pointerenter\", handleTopbarMenuInteractionStart)"), "Topbar menu hover should pause shard lyrics");
+  assert(app.includes("prefers-reduced-motion: reduce"), "Topbar shard effect should respect reduced motion");
   assert(app.includes("function clearPlaybackCache"), "Missing playback cache clearing action");
   assert(app.includes("function takePreloadedPlaybackSession"), "Missing playback preloaded session handoff");
   assert(app.includes("externalResolveRetryTrackId"), "External source playback should track one-shot fresh resolve retries");

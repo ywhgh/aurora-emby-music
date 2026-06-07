@@ -564,6 +564,7 @@ function checkPageState(check, page) {
   const relativeEnhancedProgress = lyricProgress.relativeEnhancedProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
+  const topLyricShard = lyricProgress.topLyricShard || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
 
@@ -663,6 +664,14 @@ function checkPageState(check, page) {
   assert(endScrollLayout.shellPinned === true, `${label} immersive player should remain pinned to the viewport: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.shellBottomGapPx <= 1, `${label} immersive player should not reveal a bottom gap: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.activeLineInsideList === true, `${label} active ending lyric should remain inside the lyric list viewport: ${JSON.stringify(endScrollLayout)}`);
+  assert(topLyricShard.text === "满世界嘻嘻哈哈", `${label} top lyric shard text mismatch: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.charCount === 7, `${label} top lyric shard should split 7 characters: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.timingCount === 7, `${label} top lyric shard should map character timings: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.firstSpanClass?.includes("is-sharded"), `${label} top lyric shard trigger should hide the activated character: ${JSON.stringify(topLyricShard)}`);
+  if (check.name !== "mobile") {
+    assert(topLyricShard.canvasCountAfterTrigger >= 1, `${label} top lyric shard trigger should create a canvas: ${JSON.stringify(topLyricShard)}`);
+  }
+  assert(topLyricShard.canvasCountAfterCleanup === 0, `${label} top lyric shard cleanup should remove canvases: ${JSON.stringify(topLyricShard)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

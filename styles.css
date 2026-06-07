@@ -948,6 +948,34 @@ input:disabled {
   line-height: 1.22;
 }
 
+.top-lyric-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-lyric-char {
+  display: inline-block;
+  opacity: 0.6;
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  will-change: opacity;
+}
+
+.top-lyric-char.is-sharded {
+  opacity: 0;
+  transform: translateY(-0.04rem);
+}
+
+.top-lyric-shard-canvas {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
 body.topbar-lyric-active .top-tabs .tab {
   opacity: 0;
   pointer-events: none;
