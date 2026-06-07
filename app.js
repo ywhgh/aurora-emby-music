@@ -1684,6 +1684,15 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   });
   const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
   let progressWriteCount = 0;
+  const progressWriteValues = new Set();
+  let progressFormattedWriteCount = 0;
+  let denseProgressWriteCount = 0;
+  let denseProgressUniqueWriteCount = 0;
+  let denseProgressFormattedWriteCount = 0;
+  let progressWriteCountBeforeTimeUpdate = 0;
+  let progressWriteCountAfterRafTimeUpdate = 0;
+  let progressWriteCountAfterRegularTimeUpdate = 0;
+  let finalState = null;
 
   state.lyricOffsetSeconds = 0;
   state.currentTrack = track;
@@ -1698,7 +1707,12 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
 
   CSSStyleDeclaration.prototype.setProperty = function setBrowserSmokeStyleProperty(propertyName, ...args) {
     if (propertyName === "--word-progress") {
+      const value = String(args[0] || "");
       progressWriteCount += 1;
+      progressWriteValues.add(value);
+      if (/^(?:0|100|\d{1,2}\.\d)%$/.test(value)) {
+        progressFormattedWriteCount += 1;
+      }
     }
 
     return originalSetProperty.call(this, propertyName, ...args);
@@ -1709,11 +1723,28 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     for (let index = 0; index < sampleCount; index += 1) {
       updateLyricsHighlight(index * 0.075);
     }
+    denseProgressWriteCount = progressWriteCount;
+    denseProgressUniqueWriteCount = progressWriteValues.size;
+    denseProgressFormattedWriteCount = progressFormattedWriteCount;
+    finalState = collectBrowserSmokeLyricState();
+    progressWriteCountBeforeTimeUpdate = progressWriteCount;
+    const existingLyricProgressFrame = lyricProgressFrame;
+    const existingLyricClockRunning = lyricClockIsRunning;
+    lyricProgressFrame = lyricProgressFrame || 1;
+    lyricClockIsRunning = true;
+    updateProgress();
+    progressWriteCountAfterRafTimeUpdate = progressWriteCount;
+    lyricProgressFrame = 0;
+    lyricClockIsRunning = false;
+    updateProgress();
+    progressWriteCountAfterRegularTimeUpdate = progressWriteCount;
+    lyricProgressFrame = existingLyricProgressFrame;
+    lyricClockIsRunning = existingLyricClockRunning;
   } finally {
     CSSStyleDeclaration.prototype.setProperty = originalSetProperty;
   }
   const durationMs = Math.round((getMonotonicNowMs() - startedAt) * 100) / 100;
-  const finalState = collectBrowserSmokeLyricState();
+  finalState = finalState || collectBrowserSmokeLyricState();
   const progressRatios = finalState.wordProgress.map((value) => Number(value || 0) / 100);
 
   return {
@@ -1721,7 +1752,11 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     sampleCount,
     durationMs,
     averageUpdateMs: Math.round((durationMs / sampleCount) * 1000) / 1000,
-    progressWriteCount,
+    progressWriteCount: denseProgressWriteCount,
+    progressUniqueWriteCount: denseProgressUniqueWriteCount,
+    progressFormattedWriteCount: denseProgressFormattedWriteCount,
+    rafTimeUpdateProgressWriteCount: progressWriteCountAfterRafTimeUpdate - progressWriteCountBeforeTimeUpdate,
+    regularTimeUpdateProgressWriteCount: progressWriteCountAfterRegularTimeUpdate - progressWriteCountAfterRafTimeUpdate,
     activeIndex: finalState.activeIndex,
     maxWordProgress: Math.max(...finalState.wordProgress),
     partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
@@ -8541,7 +8576,7 @@ function getTimedLyricWordProgress(lyricSeconds, start, end) {
     return 0;
   }
 
-  return Math.round(clamp((lyricSeconds - start) / (end - start), 0, 1) * 1000) / 10;
+  return normalizeLyricWordProgressPercent(clamp((lyricSeconds - start) / (end - start), 0, 1) * 100);
 }
 
 function scheduleTimedLyricProgressResumeIfIdle(isComplete, lyricSeconds, nextEntry) {
@@ -8615,7 +8650,7 @@ function updateLyricWordProgressWindow(words, litWords) {
   const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
   const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
   const nextPartialProgress = nextPartialWordIndex >= 0
-    ? Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10
+    ? normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)
     : 0;
   const previousFullWordCount = lyricProgressFullWordCount;
   const previousPartialWordIndex = lyricProgressPartialWordIndex;
@@ -8688,7 +8723,7 @@ function setLyricWordProgress(word, percent) {
     return;
   }
 
-  const normalizedPercent = clamp(Number(percent) || 0, 0, 100);
+  const normalizedPercent = normalizeLyricWordProgressPercent(percent);
   const lastPercent = Number.isFinite(word._lyricProgress) ? word._lyricProgress : -1;
 
   if (Math.abs(lastPercent - normalizedPercent) < LYRIC_PROGRESS_EPSILON) {
@@ -8696,7 +8731,20 @@ function setLyricWordProgress(word, percent) {
   }
 
   word._lyricProgress = normalizedPercent;
-  word.style.setProperty("--word-progress", `${normalizedPercent}%`);
+  word.style.setProperty("--word-progress", formatLyricWordProgressPercent(normalizedPercent));
+}
+
+function normalizeLyricWordProgressPercent(percent) {
+  return Math.round(clamp(Number(percent) || 0, 0, 100) * 10) / 10;
+}
+
+function formatLyricWordProgressPercent(percent) {
+  const normalizedPercent = normalizeLyricWordProgressPercent(percent);
+  if (normalizedPercent === 0 || normalizedPercent === 100) {
+    return `${normalizedPercent}%`;
+  }
+
+  return `${normalizedPercent.toFixed(1)}%`;
 }
 
 function renderUpNext() {
@@ -17107,11 +17155,19 @@ function updateProgress(options = {}) {
   const shouldSyncLyrics = options.syncLyrics !== false;
 
   setProgressDisplay(current, duration);
-  if (shouldSyncLyrics) {
+  if (shouldSyncLyrics && shouldSyncLyricsFromProgressUpdate()) {
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(current));
   }
   updateMediaSessionPosition();
   renderPlayerNextPreview();
+}
+
+function shouldSyncLyricsFromProgressUpdate() {
+  return !(
+    isImmersiveLyricsVisible()
+    && lyricClockIsRunning
+    && (lyricProgressFrame || lyricProgressResumeTimer)
+  );
 }
 
 function setProgressDisplay(current, duration) {

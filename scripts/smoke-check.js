@@ -257,6 +257,9 @@ function checkLyrics() {
   assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?refreshLyricsForPlaybackResume\(\);/.test(app), "Audio play should immediately refresh lyrics from the smooth playback clock");
   assert(/function handleAudioPause\(\) \{[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Audio pause should freeze the smooth lyric playback clock");
   assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\);/.test(app), "Audio timeupdate should recalibrate the smooth lyric playback clock");
+  assert(app.includes("function shouldSyncLyricsFromProgressUpdate"), "Progress updates should avoid competing with the immersive lyric RAF loop");
+  assert(/function shouldSyncLyricsFromProgressUpdate\(\) \{[\s\S]*?&& lyricClockIsRunning[\s\S]*?&& \(lyricProgressFrame \|\| lyricProgressResumeTimer\)/.test(app), "Progress update lyric sync should defer to the active smooth lyric clock and RAF loop");
+  assert(/if \(shouldSyncLyrics && shouldSyncLyricsFromProgressUpdate\(\)\) \{[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Playback timeupdate should not double-drive immersive word progress while RAF is active");
   assert(/function handleAudioSeeked\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeked should recalibrate and force-refresh lyrics");
   assert(app.includes('audioPlayer.addEventListener("ratechange", handleAudioRateChange)'), "Playback rate changes should recalibrate lyric timing");
   assert(/function handleAudioRateChange\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateMediaSessionPosition\(\);/.test(app), "Audio rate changes should sync lyric clock before updating media session position");
@@ -328,7 +331,7 @@ function checkLyrics() {
   assert(!app.includes("word.dataset.wordProgress = String(normalizedPercent)"), "Lyric word progress should not write data attributes on every frame");
   assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
   assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
-  assert(app.includes('word.style.setProperty("--word-progress", `${normalizedPercent}%`)'), "Lyric word progress should drive the visible text fill percentage");
+  assert(app.includes('word.style.setProperty("--word-progress", formatLyricWordProgressPercent(normalizedPercent))'), "Lyric word progress should drive stable formatted text fill percentages");
   assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not use transform ratios that visually compress glyphs");
   const wordAfterMatch = css.match(/\.immersive-lyric-list \.word::after \{[^}]*\}/);
   const wordAfterRule = wordAfterMatch?.[0] || "";
@@ -338,8 +341,10 @@ function checkLyrics() {
   assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");
   assert(!/\.immersive-lyric-list \.word \{[\s\S]*?background:\s*[\s\S]*?background-clip: text;/.test(css), "Immersive lyric word highlights should not return to background-gradient text fills");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
+  assert(app.includes("function normalizeLyricWordProgressPercent"), "Lyric word progress should normalize percentages before hot-path DOM writes");
+  assert(app.includes("function formatLyricWordProgressPercent"), "Lyric word progress should format percentages consistently before CSS writes");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
-  assert(app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
+  assert(app.includes("normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
   assert(!app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should not be quantized to whole-percent steps");
   assert(app.includes("lyricProgressFullWordCount"), "Lyric word progress should cache the previous fully-lit word count");
   assert(app.includes("lyricProgressPartialWordIndex"), "Lyric word progress should cache the previous partial word index");
@@ -353,7 +358,7 @@ function checkLyrics() {
   assert(app.includes("targetSeconds - currentEntry.time > LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS"), "Lyric timeline jumps should not be advanced line by line");
   assert(/function seekToPosition\(positionSeconds, options = \{\}\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(position, true\);[\s\S]*?syncLyricProgressLoop\(\);/.test(app), "Manual seeks should immediately force-refresh lyric highlights");
   assert(/function handleAudioSeeked\(\) \{[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?state\.activeLyricTimelineIndex = -1;[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeks should reset lyric timeline cache and force-refresh lyric highlights without double-rendering");
-  assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics\) \{\s*updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass");
+  assert(/function updateProgress\(options = \{\}\) \{[\s\S]*?const shouldSyncLyrics = options\.syncLyrics !== false;[\s\S]*?if \(shouldSyncLyrics && shouldSyncLyricsFromProgressUpdate\(\)\) \{\s*updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Progress updates should allow seeked handlers to skip the regular lyric sync pass and avoid competing with RAF lyric progress");
   assert(!app.includes("state.lyricTimeline.findIndex"), "Lyric progress should not search the timeline every frame");
   assert(app.includes("function renderStaticLyricFocusIfNeeded"), "Static lyric views should skip redundant playback-time renders");
   assert(app.includes("lastStaticLyricRenderSignature"), "Static lyric views should cache their rendered state");

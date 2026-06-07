@@ -652,6 +652,10 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
   assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
   assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.progressFormattedWriteCount === denseWordPerformance.progressWriteCount, `${label} dense lyric progress should write normalized CSS progress values: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.progressUniqueWriteCount <= denseWordPerformance.progressWriteCount, `${label} dense lyric progress unique write count should be bounded by total writes: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.rafTimeUpdateProgressWriteCount === 0, `${label} active RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.regularTimeUpdateProgressWriteCount >= 0, `${label} regular timeupdate lyric sync should remain measurable after RAF handoff is disabled: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.averageUpdateMs < 4, `${label} dense lyric progress average update is too slow: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.partialWordCount <= 1, `${label} dense lyric progress should keep at most one partial word: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.maxRatio === 1, `${label} dense lyric in-memory progress should reach fully lit words: ${JSON.stringify(denseWordPerformance)}`);
