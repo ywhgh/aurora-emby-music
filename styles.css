@@ -911,6 +911,8 @@ input:disabled {
   align-content: center;
   padding: 0 0.8rem;
   overflow: hidden;
+  contain: paint;
+  isolation: isolate;
   color: var(--text);
   text-align: center;
   opacity: 0;
@@ -960,20 +962,21 @@ input:disabled {
   display: inline-block;
   opacity: 0.6;
   transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
+    opacity 0.16s ease,
+    transform 0.16s cubic-bezier(0.25, 1, 0.5, 1);
   will-change: opacity;
 }
 
 .top-lyric-char.is-sharded {
   opacity: 0;
-  transform: translateY(-0.04rem);
+  transform: translate3d(0.02rem, -0.02rem, 0) scale(0.98);
 }
 
 .top-lyric-shard-canvas {
   position: absolute;
   z-index: 2;
   pointer-events: none;
+  mix-blend-mode: multiply;
 }
 
 body.topbar-lyric-active .top-tabs .tab {

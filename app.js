@@ -122,12 +122,12 @@ const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
-const TOP_LYRIC_SHARD_MIN_COUNT = 20;
-const TOP_LYRIC_SHARD_MAX_COUNT = 30;
-const TOP_LYRIC_SHARD_PADDING = 18;
-const TOP_LYRIC_SHARD_DRAG = 0.98;
-const TOP_LYRIC_SHARD_GRAVITY = 0.1;
-const TOP_LYRIC_SHARD_FADE = 0.02;
+const TOP_LYRIC_SHARD_MIN_COUNT = 12;
+const TOP_LYRIC_SHARD_MAX_COUNT = 18;
+const TOP_LYRIC_SHARD_PADDING = 12;
+const TOP_LYRIC_SHARD_DRAG = 0.94;
+const TOP_LYRIC_SHARD_GRAVITY = 0.075;
+const TOP_LYRIC_SHARD_FADE = 0.055;
 const TOP_LYRIC_SHARD_MAX_DPR = 2;
 const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
 const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 177, 74, 0.9)";
@@ -7731,15 +7731,18 @@ function spawnTopLyricShardCanvas(span) {
 
   const dpr = Math.min(window.devicePixelRatio || 1, TOP_LYRIC_SHARD_MAX_DPR);
   const canvas = document.createElement("canvas");
-  const width = Math.ceil(spanRect.width + (TOP_LYRIC_SHARD_PADDING * 2));
-  const height = Math.ceil(spanRect.height + (TOP_LYRIC_SHARD_PADDING * 2));
+  const padding = getTopLyricShardPadding(spanRect, focusRect);
+  const width = Math.ceil(spanRect.width + (padding.x * 2));
+  const height = Math.ceil(spanRect.height + (padding.y * 2));
+  const left = clamp(spanRect.left - focusRect.left - padding.x, 0, Math.max(0, focusRect.width - width));
+  const top = clamp(spanRect.top - focusRect.top - padding.y, 0, Math.max(0, focusRect.height - height));
   canvas.className = "top-lyric-shard-canvas";
   canvas.width = Math.ceil(width * dpr);
   canvas.height = Math.ceil(height * dpr);
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  canvas.style.left = `${spanRect.left - focusRect.left - TOP_LYRIC_SHARD_PADDING}px`;
-  canvas.style.top = `${spanRect.top - focusRect.top - TOP_LYRIC_SHARD_PADDING}px`;
+  canvas.style.left = `${left}px`;
+  canvas.style.top = `${top}px`;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) {
@@ -7749,11 +7752,13 @@ function spawnTopLyricShardCanvas(span) {
   ctx.scale(dpr, dpr);
   const fontStyle = window.getComputedStyle(span);
   const shards = createTopLyricShards(span.textContent || "", spanRect, fontStyle, {
-    color: topLyricShardOptions.color || TOP_LYRIC_SHARD_DEFAULT_COLOR,
-    accentColor: topLyricShardOptions.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR,
-    glowColor: topLyricShardOptions.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR,
+    color: topLyricShardOptions.color || getTopLyricShardColor(span),
+    accentColor: topLyricShardOptions.accentColor || getTopLyricShardAccentColor(),
+    glowColor: topLyricShardOptions.glowColor || getTopLyricShardGlowColor(),
     width,
     height,
+    originX: spanRect.left - focusRect.left - left,
+    originY: spanRect.top - focusRect.top - top,
   });
 
   if (!shards.length) {
@@ -7766,11 +7771,40 @@ function spawnTopLyricShardCanvas(span) {
   syncTopLyricShardAnimationLoop();
 }
 
-// Shard System：从字形像素中取样，生成 20-30 个带速度、旋转、寿命的不规则碎片。
+function getTopLyricShardPadding(spanRect, focusRect) {
+  return {
+    x: Math.min(TOP_LYRIC_SHARD_PADDING, Math.max(6, focusRect.width / 24)),
+    y: Math.min(TOP_LYRIC_SHARD_PADDING, Math.max(6, spanRect.height * 0.62)),
+  };
+}
+
+function getTopLyricShardColor(span) {
+  const accent = window.getComputedStyle(document.documentElement)
+    .getPropertyValue("--now-accent")
+    .trim();
+
+  return accent || TOP_LYRIC_SHARD_DEFAULT_COLOR;
+}
+
+function getTopLyricShardAccentColor() {
+  return "rgba(255, 164, 92, 0.72)";
+}
+
+function getTopLyricShardGlowColor() {
+  const rgb = window.getComputedStyle(document.documentElement)
+    .getPropertyValue("--now-accent-rgb")
+    .trim();
+
+  return rgb ? `rgba(${rgb}, 0.32)` : TOP_LYRIC_SHARD_GLOW_COLOR;
+}
+
+// Shard System：从字形像素中取样，生成少量带速度、旋转、寿命的不规则碎片。
 function createTopLyricShards(character, rect, fontStyle, options) {
   const count = randomInteger(TOP_LYRIC_SHARD_MIN_COUNT, TOP_LYRIC_SHARD_MAX_COUNT);
-  const centerX = TOP_LYRIC_SHARD_PADDING + (rect.width / 2);
-  const centerY = TOP_LYRIC_SHARD_PADDING + (rect.height / 2);
+  const originX = Number.isFinite(options.originX) ? options.originX : TOP_LYRIC_SHARD_PADDING;
+  const originY = Number.isFinite(options.originY) ? options.originY : TOP_LYRIC_SHARD_PADDING;
+  const centerX = originX + (rect.width / 2);
+  const centerY = originY + (rect.height / 2);
   const fontSize = parseFloat(fontStyle.fontSize) || rect.height || 16;
   const color = options.color || TOP_LYRIC_SHARD_DEFAULT_COLOR;
   const accentColor = options.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR;
@@ -7785,15 +7819,16 @@ function createTopLyricShards(character, rect, fontStyle, options) {
   });
 
   return points.map((point) => {
-    const size = Math.max(2.4, Math.min(rect.width || fontSize, rect.height || fontSize) * (0.16 + Math.random() * 0.2));
+    const size = Math.max(1.4, Math.min(rect.width || fontSize, rect.height || fontSize) * (0.1 + Math.random() * 0.12));
+    const burst = Math.random();
 
     return {
       x: point.x,
       y: point.y,
-      vx: Math.random() * 3 + 1,
-      vy: -(Math.random() * 4 + 2),
+      vx: 0.45 + (burst * 1.6),
+      vy: -(0.65 + (Math.random() * 1.35)),
       angle: Math.random() * Math.PI * 2,
-      vAngle: (Math.random() - 0.5) * 0.36,
+      vAngle: (Math.random() - 0.5) * 0.22,
       alpha: 1,
       size,
       color,
@@ -7951,7 +7986,7 @@ function renderTopLyricShard(ctx, shard) {
   ctx.globalAlpha = Math.max(0, shard.alpha);
   ctx.translate(shard.x, shard.y);
   ctx.rotate(shard.angle);
-  ctx.shadowBlur = 4;
+  ctx.shadowBlur = 2.5;
   ctx.shadowColor = shard.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
 
   const gradient = ctx.createLinearGradient(-shard.size, -shard.size, shard.size, shard.size);
@@ -7969,14 +8004,6 @@ function renderTopLyricShard(ctx, shard) {
   });
   ctx.closePath();
   ctx.fill();
-
-  // 在碎片中心压一层极淡的字形采样感，避免碎片变成普通圆点或无意义色块。
-  ctx.globalAlpha = Math.max(0, shard.alpha * 0.16);
-  ctx.font = shard.font;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.fillText(shard.character, 0, 0);
   ctx.restore();
 }
 
