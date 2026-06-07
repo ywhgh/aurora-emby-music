@@ -1698,6 +1698,8 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   let progressWriteCountBeforeTimeUpdate = 0;
   let progressWriteCountAfterRafTimeUpdate = 0;
   let progressWriteCountAfterRegularTimeUpdate = 0;
+  let hotPathFrameCount = 0;
+  let fullHighlightFrameCount = 0;
   let finalState = null;
 
   state.lyricOffsetSeconds = 0;
@@ -1727,7 +1729,13 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   const startedAt = getMonotonicNowMs();
   try {
     for (let index = 0; index < sampleCount; index += 1) {
-      updateLyricsHighlight(index * 0.075);
+      const seconds = index * 0.075;
+      if (updateActiveImmersiveLyricWordProgressFrame(seconds)) {
+        hotPathFrameCount += 1;
+      } else {
+        fullHighlightFrameCount += 1;
+        updateLyricsHighlight(seconds);
+      }
     }
     denseProgressWriteCount = progressWriteCount;
     denseProgressUniqueWriteCount = progressWriteValues.size;
@@ -1763,6 +1771,8 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     progressFormattedWriteCount: denseProgressFormattedWriteCount,
     rafTimeUpdateProgressWriteCount: progressWriteCountAfterRafTimeUpdate - progressWriteCountBeforeTimeUpdate,
     regularTimeUpdateProgressWriteCount: progressWriteCountAfterRegularTimeUpdate - progressWriteCountAfterRafTimeUpdate,
+    hotPathFrameCount,
+    fullHighlightFrameCount,
     activeIndex: finalState.activeIndex,
     maxWordProgress: Math.max(...finalState.wordProgress),
     partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
@@ -8492,7 +8502,41 @@ function updateLyricProgressFrame() {
     return;
   }
 
-  updateLyricsHighlight(getLyricPlaybackTimeSeconds());
+  const currentSeconds = getLyricPlaybackTimeSeconds();
+  if (!updateActiveImmersiveLyricWordProgressFrame(currentSeconds)) {
+    updateLyricsHighlight(currentSeconds);
+  }
+}
+
+function updateActiveImmersiveLyricWordProgressFrame(currentSeconds) {
+  const activeIndex = state.activeLyricIndex;
+
+  if (activeIndex < 0 || !isCurrentLyricLineActiveAtTime(activeIndex, currentSeconds)) {
+    return false;
+  }
+
+  const activeItem = immersiveLyricLineElements[activeIndex];
+  if (!activeItem) {
+    return false;
+  }
+
+  updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds);
+  syncLyricProgressLoop();
+  return true;
+}
+
+function isCurrentLyricLineActiveAtTime(activeIndex, currentSeconds) {
+  const timelineIndex = state.activeLyricTimelineIndex;
+  const currentEntry = state.lyricTimeline[timelineIndex];
+
+  if (!currentEntry || currentEntry.index !== activeIndex) {
+    return false;
+  }
+
+  const targetSeconds = getAdjustedLyricSeconds(currentSeconds);
+  const nextEntry = state.lyricTimeline[timelineIndex + 1];
+
+  return currentEntry.time <= targetSeconds && (!nextEntry || nextEntry.time > targetSeconds);
 }
 
 function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds) {

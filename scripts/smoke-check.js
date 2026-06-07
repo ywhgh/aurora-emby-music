@@ -252,7 +252,9 @@ function checkLyrics() {
   assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
   assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use capped line end timing");
   assert(/scheduleLyricProgressResumeIfIdle\(lineRatio, lyricSeconds, nextEntry\);/.test(app), "Lyric word progress should idle after a line is fully highlighted");
-  assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getLyricPlaybackTimeSeconds\(\)\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock");
+  assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?const currentSeconds = getLyricPlaybackTimeSeconds\(\);[\s\S]*?updateActiveImmersiveLyricWordProgressFrame\(currentSeconds\)[\s\S]*?updateLyricsHighlight\(currentSeconds\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock with an immersive hot path");
+  assert(app.includes("function updateActiveImmersiveLyricWordProgressFrame"), "Immersive word lyrics should have a direct RAF hot path");
+  assert(app.includes("function isCurrentLyricLineActiveAtTime"), "Immersive word lyric hot path should verify the cached line before skipping full highlight sync");
   assert(!/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\)\);/.test(app), "RAF lyric progress should not depend on discrete audio.currentTime reads");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?refreshLyricsForPlaybackResume\(\);/.test(app), "Audio play should immediately refresh lyrics from the smooth playback clock");
   assert(/function handleAudioPause\(\) \{[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Audio pause should freeze the smooth lyric playback clock");
