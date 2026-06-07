@@ -1023,7 +1023,11 @@ function init() {
   deviceNameInput.value = storage.loadDeviceName(getDefaultDeviceName());
   if (state.session) {
     state.sourceMode = getSessionSourceMode(state.session);
-    state.externalSourceApiUrl = state.session.externalSourceApiUrl || state.externalSourceApiUrl;
+    if (isExternalSourceSession(state.session)) {
+      syncExternalSourceSessionApiUrl(state.session);
+    } else {
+      state.externalSourceApiUrl = state.session.externalSourceApiUrl || state.externalSourceApiUrl;
+    }
   }
   syncLoginSourceMode();
   const pendingCredentialLogin = readPendingCredentialLogin();
@@ -2534,13 +2538,14 @@ async function verifySession(session) {
 
 async function verifyExternalSourceSession(session) {
   try {
-    const apiUrl = getSessionExternalSourceApiUrl(session);
+    const apiUrl = syncExternalSourceSessionApiUrl(session);
     const info = apiUrl
       ? await externalSourceApi.fetchHealth(apiUrl)
       : { name: "音源桥", version: "-", offline: true };
+    const currentSession = state.session && isExternalSourceSession(state.session) ? state.session : session;
     const nextSession = {
       ...buildExternalSourceSession(apiUrl, info),
-      savedAt: session.savedAt || new Date().toISOString(),
+      savedAt: currentSession.savedAt || session.savedAt || new Date().toISOString(),
     };
 
     saveSession(nextSession);
@@ -18067,6 +18072,42 @@ function getInitialExternalSourceApiUrl(session) {
     : (sessionApiUrl || loadExternalSourceApiUrl());
 }
 
+function getResolvedExternalSourceApiUrl(session = state.session) {
+  return getSessionExternalSourceApiUrl(session)
+    || normalizeExternalSourceApiUrl(state.externalSourceApiUrl || "")
+    || loadExternalSourceApiUrl();
+}
+
+function syncExternalSourceSessionApiUrl(session = state.session) {
+  if (!session || !isExternalSourceSession(session)) {
+    return "";
+  }
+
+  const apiUrl = getResolvedExternalSourceApiUrl(session);
+
+  if (!apiUrl) {
+    return "";
+  }
+
+  state.externalSourceApiUrl = apiUrl;
+
+  if (session.serverUrl === apiUrl && session.externalSourceApiUrl === apiUrl) {
+    return apiUrl;
+  }
+
+  const nextSession = {
+    ...session,
+    serverUrl: apiUrl,
+    externalSourceApiUrl: apiUrl,
+  };
+
+  if (state.session === session || state.session?.userId === session.userId) {
+    state.session = nextSession;
+  }
+
+  return apiUrl;
+}
+
 function saveExternalSourceApiUrl(apiUrl) {
   const normalizedApiUrl = normalizeExternalSourceApiUrl(apiUrl);
 
@@ -19094,34 +19135,35 @@ function sanitizeQueueTrack(track) {
     RunTimeTicks: track.RunTimeTicks,
     SortName: track.SortName,
     UserData: track.UserData,
-    ExternalSource: sanitizeExternalSourceForPersistence(track.ExternalSource),
+    ExternalSource: sanitizeExternalSourceForPersistence(track.ExternalSource, track),
   };
 }
 
-function sanitizeExternalSourceForPersistence(external) {
+function sanitizeExternalSourceForPersistence(external, track = null) {
   if (!external || typeof external !== "object") {
     return external;
   }
 
-  const restore = sanitizeExternalRestoreSnapshot(external.restore);
+  const restore = createExternalRestoreSnapshotForPersistence(external, track);
   const isRestorablePlugin = isRestorableExternalSourcePlugin(external, restore);
   return {
     apiUrl: external.apiUrl,
     id: external.id,
     platform: external.platform,
-    pluginKey: external.pluginKey,
-    pluginName: external.pluginName,
-    pluginUrl: external.pluginUrl,
-    pluginPlatform: external.pluginPlatform,
-    mediaKind: external.mediaKind,
+    pluginKey: restore?.pluginKey || external.pluginKey,
+    pluginName: restore?.pluginName || external.pluginName,
+    pluginUrl: restore?.pluginUrl || external.pluginUrl,
+    pluginPlatform: restore?.pluginPlatform || external.pluginPlatform,
+    sourceId: restore?.sourceId || external.sourceId,
+    mediaKind: external.mediaKind || restore?.mediaKind,
     isVideo: external.isVideo,
     codec: external.codec,
     bitrate: external.bitrate,
-    sourceQuality: external.sourceQuality,
-    qualityLabel: external.qualityLabel,
-    resolution: external.resolution,
+    sourceQuality: external.sourceQuality || restore?.sourceQuality,
+    qualityLabel: external.qualityLabel || restore?.qualityLabel,
+    resolution: external.resolution || restore?.resolution,
     qualityState: external.qualityState,
-    qualityVerified: external.qualityVerified,
+    qualityVerified: Boolean(external.qualityVerified || restore?.qualityVerified),
     contentType: external.contentType,
     artwork: external.artwork,
     mediaUrl: isRestorablePlugin ? "" : external.mediaUrl,
@@ -19134,6 +19176,48 @@ function sanitizeExternalSourceForPersistence(external) {
   };
 }
 
+function createExternalRestoreSnapshotForPersistence(external, track = null) {
+  if (!external || typeof external !== "object") {
+    return null;
+  }
+
+  const restore = sanitizeExternalRestoreSnapshot(external.restore);
+  const pluginIdParts = getExternalPluginIdPartsForPersistence(external, track);
+  const pluginMeta = getExternalPluginMetaForPersistence(external.raw);
+  const raw = getExternalPluginRestoreRawForPersistence(external.raw, restore)
+    || createExternalPluginFallbackRawForPersistence(external, restore, pluginIdParts, track);
+  const sourceId = restore?.sourceId
+    || pluginMeta.sourceId
+    || external.sourceId
+    || pluginIdParts.sourceId
+    || getExternalPluginRawSourceIdForPersistence(raw)
+    || "";
+  const pluginKey = restore?.pluginKey
+    || pluginMeta.pluginKey
+    || external.pluginKey
+    || pluginIdParts.pluginKey
+    || "";
+
+  if (!pluginKey || !raw) {
+    return restore;
+  }
+
+  return {
+    id: restore?.id || sourceId || external.id || "",
+    pluginKey,
+    pluginName: restore?.pluginName || pluginMeta.pluginName || external.pluginName || external.platform || "",
+    pluginUrl: restore?.pluginUrl || pluginMeta.pluginUrl || external.pluginUrl || "",
+    pluginPlatform: restore?.pluginPlatform || pluginMeta.pluginPlatform || external.pluginPlatform || external.platform || "",
+    sourceId,
+    mediaKind: restore?.mediaKind || pluginMeta.mediaKind || external.mediaKind || "",
+    sourceQuality: restore?.sourceQuality || pluginMeta.sourceQuality || external.sourceQuality || "",
+    qualityLabel: restore?.qualityLabel || pluginMeta.qualityLabel || external.qualityLabel || "",
+    resolution: restore?.resolution || pluginMeta.resolution || external.resolution || "",
+    qualityVerified: Boolean(restore?.qualityVerified || pluginMeta.qualityVerified || external.qualityVerified),
+    raw,
+  };
+}
+
 function isRestorableExternalSourcePlugin(external, restore = null) {
   return Boolean(
     String(external?.id || "").startsWith("plugin:")
@@ -19141,6 +19225,8 @@ function isRestorableExternalSourcePlugin(external, restore = null) {
       || restore?.pluginKey
       || external?.raw?.pluginKey
       || external?.raw?.raw?.pluginKey
+      || external?.raw?.restore?.pluginKey
+      || external?.raw?.data?.restore?.pluginKey
   );
 }
 
@@ -19183,6 +19269,217 @@ function getExternalSourceRawForPersistence(raw, restore) {
   }
 
   return raw;
+}
+
+function getExternalPluginMetaForPersistence(raw) {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+
+  if (raw.pluginKey) {
+    return raw;
+  }
+
+  if (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey) {
+    return raw.raw;
+  }
+
+  if (raw.restore && typeof raw.restore === "object" && raw.restore.pluginKey) {
+    return raw.restore;
+  }
+
+  if (raw.data?.restore && typeof raw.data.restore === "object" && raw.data.restore.pluginKey) {
+    return raw.data.restore;
+  }
+
+  return {};
+}
+
+function getExternalPluginRestoreRawForPersistence(raw, restore = {}) {
+  if (restore?.raw && typeof restore.raw === "object" && !looksLikeMediaPayloadOnlyForPersistence(restore.raw)) {
+    return restore.raw;
+  }
+
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  if (raw.restore?.raw && typeof raw.restore.raw === "object" && !looksLikeMediaPayloadOnlyForPersistence(raw.restore.raw)) {
+    return raw.restore.raw;
+  }
+
+  if (raw.data?.restore?.raw && typeof raw.data.restore.raw === "object" && !looksLikeMediaPayloadOnlyForPersistence(raw.data.restore.raw)) {
+    return raw.data.restore.raw;
+  }
+
+  if (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey && raw.raw.raw && typeof raw.raw.raw === "object") {
+    return raw.raw.raw;
+  }
+
+  if (raw.raw && typeof raw.raw === "object" && !raw.raw.pluginKey && !looksLikeMediaPayloadOnlyForPersistence(raw.raw)) {
+    return raw.raw;
+  }
+
+  if (raw.track && typeof raw.track === "object") {
+    return raw.track;
+  }
+
+  if (raw.originalTrack && typeof raw.originalTrack === "object") {
+    return raw.originalTrack;
+  }
+
+  if (raw.sourceTrack && typeof raw.sourceTrack === "object") {
+    return raw.sourceTrack;
+  }
+
+  if (raw.item && typeof raw.item === "object") {
+    return raw.item;
+  }
+
+  if (raw.song && typeof raw.song === "object") {
+    return raw.song;
+  }
+
+  if (raw.media && typeof raw.media === "object" && !looksLikeMediaPayloadOnlyForPersistence(raw.media)) {
+    return raw.media;
+  }
+
+  return looksLikeMediaPayloadOnlyForPersistence(raw) ? null : raw;
+}
+
+function createExternalPluginFallbackRawForPersistence(external, restore = {}, pluginIdParts = {}, track = null) {
+  const sourceId = restore?.sourceId
+    || external?.sourceId
+    || pluginIdParts.sourceId
+    || getExternalPluginRawSourceIdForPersistence(external?.raw)
+    || "";
+
+  if (!sourceId) {
+    return null;
+  }
+
+  const title = pickExternalPersistenceString(
+    track?.Name,
+    external.title,
+    external.name,
+    external.raw?.title,
+    external.raw?.name,
+    external.raw?.songName,
+  );
+  const artist = pickExternalPersistenceString(
+    Array.isArray(track?.Artists) ? track.Artists.join(", ") : "",
+    track?.AlbumArtist,
+    external.artist,
+    external.singer,
+    external.raw?.artist,
+    external.raw?.singer,
+    external.raw?.author,
+  );
+
+  return {
+    id: sourceId,
+    Id: sourceId,
+    sourceId,
+    mid: sourceId,
+    songmid: sourceId,
+    hash: sourceId,
+    rid: sourceId,
+    songId: sourceId,
+    title,
+    name: title,
+    songName: title,
+    artist,
+    singer: artist,
+    author: artist,
+  };
+}
+
+function getExternalPluginRawSourceIdForPersistence(raw) {
+  if (!raw || typeof raw !== "object") {
+    return "";
+  }
+
+  return pickExternalPersistenceString(
+    raw.sourceId,
+    raw.id,
+    raw.Id,
+    raw.mid,
+    raw.songmid,
+    raw.hash,
+    raw.rid,
+    raw.songId,
+    raw.raw?.sourceId,
+    raw.raw?.id,
+    raw.raw?.Id,
+  );
+}
+
+function getExternalPluginIdPartsForPersistence(external = {}, track = null) {
+  const candidates = [
+    external.id,
+    external.raw?.id,
+    stripExternalTrackPrefixForPersistence(track?.Id),
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+
+  for (const candidate of candidates) {
+    const match = candidate.match(/^plugin:([^:]+):(.+)$/);
+
+    if (match) {
+      return {
+        pluginKey: match[1],
+        sourceId: decodeURIComponentSafe(match[2]),
+      };
+    }
+  }
+
+  return {
+    pluginKey: "",
+    sourceId: "",
+  };
+}
+
+function looksLikeMediaPayloadOnlyForPersistence(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const playableUrl = pickExternalPersistenceString(value.url, value.streamUrl, value.src, value.playUrl, value.play_url, value.location, value.link);
+  const trackText = pickExternalPersistenceString(value.name, value.title, value.songName, value.artist, value.singer, value.author, value.album, value.albumName);
+
+  return Boolean(
+    playableUrl
+      && !trackText
+      && !value.restore
+      && !value.data?.restore
+      && !value.track
+      && !value.originalTrack
+      && !value.sourceTrack
+      && !value.item
+      && !value.song
+  );
+}
+
+function pickExternalPersistenceString(...values) {
+  const value = values.find((item) => item !== undefined && item !== null && String(item).trim());
+  return value === undefined ? "" : String(value).trim();
+}
+
+function stripExternalTrackPrefixForPersistence(id) {
+  const value = String(id || "");
+
+  if (value.startsWith("external:plugin:")) {
+    return value.slice("external:".length);
+  }
+
+  return value.replace(/^external:[^:]+:/, "");
+}
+
+function decodeURIComponentSafe(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
 }
 
 function clearSession() {

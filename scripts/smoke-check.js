@@ -29,6 +29,26 @@ function getCssRule(css, selectorStart) {
   return end >= 0 ? css.slice(start, end + 2) : css.slice(start);
 }
 
+function createMemoryLocalStorage() {
+  const map = new Map();
+
+  return {
+    getItem(key) {
+      const normalizedKey = String(key);
+      return map.has(normalizedKey) ? map.get(normalizedKey) : null;
+    },
+    setItem(key, value) {
+      map.set(String(key), String(value));
+    },
+    removeItem(key) {
+      map.delete(String(key));
+    },
+    hasItem(key) {
+      return map.has(String(key));
+    },
+  };
+}
+
 function checkVersions() {
   const index = read("index.html");
   const config = read("src/config.js");
@@ -840,9 +860,65 @@ async function checkExternalSourceLyrics() {
   assert(externalSourceCode.includes("options.forceResolve"), "External source playback should support bypassing stale inline URLs on retry");
 }
 
+function checkStorageQueuePersistence() {
+  const storageCode = read("src/storage.js");
+  const localStorage = createMemoryLocalStorage();
+  const context = {
+    localStorage,
+    navigator: { platform: "Smoke" },
+    window: {},
+  };
+
+  vm.runInNewContext(storageCode, context, { filename: "src/storage.js" });
+
+  const queueKey = "emby-music-web/queue";
+  const storage = context.window.EmbyMusicStorage.createEmbyMusicStorage({
+    appName: "Smoke",
+    clamp: (value, min, max) => Math.min(max, Math.max(min, value)),
+    maxQueueTracks: 100,
+    queueKey,
+  });
+  const currentSession = {
+    sourceMode: "external",
+    serverUrl: "http://127.0.0.1:5174",
+    externalSourceApiUrl: "http://127.0.0.1:5174",
+    userId: "external-source",
+    serverId: "external-source",
+  };
+  const legacyQueueKey = `${queueKey}/${encodeURIComponent("source-bridge://unconfigured::external-source")}`;
+  const legacyQueuePayload = {
+    serverUrl: "source-bridge://unconfigured",
+    userId: "external-source",
+    serverId: "external-source",
+    queue: [{ Id: "external:plugin:wy-key:restore-song", Name: "恢复播放歌曲" }],
+    currentTrackId: "external:plugin:wy-key:restore-song",
+    currentTrackIndex: 0,
+    positionSeconds: 42,
+    savedAt: "2026-06-08T00:00:00.000Z",
+  };
+
+  localStorage.setItem(legacyQueueKey, JSON.stringify(legacyQueuePayload));
+
+  const restoredQueue = storage.loadQueueState(currentSession);
+  assert(restoredQueue.currentTrack?.Id === "external:plugin:wy-key:restore-song", `External source queue should load legacy unconfigured bridge queue after re-entry, got ${restoredQueue.currentTrack?.Id || "-"}`);
+  assert(restoredQueue.positionSeconds === 42, `External source queue should keep legacy playback position, got ${restoredQueue.positionSeconds}`);
+
+  storage.saveQueueState({
+    session: currentSession,
+    queue: [{ Id: "external:plugin:wy-key:new-song", Name: "新缓存歌曲" }],
+    currentTrackId: "external:plugin:wy-key:new-song",
+    currentTrackIndex: 0,
+    positionSeconds: 7,
+  });
+
+  const stableQueueKey = `${queueKey}/${encodeURIComponent("source-bridge://external-source::external-source")}`;
+  assert(localStorage.hasItem(stableQueueKey), "External source queue should save under a stable bridge account key instead of the mutable bridge URL");
+}
+
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const embyApi = read("src/emby-api.js");
+  const storageCode = read("src/storage.js");
   [
     "getAlbumQualityBucket",
     "getTrackQualityBucket",
@@ -914,14 +990,23 @@ function checkAppFunctionReferences() {
   assert(/if \(isExternalSourceTrack\(track\)\) \{\s*saveQueueState\(getQueuePositionSeconds\(\)\);/.test(app), "Successful external playback should persist refreshed restore metadata immediately");
   assert(/function getExternalSourceApiUrlFromSession\(session\) \{[\s\S]*?return session\.externalSourceApiUrl \|\| session\.serverUrl \|\| "";/.test(app), "External source sessions should recover the bridge URL from legacy serverUrl-only sessions");
   assert(/function getSessionExternalSourceApiUrl\(session = state\.session\) \{[\s\S]*?getExternalSourceApiUrlFromSession\(session\)/.test(app), "External source API URL lookup should use the legacy-compatible session helper");
-  assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
+  assert(/function init\(\) \{[\s\S]*?syncExternalSourceSessionApiUrl\(state\.session\)/.test(app), "App re-entry should sync legacy external sessions to the configured source bridge URL");
+  assert(/async function verifyExternalSourceSession\(session\) \{[\s\S]*?const apiUrl = syncExternalSourceSessionApiUrl\(session\)/.test(app), "External session verification should use the resolved source bridge URL");
+  assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource, track\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
   assert(app.includes("function sanitizeExternalSourceForPersistence"), "External source queue persistence should have an explicit sanitizer");
   assert(app.includes("function isRestorableExternalSourcePlugin"), "External source persistence should detect plugin-backed tracks");
   assert(/mediaUrl:\s*isRestorablePlugin \? "" : external\.mediaUrl/.test(app), "Persisted plugin source tracks should not keep stale media URLs");
   assert(/bridgeStreamUrl:\s*""/.test(app), "Persisted plugin source tracks should not keep stale bridge stream URLs");
   assert(/directUrl:\s*""/.test(app), "Persisted plugin source tracks should not keep stale direct URLs");
   assert(/function getExternalSourceRawForPersistence\(raw, restore\) \{[\s\S]*?pluginKey: restore\.pluginKey[\s\S]*?raw: restore\.raw/.test(app), "External source persistence should keep a restorable raw plugin snapshot");
-  assert(/function sanitizeExternalSourceForPersistence\(external\) \{[\s\S]*?pluginUrl: external\.pluginUrl/.test(app), "Persisted external source state should keep plugin URL restore metadata");
+  assert(/function sanitizeExternalSourceForPersistence\(external, track = null\) \{[\s\S]*?pluginUrl: restore\?\.pluginUrl \|\| external\.pluginUrl/.test(app), "Persisted external source state should keep plugin URL restore metadata");
+  assert(app.includes("function createExternalRestoreSnapshotForPersistence"), "External source persistence should rebuild a restore snapshot from plugin metadata");
+  assert(app.includes("function getExternalPluginRestoreRawForPersistence"), "External source persistence should recover the original plugin raw track from media responses");
+  assert(app.includes("stripExternalTrackPrefixForPersistence(track?.Id)"), "External source persistence should infer plugin ids from restored queue track ids");
+  assert(/function looksLikeMediaPayloadOnlyForPersistence\(value\) \{[\s\S]*?const playableUrl[\s\S]*?const trackText[\s\S]*?!trackText/.test(app), "External source persistence should reject media-only playback responses even when they carry ids");
+  assert(storageCode.includes("source-bridge://external-source"), "External source storage should use a stable queue/account key across bridge URL changes");
+  assert(storageCode.includes("function getExternalQueueStateFallbackKeys"), "External source storage should read legacy bridge queue keys after re-entry");
+  assert(storageCode.includes('"source-bridge://unconfigured"'), "External source storage should migrate old unconfigured bridge queues");
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");
   assert(/function takePreloadedPlaybackSession\(track, mode, options = \{\}\) \{[\s\S]*?if \(options\.forceExternalResolve\) \{[\s\S]*?clearPreload\(\);[\s\S]*?return null;/.test(app), "Preloaded sessions should be cleared and ignored during forced external media refreshes");
   assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");
@@ -1140,6 +1225,7 @@ async function main() {
   checkCss();
   checkLyrics();
   await checkExternalSourceLyrics();
+  checkStorageQueuePersistence();
   checkAppFunctionReferences();
   checkDomReferences();
 

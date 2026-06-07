@@ -155,11 +155,11 @@ function createEmbyMusicStorage({
     const isExternal = session?.sourceMode === "external";
     const serverUrl = session?.serverUrl || (isExternal ? "source-bridge://unconfigured" : "");
 
-    if (!serverUrl || !session?.userId) {
+    if (!session?.userId || (!serverUrl && !isExternal)) {
       return "";
     }
 
-    return `${String(serverUrl).replace(/\/+$/, "").toLowerCase()}::${session.userId}`;
+    return `${getSessionStorageServerUrl(session)}::${session.userId}`;
   }
 
   function compareProfileDate(left, right) {
@@ -299,36 +299,22 @@ function createEmbyMusicStorage({
 
   function loadQueueState(session) {
     try {
-      const raw = localStorage.getItem(getScopedSessionKey(queueKey, session)) || localStorage.getItem(queueKey);
-      const saved = raw ? JSON.parse(raw) : null;
+      const saved = getQueueStateCandidates(session)
+        .map((key) => {
+          const raw = localStorage.getItem(key);
+          if (!raw) {
+            return null;
+          }
 
-      if (!saved || !isSameSession(saved, session)) {
-        return emptyQueueState();
-      }
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        })
+        .find((candidate) => candidate && isSameSession(candidate, session));
 
-      const queue = Array.isArray(saved.queue)
-        ? saved.queue.filter((track) => track?.Id).slice(0, maxQueueTracks)
-        : [];
-
-      if (!queue.length) {
-        return emptyQueueState();
-      }
-
-      const fallbackIndex = Math.floor(clamp(Number(saved.currentTrackIndex) || 0, 0, queue.length - 1));
-      const savedTrackIndex = saved.currentTrackId
-        ? queue.findIndex((track) => track.Id === saved.currentTrackId)
-        : -1;
-      const resolvedIndex = savedTrackIndex >= 0 ? savedTrackIndex : fallbackIndex;
-
-      return {
-        queue,
-        currentTrackIndex: resolvedIndex,
-        currentTrack: queue[resolvedIndex] || queue[0],
-        positionSeconds: Number.isFinite(Number(saved.positionSeconds))
-          ? Math.max(0, Number(saved.positionSeconds))
-          : 0,
-        savedAt: typeof saved.savedAt === "string" ? saved.savedAt : "",
-      };
+      return normalizeQueueState(saved);
     } catch {
       return emptyQueueState();
     }
@@ -367,7 +353,9 @@ function createEmbyMusicStorage({
   }
 
   function clearQueueState(session) {
-    localStorage.removeItem(getScopedSessionKey(queueKey, session));
+    getQueueStateCandidates(session).forEach((key) => {
+      localStorage.removeItem(key);
+    });
   }
 
   function emptyQueueState() {
@@ -381,13 +369,96 @@ function createEmbyMusicStorage({
   }
 
   function isSameSession(saved, session) {
-    const sessionServerUrl = session?.serverUrl || (session?.sourceMode === "external" ? "source-bridge://unconfigured" : "");
+    const sessionServerUrl = getSessionStorageServerUrl(session);
 
     if (!session?.userId || !sessionServerUrl) {
       return false;
     }
 
-    return saved.userId === session.userId && saved.serverUrl === sessionServerUrl;
+    return saved.userId === session.userId && getSavedQueueServerUrl(saved, session) === sessionServerUrl;
+  }
+
+  function normalizeQueueState(saved) {
+    if (!saved) {
+      return emptyQueueState();
+    }
+
+    const queue = Array.isArray(saved.queue)
+      ? saved.queue.filter((track) => track?.Id).slice(0, maxQueueTracks)
+      : [];
+
+    if (!queue.length) {
+      return emptyQueueState();
+    }
+
+    const fallbackIndex = Math.floor(clamp(Number(saved.currentTrackIndex) || 0, 0, queue.length - 1));
+    const savedTrackIndex = saved.currentTrackId
+      ? queue.findIndex((track) => track.Id === saved.currentTrackId)
+      : -1;
+    const resolvedIndex = savedTrackIndex >= 0 ? savedTrackIndex : fallbackIndex;
+
+    return {
+      queue,
+      currentTrackIndex: resolvedIndex,
+      currentTrack: queue[resolvedIndex] || queue[0],
+      positionSeconds: Number.isFinite(Number(saved.positionSeconds))
+        ? Math.max(0, Number(saved.positionSeconds))
+        : 0,
+      savedAt: typeof saved.savedAt === "string" ? saved.savedAt : "",
+    };
+  }
+
+  function getSessionStorageServerUrl(session) {
+    if (session?.sourceMode === "external") {
+      return "source-bridge://external-source";
+    }
+
+    return normalizeStorageServerUrl(session?.serverUrl || "");
+  }
+
+  function getSavedQueueServerUrl(saved, session) {
+    if (session?.sourceMode === "external" && saved?.userId === session.userId) {
+      return "source-bridge://external-source";
+    }
+
+    return normalizeStorageServerUrl(saved?.serverUrl || "");
+  }
+
+  function normalizeStorageServerUrl(value) {
+    return String(value || "").replace(/\/+$/, "").toLowerCase();
+  }
+
+  function getQueueStateCandidates(session) {
+    return uniqueStorageKeys([
+      getScopedSessionKey(queueKey, session),
+      ...getExternalQueueStateFallbackKeys(queueKey, session),
+      queueKey,
+    ]);
+  }
+
+  function getExternalQueueStateFallbackKeys(baseKey, session) {
+    if (session?.sourceMode !== "external" || !session?.userId) {
+      return [];
+    }
+
+    const keys = new Set();
+    [
+      session.serverUrl,
+      session.externalSourceApiUrl,
+      "source-bridge://unconfigured",
+    ].filter(Boolean).forEach((serverUrl) => {
+      keys.add(getScopedSessionKey(baseKey, {
+        ...session,
+        sourceMode: "emby",
+        serverUrl,
+      }));
+    });
+
+    return [...keys];
+  }
+
+  function uniqueStorageKeys(keys) {
+    return [...new Set(keys.filter(Boolean))];
   }
 
   function getScopedSessionKey(baseKey, session) {
