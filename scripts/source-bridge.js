@@ -770,7 +770,18 @@ function buildPluginMediaResponse(track, options = {}) {
     resolution: track.resolution || "",
     qualityVerified: Boolean(track.qualityVerified),
     requestedQuality: options.quality || "",
-    raw: payload,
+    raw: {
+      pluginKey: track.pluginKey,
+      pluginName: track.pluginName,
+      sourceId: track.sourceId,
+      mediaKind: track.mediaKind,
+      sourceQuality: track.sourceQuality || "",
+      qualityLabel: track.qualityLabel || "",
+      resolution: track.resolution || "",
+      qualityVerified: Boolean(track.qualityVerified),
+      raw: track.raw,
+      media: payload,
+    },
   };
 }
 

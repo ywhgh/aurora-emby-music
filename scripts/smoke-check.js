@@ -473,6 +473,57 @@ async function checkExternalSourceLyrics() {
   const nestedSnapshot = JSON.parse(nestedSnapshotUrl.searchParams.get("track") || "{}");
   assert(nestedSnapshot.pluginKey === "wy-key", `Nested external media snapshot should recover pluginKey, got ${nestedSnapshot.pluginKey || "-"}`);
   assert(nestedSnapshot.raw?.url === "https://example.test/recovered.mp3", `Nested external media snapshot should preserve raw media url, got ${JSON.stringify(nestedSnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:wy-test-song-3",
+    ExternalSource: {
+      id: "plugin:wy-key:wy-test-song-3",
+      platform: "网易",
+      mediaUrl: "https://expired.example.test/old-token.mp3",
+      raw: {
+        pluginKey: "wy-key",
+        pluginName: "网易",
+        sourceId: "wy-test-song-3",
+        raw: { id: "wy-test-song-3", name: "旧直链也要恢复", artist: "测试艺人" },
+      },
+    },
+  });
+  const restoredInlineUrl = new URL(snapshotRequests[2]);
+  const restoredInlineSnapshot = JSON.parse(restoredInlineUrl.searchParams.get("track") || "{}");
+  assert(restoredInlineUrl.pathname === "/media", `Restored plugin tracks with old inline URLs should re-resolve through /media, got ${restoredInlineUrl.href}`);
+  assert(restoredInlineUrl.searchParams.get("id") === "plugin:wy-key:wy-test-song-3", `Restored plugin media request should keep the plugin id, got ${restoredInlineUrl.searchParams.get("id") || "-"}`);
+  assert(restoredInlineSnapshot.raw?.id === "wy-test-song-3", `Restored plugin media request should preserve raw track snapshot, got ${JSON.stringify(restoredInlineSnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:wy-test-song-4",
+    ExternalSource: {
+      id: "plugin:wy-key:wy-test-song-4",
+      platform: "网易",
+      mediaUrl: "https://expired.example.test/media-response-token.mp3",
+      raw: {
+        pluginKey: "wy-key",
+        pluginName: "网易",
+        sourceId: "wy-test-song-4",
+        raw: { id: "wy-test-song-4", name: "播放后仍可恢复" },
+        media: { url: "https://example.test/resolved-once.mp3" },
+      },
+    },
+  });
+  const mediaRawSnapshotUrl = new URL(snapshotRequests[3]);
+  const mediaRawSnapshot = JSON.parse(mediaRawSnapshotUrl.searchParams.get("track") || "{}");
+  assert(mediaRawSnapshot.raw?.id === "wy-test-song-4", `Media response raw should keep original plugin track for later restore, got ${JSON.stringify(mediaRawSnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:legacy-song",
+    ExternalSource: {
+      id: "plugin:wy-key:legacy-song",
+      platform: "网易",
+      mediaUrl: "https://expired.example.test/legacy-token.mp3",
+      raw: { id: "legacy-song", name: "旧缓存歌曲", artist: "测试艺人" },
+    },
+  });
+  const legacySnapshotUrl = new URL(snapshotRequests[4]);
+  const legacySnapshot = JSON.parse(legacySnapshotUrl.searchParams.get("track") || "{}");
+  assert(legacySnapshot.pluginKey === "wy-key", `Legacy restored plugin track should infer pluginKey from id, got ${legacySnapshot.pluginKey || "-"}`);
+  assert(legacySnapshot.sourceId === "legacy-song", `Legacy restored plugin track should infer sourceId from id, got ${legacySnapshot.sourceId || "-"}`);
+  assert(legacySnapshot.raw?.id === "legacy-song", `Legacy restored plugin track should keep raw payload, got ${JSON.stringify(legacySnapshot.raw)}`);
 
   try {
     await timeoutContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174", { timeoutMs: 5 });
@@ -504,9 +555,12 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("function restorePluginTrackFromSnapshot"), "Source bridge should restore plugin tracks from persisted snapshots");
   assert(bridge.includes("url.searchParams.get(\"track\")"), "Source bridge should read persisted track snapshots from media requests");
   assert(bridge.includes("raw: track.raw"), "Source bridge API tracks should preserve plugin raw payloads for later playback");
+  assert(/function buildPluginMediaResponse\(track, options = \{\}\) \{[\s\S]*?pluginKey: track\.pluginKey[\s\S]*?media: payload/.test(bridge), "Source bridge media responses should preserve original plugin snapshots after playback resolution");
   assert(bridge.includes("function getPluginDirectMediaUrl"), "Source bridge should reuse direct plugin media URLs before plugin retries");
   assert(bridge.includes("function getPluginQualityCandidates"), "Source bridge should retry plugin media quality candidates");
   assert(bridge.includes("resolvePluginMediaPayload"), "Source bridge should resolve plugin media with fallback quality attempts");
+  assert(externalSourceCode.includes("function hasRestorableExternalPluginSnapshot"), "External source playback should detect restorable plugin snapshots");
+  assert(/function shouldResolveInlineUrlThroughBridge\(url, track\) \{[\s\S]*?hasRestorableExternalPluginSnapshot\(track\)/.test(externalSourceCode), "Restored plugin tracks should ignore stale inline URLs and re-resolve through the bridge");
 }
 
 function checkAppFunctionReferences() {

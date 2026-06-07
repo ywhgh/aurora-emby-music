@@ -9090,12 +9090,20 @@ body.action-sheet-open .content {
 }
 
 .lyric-line {
+  width: 100%;
+  box-sizing: border-box;
   margin: 0;
   padding: 0.42rem 0.2rem;
-  border-radius: 10px;
+  border-radius: 0;
+  background: transparent;
   color: var(--muted);
   font-size: 0.95rem;
   line-height: 1.55;
+  opacity: 0.4;
+  transition:
+    background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.35s ease,
+    color 0.35s ease;
 }
 
 .lyric-line[role="button"] {
@@ -9104,14 +9112,33 @@ body.action-sheet-open .content {
 
 .lyric-line[role="button"]:hover,
 .lyric-line[role="button"]:focus-visible {
-  background: rgba(var(--now-accent-rgb), 0.07);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.03) 75%,
+      transparent 100%
+    );
   color: var(--now-accent);
+  opacity: 0.7;
   outline: 0;
 }
 
 .lyric-line.active {
   color: var(--text);
-  background: rgba(236, 65, 65, 0.08);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 20%,
+      rgba(255, 255, 255, 0.08) 80%,
+      transparent 100%
+    );
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-radius: 0;
+  opacity: 1;
   font-weight: 850;
 }
 
@@ -9212,11 +9239,27 @@ body.action-sheet-open .content {
 
 #nowPlayingPanel .lyric-line[role="button"]:hover,
 #nowPlayingPanel .lyric-line[role="button"]:focus-visible {
-  background: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.03) 75%,
+      transparent 100%
+    );
 }
 
 #nowPlayingPanel .lyric-line.active {
-  background: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 20%,
+      rgba(255, 255, 255, 0.08) 80%,
+      transparent 100%
+    );
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   color: var(--now-accent);
 }
 
@@ -9585,16 +9628,22 @@ body.action-sheet-open .content {
 
 .immersive-lyric-list .lyric-line,
 .immersive-lyric-list p {
+  width: 100%;
+  box-sizing: border-box;
   margin: 0;
-  opacity: 0.54;
+  position: relative;
+  border-radius: 0;
+  background: transparent;
+  opacity: 0.4;
   color: var(--immersive-lyric-primary);
   font-size: clamp(1.85rem, 3.35vw, 3rem);
   font-weight: 850;
   line-height: 1.18;
   transform-origin: left center;
   transition:
-    color 0.2s ease,
-    opacity 0.2s ease,
+    background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.35s ease,
+    color 0.35s ease,
     transform 0.2s ease;
 }
 
@@ -9604,25 +9653,35 @@ body.action-sheet-open .content {
 
 .immersive-lyric-list .lyric-line:hover,
 .immersive-lyric-list .lyric-line:focus-visible {
-  opacity: 0.76;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.03) 75%,
+      transparent 100%
+    );
+  opacity: 0.7;
   color: var(--immersive-lyric-hover);
 }
 
 .immersive-lyric-list .lyric-line.active,
 .immersive-lyric-list p.active {
-  padding: 0.1em 0.42em 0.1em 0.52em;
   background:
     linear-gradient(
       90deg,
-      var(--immersive-lyric-active-bg-tail) 0%,
-      var(--immersive-lyric-active-bg) 7%,
-      var(--immersive-lyric-active-bg-mid) 58%,
-      var(--immersive-lyric-active-bg-tail) 100%
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 20%,
+      rgba(255, 255, 255, 0.08) 80%,
+      transparent 100%
     );
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-radius: 0;
   box-shadow: none;
   opacity: 1;
   color: var(--immersive-lyric-active);
-  transform: translateX(-0.52em);
+  transform: none;
 }
 
 .immersive-lyric-original,

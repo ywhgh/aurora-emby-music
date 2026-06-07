@@ -184,6 +184,10 @@ function createExternalSourceApi() {
   }
 
   function shouldResolveInlineUrlThroughBridge(url, track) {
+    if (hasRestorableExternalPluginSnapshot(track)) {
+      return true;
+    }
+
     if (/\.m4s(?:$|[?#])/i.test(String(url || ""))) {
       return true;
     }
@@ -261,12 +265,15 @@ function createExternalTrackSnapshot(track) {
     : (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey ? raw.raw : {});
   const pluginRaw = pluginMeta.raw && typeof pluginMeta.raw === "object"
     ? pluginMeta.raw
-    : (raw.raw?.raw && typeof raw.raw.raw === "object" ? raw.raw.raw : raw);
+    : (raw.raw?.raw && typeof raw.raw.raw === "object"
+      ? raw.raw.raw
+      : (raw.media && typeof raw.media === "object" ? raw.media : raw));
+  const pluginIdParts = getExternalPluginIdParts(track, external);
   const snapshot = {
     id: external.id || stripExternalTrackPrefix(track?.Id),
-    pluginKey: pluginMeta.pluginKey || external.pluginKey,
+    pluginKey: pluginMeta.pluginKey || external.pluginKey || pluginIdParts.pluginKey,
     pluginName: pluginMeta.pluginName || external.platform,
-    sourceId: pluginMeta.sourceId || external.id,
+    sourceId: pluginMeta.sourceId || external.sourceId || pluginIdParts.sourceId || external.id,
     mediaKind: pluginMeta.mediaKind || external.mediaKind,
     sourceQuality: pluginMeta.sourceQuality || external.sourceQuality,
     qualityLabel: pluginMeta.qualityLabel || external.qualityLabel,
@@ -283,6 +290,41 @@ function createExternalTrackSnapshot(track) {
     return JSON.stringify(snapshot);
   } catch {
     return "";
+  }
+}
+
+function hasRestorableExternalPluginSnapshot(track) {
+  return Boolean(createExternalTrackSnapshot(track));
+}
+
+function getExternalPluginIdParts(track, external = {}) {
+  const candidates = [
+    external.id,
+    stripExternalTrackPrefix(track?.Id),
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+
+  for (const candidate of candidates) {
+    const match = candidate.match(/^plugin:([^:]+):(.+)$/);
+
+    if (match) {
+      return {
+        pluginKey: match[1],
+        sourceId: decodeURIComponentSafe(match[2]),
+      };
+    }
+  }
+
+  return {
+    pluginKey: "",
+    sourceId: "",
+  };
+}
+
+function decodeURIComponentSafe(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
   }
 }
 
