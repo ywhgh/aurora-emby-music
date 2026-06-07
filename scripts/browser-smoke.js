@@ -626,7 +626,7 @@ function checkPageState(check, page) {
   assert(lyricProgressBeforeOffset.wordProgress?.[0] === 100, `${label} first word should be fully highlighted before offset`);
   assert(lyricProgressBeforeOffset.wordProgress?.[1] > 0 && lyricProgressBeforeOffset.wordProgress?.[1] < 100, `${label} second word should be partially highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
   assert(lyricProgressBeforeOffset.wordProgress?.[2] === 0, `${label} third word should not be highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
-  assert(Number(lyricProgressBeforeOffset.cssWordRatio?.[1]) > 0 && Number(lyricProgressBeforeOffset.cssWordRatio?.[1]) < 1, `${label} partial word should expose transform progress before offset`);
+  assert(parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) > 0 && parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) < 100, `${label} partial word should expose clipped text progress before offset`);
   assert(/Delta epsilon zeta/.test(lyricProgressBeforeOffset.activeLineText || ""), `${label} active lyric line text mismatch before offset: ${lyricProgressBeforeOffset.activeLineText || "-"}`);
   assert(lyricProgressBeforeOffset.activeLineClass?.includes("active"), `${label} active lyric line should have active class before offset`);
   assert(lyricProgressAfterOffset.offsetLabel === "+0.68s", `${label} lyric offset smoke should adjust to +0.68s, got ${lyricProgressAfterOffset.offsetLabel || "-"}`);
@@ -646,10 +646,9 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
   assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
   assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);
-  assert(denseWordPerformance.ratioWriteCount > 60 && denseWordPerformance.ratioWriteCount < 260, `${label} dense lyric progress should only write changed transform ratios: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.averageUpdateMs < 4, `${label} dense lyric progress average update is too slow: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.partialWordCount <= 1, `${label} dense lyric progress should keep at most one partial word: ${JSON.stringify(denseWordPerformance)}`);
-  assert(denseWordPerformance.maxRatio === 1, `${label} dense lyric transform ratio should reach fully lit words: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.maxRatio === 1, `${label} dense lyric in-memory progress should reach fully lit words: ${JSON.stringify(denseWordPerformance)}`);
   assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
   assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
   assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);

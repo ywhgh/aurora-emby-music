@@ -800,6 +800,7 @@ let immersiveLyricLineElements = [];
 let immersiveLyricWordElements = [];
 let immersiveLyricWordTimings = [];
 let immersiveLyricWordEndTimings = [];
+let immersiveLyricTimedWordUsable = [];
 let lastStaticLyricRenderSignature = "";
 let lyricRenderRevision = 0;
 let libraryAlphabetScrubber = null;
@@ -1544,7 +1545,6 @@ function collectBrowserSmokeLyricState() {
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
   const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
-  const cssWordRatio = words.map((word) => word.style.getPropertyValue("--word-progress-ratio"));
 
   return {
     activeIndex: state.activeLyricIndex,
@@ -1558,7 +1558,6 @@ function collectBrowserSmokeLyricState() {
     wordCount: words.length,
     wordProgress,
     cssWordProgress,
-    cssWordRatio,
     offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
     scrollAllowedForced: shouldScrollLyricLine(true),
   };
@@ -1582,7 +1581,6 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     ].join("\n"),
   });
   const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
-  let ratioWriteCount = 0;
   let progressWriteCount = 0;
 
   state.lyricOffsetSeconds = 0;
@@ -1597,9 +1595,7 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   updateLyricsHighlight(0, true);
 
   CSSStyleDeclaration.prototype.setProperty = function setBrowserSmokeStyleProperty(propertyName, ...args) {
-    if (propertyName === "--word-progress-ratio") {
-      ratioWriteCount += 1;
-    } else if (propertyName === "--word-progress") {
+    if (propertyName === "--word-progress") {
       progressWriteCount += 1;
     }
 
@@ -1616,19 +1612,18 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   }
   const durationMs = Math.round((getMonotonicNowMs() - startedAt) * 100) / 100;
   const finalState = collectBrowserSmokeLyricState();
-  const ratioValues = finalState.cssWordRatio.map((value) => Number(value || 0));
+  const progressRatios = finalState.wordProgress.map((value) => Number(value || 0) / 100);
 
   return {
     wordCount: finalState.wordCount,
     sampleCount,
     durationMs,
     averageUpdateMs: Math.round((durationMs / sampleCount) * 1000) / 1000,
-    ratioWriteCount,
     progressWriteCount,
     activeIndex: finalState.activeIndex,
     maxWordProgress: Math.max(...finalState.wordProgress),
     partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
-    maxRatio: Math.max(...ratioValues),
+    maxRatio: Math.max(...progressRatios),
   };
 }
 
@@ -7379,6 +7374,7 @@ function renderImmersiveLyricFocus() {
   immersiveLyricWordElements = [];
   immersiveLyricWordTimings = [];
   immersiveLyricWordEndTimings = [];
+  immersiveLyricTimedWordUsable = [];
 
   const appendLine = (text, className = "") => {
     const line = document.createElement("p");
@@ -7398,6 +7394,7 @@ function renderImmersiveLyricFocus() {
     immersiveLyricWordElements[index] = lineContent.words;
     immersiveLyricWordTimings[index] = lineContent.timings;
     immersiveLyricWordEndTimings[index] = lineContent.endTimings;
+    immersiveLyricTimedWordUsable[index] = lineContent.hasUsableTimedWords;
     immersiveLyricLineElements[index] = line;
     if (state.isLyricSynced && Number.isFinite(lyricLine.time)) {
       line.tabIndex = 0;
@@ -7479,16 +7476,23 @@ function appendImmersiveLyricLineContent(container, line) {
     endTimings.push(Number.isFinite(part.endTime) ? Number(part.endTime) : NaN);
   });
 
-  if (!translatedText) {
+  if (translatedText) {
+    const translated = document.createElement("strong");
+    translated.className = "immersive-lyric-translated";
+    translated.textContent = translatedText;
+    container.replaceChildren(original, translated);
+  } else {
     container.replaceChildren(original);
-    return { words, timings, endTimings };
   }
 
-  const translated = document.createElement("strong");
-  translated.className = "immersive-lyric-translated";
-  translated.textContent = translatedText;
-  container.replaceChildren(original, translated);
-  return { words, timings, endTimings };
+  return {
+    words,
+    timings,
+    endTimings,
+    hasUsableTimedWords: timings.length === words.length
+      && timings.length > 0
+      && areTimedLyricWordTimingsUsable(timings),
+  };
 }
 
 function getLyricWordParts(line, fallbackText) {
@@ -7674,10 +7678,8 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
 }
 
 function hasTimedLyricWords(activeIndex, words) {
-  const timings = getTimedLyricWordTimings(activeIndex, words);
-  return timings.length === words.length
-    && timings.length > 0
-    && areTimedLyricWordTimingsUsable(timings);
+  return Boolean(immersiveLyricTimedWordUsable[activeIndex])
+    && (immersiveLyricWordTimings[activeIndex] || []).length === words.length;
 }
 
 function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry) {
@@ -7939,7 +7941,6 @@ function setLyricWordProgress(word, percent) {
 
   word._lyricProgress = normalizedPercent;
   word.style.setProperty("--word-progress", `${normalizedPercent}%`);
-  word.style.setProperty("--word-progress-ratio", String(normalizedPercent / 100));
 }
 
 function renderUpNext() {

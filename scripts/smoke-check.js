@@ -248,6 +248,7 @@ function checkLyrics() {
   assert(app.includes("function hasTimedLyricWords"), "Immersive lyrics should detect timed word nodes");
   assert(app.includes("immersiveLyricWordTimings"), "Enhanced LRC word timings should be cached with rendered word nodes");
   assert(app.includes("immersiveLyricWordEndTimings"), "Enhanced LRC word end timings should be cached with rendered word nodes");
+  assert(app.includes("immersiveLyricTimedWordUsable"), "Enhanced LRC timed-word usability should be cached at render time");
   assert(app.includes("function findTimedLyricWordIndex"), "Enhanced LRC word progress should locate the current word by timing search");
   assert(app.includes("function getTimedLyricWordProgress"), "Enhanced LRC word progress should calculate the current word fill from exact timestamps");
   assert(app.includes("updateLyricWordProgressWindow(words, litWords)"), "Enhanced LRC word progress should reuse the changed-word update window");
@@ -257,6 +258,12 @@ function checkLyrics() {
     ? app.slice(timedLyricProgressStart, timedLyricProgressEnd)
     : "";
   assert(timedLyricProgressFunction && !timedLyricProgressFunction.includes("words.forEach((word, index)"), "Enhanced LRC word progress should not scan every word on each frame");
+  const hasTimedLyricWordsStart = app.indexOf("function hasTimedLyricWords");
+  const hasTimedLyricWordsEnd = app.indexOf("function updateTimedLyricWordProgress", hasTimedLyricWordsStart);
+  const hasTimedLyricWordsFunction = hasTimedLyricWordsStart >= 0 && hasTimedLyricWordsEnd > hasTimedLyricWordsStart
+    ? app.slice(hasTimedLyricWordsStart, hasTimedLyricWordsEnd)
+    : "";
+  assert(hasTimedLyricWordsFunction && !hasTimedLyricWordsFunction.includes("areTimedLyricWordTimingsUsable"), "Enhanced LRC word progress should not re-validate all word timings on each frame");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
@@ -279,7 +286,7 @@ function checkLyrics() {
   assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
   assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
   assert(app.includes('word.style.setProperty("--word-progress", `${normalizedPercent}%`)'), "Lyric word progress should drive the visible text clip fill");
-  assert(app.includes('word.style.setProperty("--word-progress-ratio", String(normalizedPercent / 100))'), "Lyric word progress should update a transform ratio for smoother compositor-friendly highlights");
+  assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not write unused transform ratio variables on every frame");
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
   assert(/\.immersive-lyric-list \.word::after \{[\s\S]*?content: attr\(data-word-text\);[\s\S]*?clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?will-change: clip-path;/.test(css), "Immersive lyric word highlights should use clipped text overlays");
   assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");

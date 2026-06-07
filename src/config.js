@@ -1,6 +1,6 @@
 window.EmbyMusicConfig = {
   APP_NAME: "Emby Music Web",
-  APP_VERSION: "0.93.106",
+  APP_VERSION: "0.93.107",
   DEFAULT_SERVER_URL: "",
   DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174",
   LOCK_SERVER_URL: false,

@@ -1,5 +1,5 @@
-const CACHE_NAME = "emby-music-web-v0.93.106";
-const ASSET_VERSION = "0.93.106";
+const CACHE_NAME = "emby-music-web-v0.93.107";
+const ASSET_VERSION = "0.93.107";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
