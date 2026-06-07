@@ -13920,7 +13920,7 @@ async function playTrack(track, queue, options = {}) {
     ? `正在加载${getTranscodeMethodLabel()}（${getAudioQualityButtonLabel()}）...`
     : "正在加载歌曲...");
 
-  const playbackSession = takePreloadedPlaybackSession(track, mode) || await preparePlaybackSession(track, mode, requestId, playbackOptions);
+  const playbackSession = takePreloadedPlaybackSession(track, mode, playbackOptions) || await preparePlaybackSession(track, mode, requestId, playbackOptions);
 
   if (requestId !== state.playRequestId || !playbackSession) {
     return;
@@ -15760,7 +15760,14 @@ async function preparePreloadedPlaybackSession(track, mode, playSessionId, media
   }
 }
 
-function takePreloadedPlaybackSession(track, mode) {
+function takePreloadedPlaybackSession(track, mode, options = {}) {
+  if (options.forceExternalResolve) {
+    if (track?.Id && track.Id === state.preloadTrackId) {
+      clearPreload();
+    }
+    return null;
+  }
+
   if (!track?.Id || track.Id !== state.preloadTrackId || mode !== state.preloadMode) {
     return null;
   }
