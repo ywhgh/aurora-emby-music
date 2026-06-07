@@ -583,6 +583,7 @@ function checkPageState(check, page) {
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
   const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
+  const enhancedTailWordProgress = lyricProgress.enhancedTailWordProgress || {};
   const relativeEnhancedProgress = lyricProgress.relativeEnhancedProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
@@ -673,6 +674,7 @@ function checkPageState(check, page) {
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[2] > 0 && enhancedLateWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric third word should be partially highlighted from inline timing: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
+  assert(enhancedTailWordProgress.wordProgress?.[2] === 100, `${label} enhanced lyric tail word should finish before the next lyric line gap: ${JSON.stringify(enhancedTailWordProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.activeIndex === 0, `${label} relative enhanced lyric should focus the late line, got ${relativeEnhancedProgress.activeIndex}`);
   assert(relativeEnhancedProgress.wordProgress?.[0] === 100, `${label} relative enhanced lyric first word should complete at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.wordProgress?.[1] > 0 && relativeEnhancedProgress.wordProgress?.[1] < 100, `${label} relative enhanced lyric second word should be partially highlighted at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);

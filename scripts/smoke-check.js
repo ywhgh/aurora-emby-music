@@ -266,9 +266,11 @@ function checkLyrics() {
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
   assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap long line durations");
+  assert(app.includes("LYRIC_TIMED_WORD_MAX_DURATION_SECONDS"), "Timed lyric words should cap fallback word duration so the last word does not drag until the next line");
   assert(app.includes("LYRIC_PROGRESS_RESUME_LEAD_MS"), "Lyric word progress should resume shortly before the next line after idling");
   assert(app.includes("lyricProgressResumeTimer"), "Lyric word progress should have a low-frequency idle timer");
   assert(app.includes("function getLyricWordProgressEndSeconds"), "Lyric word progress should centralize line end timing");
+  assert(app.includes("function getTimedLyricWordPreferredDurationSeconds"), "Timed lyric fallback word duration should be centralized");
   assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
   assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use capped line end timing");
   assert(/scheduleLyricProgressResumeIfIdle\(lineRatio, lyricSeconds, nextEntry\);/.test(app), "Lyric word progress should idle after a line is fully highlighted");
@@ -438,6 +440,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("wordHighlightClipPath"), "Browser smoke should verify clipped word highlight rendering");
   assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
+  assert(browserSmoke.includes("enhancedTailWordProgress.wordProgress?.[2] === 100"), "Browser smoke should verify enhanced lyric tail words finish before a long next-line gap");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");

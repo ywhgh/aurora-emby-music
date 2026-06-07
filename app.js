@@ -120,6 +120,8 @@ const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
 const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
+const LYRIC_TIMED_WORD_MIN_DURATION_SECONDS = 0.16;
+const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 0.72;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
 const TOP_LYRIC_SHARD_MIN_COUNT = 16;
@@ -1578,6 +1580,8 @@ function runLyricProgressScenario() {
   const enhancedMidWordProgress = collectBrowserSmokeLyricState();
   updateLyricsHighlight(1.45, true);
   const enhancedLateWordProgress = collectBrowserSmokeLyricState();
+  updateLyricsHighlight(2.1, true);
+  const enhancedTailWordProgress = collectBrowserSmokeLyricState();
   const relativeEnhancedTrack = createBrowserSmokeTrack({
     id: "browser-smoke-relative-enhanced-lyric-track",
     name: "Browser Smoke Relative Enhanced Lyric Track",
@@ -1638,6 +1642,7 @@ function runLyricProgressScenario() {
     longGapIdleResumeDelayMs,
     enhancedMidWordProgress,
     enhancedLateWordProgress,
+    enhancedTailWordProgress,
     relativeEnhancedProgress,
     denseWordPerformance,
     endScrollLayout,
@@ -8655,11 +8660,14 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
   const start = timings[activeWordIndex];
   const nextWordStart = timings[activeWordIndex + 1];
   const explicitEnd = endTimings[activeWordIndex];
-  const end = Number.isFinite(explicitEnd) && explicitEnd > start
-    ? explicitEnd
-    : Number.isFinite(nextWordStart)
-    ? nextWordStart
-    : getTimedLyricWordEndSeconds(words[activeWordIndex], start, nextEntry);
+  const end = getTimedLyricWordEndSeconds({
+    word: words[activeWordIndex],
+    start,
+    explicitEnd,
+    nextWordStart,
+    nextEntry,
+    isTailWord: activeWordIndex >= words.length - 1,
+  });
   const activeWordProgress = getTimedLyricWordProgress(lyricSeconds, start, end);
   const litWords = activeWordIndex + (activeWordProgress / 100);
 
@@ -8724,12 +8732,39 @@ function findTimedLyricWordIndex(timings, lyricSeconds) {
   return result;
 }
 
-function getTimedLyricWordEndSeconds(word, start, nextEntry) {
-  if (Number.isFinite(nextEntry?.time) && nextEntry.time > start) {
-    return nextEntry.time;
+function getTimedLyricWordEndSeconds({ word, start, explicitEnd, nextWordStart, nextEntry, isTailWord = false }) {
+  if (!Number.isFinite(start)) {
+    return start;
   }
 
-  return start + Math.max(0.35, String(word?.textContent || "").length * 0.14);
+  if (Number.isFinite(explicitEnd) && explicitEnd > start) {
+    return explicitEnd;
+  }
+
+  if (Number.isFinite(nextWordStart) && nextWordStart > start) {
+    return nextWordStart;
+  }
+
+  const preferredEnd = start + getTimedLyricWordPreferredDurationSeconds(word);
+
+  if (isTailWord) {
+    return preferredEnd;
+  }
+
+  if (Number.isFinite(nextEntry?.time) && nextEntry.time > start) {
+    return Math.min(nextEntry.time, preferredEnd);
+  }
+
+  return preferredEnd;
+}
+
+function getTimedLyricWordPreferredDurationSeconds(word) {
+  const textLength = Array.from(String(word?.textContent || "")).filter((char) => char.trim()).length || 1;
+  return clamp(
+    Math.max(LYRIC_TIMED_WORD_MIN_DURATION_SECONDS, textLength * 0.12),
+    LYRIC_TIMED_WORD_MIN_DURATION_SECONDS,
+    LYRIC_TIMED_WORD_MAX_DURATION_SECONDS
+  );
 }
 
 function getTimedLyricWordProgress(lyricSeconds, start, end) {
