@@ -628,7 +628,7 @@ function checkPageState(check, page) {
   assert(lyricProgressBeforeOffset.wordProgress?.[0] === 100, `${label} first word should be fully highlighted before offset`);
   assert(lyricProgressBeforeOffset.wordProgress?.[1] > 0 && lyricProgressBeforeOffset.wordProgress?.[1] < 100, `${label} second word should be partially highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
   assert(lyricProgressBeforeOffset.wordProgress?.[2] === 0, `${label} third word should not be highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
-  assert(parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) > 0 && parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) < 100, `${label} partial word should expose clipped text progress before offset`);
+  assert(parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) > 0 && parseFloat(lyricProgressBeforeOffset.cssWordProgress?.[1]) < 100, `${label} partial word should expose width-clipped text progress before offset`);
   assert(/Delta epsilon zeta/.test(lyricProgressBeforeOffset.activeLineText || ""), `${label} active lyric line text mismatch before offset: ${lyricProgressBeforeOffset.activeLineText || "-"}`);
   assert(lyricProgressBeforeOffset.activeLineClass?.includes("active"), `${label} active lyric line should have active class before offset`);
   assert(lyricProgressAfterOffset.offsetLabel === "+0.68s", `${label} lyric offset smoke should adjust to +0.68s, got ${lyricProgressAfterOffset.offsetLabel || "-"}`);

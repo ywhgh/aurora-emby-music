@@ -328,10 +328,13 @@ function checkLyrics() {
   assert(!app.includes("word.dataset.wordProgress = String(normalizedPercent)"), "Lyric word progress should not write data attributes on every frame");
   assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
   assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
-  assert(app.includes('word.style.setProperty("--word-progress", `${normalizedPercent}%`)'), "Lyric word progress should drive the visible text clip fill");
-  assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not write unused transform ratio variables on every frame");
+  assert(app.includes('word.style.setProperty("--word-progress", `${normalizedPercent}%`)'), "Lyric word progress should drive the visible text fill percentage");
+  assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not use transform ratios that visually compress glyphs");
+  const wordAfterMatch = css.match(/\.immersive-lyric-list \.word::after \{[^}]*\}/);
+  const wordAfterRule = wordAfterMatch?.[0] || "";
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
-  assert(/\.immersive-lyric-list \.word::after \{[\s\S]*?content: attr\(data-word-text\);[\s\S]*?clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?will-change: clip-path;/.test(css), "Immersive lyric word highlights should use clipped text overlays");
+  assert(/width: var\(--word-progress, 0%\);[\s\S]*?content: attr\(data-word-text\);[\s\S]*?will-change: width;/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded width-clipped text overlay");
+  assert(wordAfterRule && !wordAfterRule.includes("clip-path: inset"), "Immersive lyric word highlights should not use clip-path on the hot path");
   assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");
   assert(!/\.immersive-lyric-list \.word \{[\s\S]*?background:\s*[\s\S]*?background-clip: text;/.test(css), "Immersive lyric word highlights should not return to background-gradient text fills");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");

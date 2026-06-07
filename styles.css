@@ -9839,12 +9839,16 @@ body.action-sheet-open .content {
 .immersive-lyric-list .word::after {
   position: absolute;
   inset: 0;
+  right: auto;
+  width: var(--word-progress, 0%);
   overflow: hidden;
   color: var(--immersive-lyric-word-active);
   content: attr(data-word-text);
-  clip-path: inset(0 calc(100% - var(--word-progress, 0%)) 0 0);
+  white-space: pre;
+  transform: translateZ(0);
+  transform-origin: left center;
   pointer-events: none;
-  will-change: clip-path;
+  will-change: width;
 }
 
 .immersive-lyric-list .lyric-line.active .immersive-lyric-translated,
