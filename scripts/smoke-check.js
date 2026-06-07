@@ -225,6 +225,16 @@ function checkLyrics() {
   assert(app.includes("word.dataset.wordTime"), "Immersive lyrics should persist enhanced LRC word times on word nodes");
   assert(app.includes("function updateTimedLyricWordProgress"), "Immersive lyrics should use enhanced LRC word timing when available");
   assert(app.includes("function hasTimedLyricWords"), "Immersive lyrics should detect timed word nodes");
+  assert(app.includes("immersiveLyricWordTimings"), "Enhanced LRC word timings should be cached with rendered word nodes");
+  assert(app.includes("function findTimedLyricWordIndex"), "Enhanced LRC word progress should locate the current word by timing search");
+  assert(app.includes("function getTimedLyricWordProgress"), "Enhanced LRC word progress should calculate the current word fill from exact timestamps");
+  assert(app.includes("updateLyricWordProgressWindow(words, litWords)"), "Enhanced LRC word progress should reuse the changed-word update window");
+  const timedLyricProgressStart = app.indexOf("function updateTimedLyricWordProgress");
+  const timedLyricProgressEnd = app.indexOf("function getTimedLyricWordTimings", timedLyricProgressStart);
+  const timedLyricProgressFunction = timedLyricProgressStart >= 0 && timedLyricProgressEnd > timedLyricProgressStart
+    ? app.slice(timedLyricProgressStart, timedLyricProgressEnd)
+    : "";
+  assert(timedLyricProgressFunction && !timedLyricProgressFunction.includes("words.forEach((word, index)"), "Enhanced LRC word progress should not scan every word on each frame");
   assert(app.includes("progressRenderSignature"), "Playback progress rendering should cache visible progress state");
   assert(app.includes("homeStartProgressSignature"), "Home start progress rendering should skip unchanged DOM writes");
   assert(app.includes("playerNextPreviewSignature"), "Next-track preview rendering should skip unchanged DOM writes");
