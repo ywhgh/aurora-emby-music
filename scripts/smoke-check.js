@@ -458,6 +458,39 @@ async function checkExternalSourceLyrics() {
   vm.runInNewContext(externalSourceCode, timeoutContext, { filename: "src/external-source-api.js" });
 
   const api = context.window.EmbyMusicExternalSource.createExternalSourceApi();
+  const trackContext = {
+    URL,
+    AbortController,
+    clearTimeout,
+    location: { href: "http://localhost:5174/" },
+    setTimeout,
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify({
+        items: [{
+          id: "plugin:wy-key:persisted-song",
+          title: "持久歌源",
+          artist: "测试艺人",
+          platform: "网易",
+          raw: {
+            pluginKey: "wy-key",
+            pluginName: "网易",
+            sourceId: "persisted-song",
+          },
+        }],
+        total: 1,
+      }),
+    }),
+    window: {},
+  };
+  vm.runInNewContext(externalSourceCode, trackContext, { filename: "src/external-source-api.js" });
+  const normalizedTracks = await trackContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174");
+  const normalizedTrack = normalizedTracks.Items?.[0] || {};
+  assert(normalizedTrack.ExternalSource?.restore?.pluginKey === "wy-key", `External tracks should persist restore pluginKey, got ${normalizedTrack.ExternalSource?.restore?.pluginKey || "-"}`);
+  assert(normalizedTrack.ExternalSource?.restore?.raw?.id === "plugin:wy-key:persisted-song", `External tracks should persist restore raw payload, got ${JSON.stringify(normalizedTrack.ExternalSource?.restore?.raw)}`);
+
   const lyric = await api.fetchLyric("http://localhost:5174", {
     Id: "external:test:song-1",
     ExternalSource: {
@@ -566,6 +599,28 @@ async function checkExternalSourceLyrics() {
   const mediaRawSnapshot = JSON.parse(mediaRawSnapshotUrl.searchParams.get("track") || "{}");
   assert(mediaRawSnapshot.raw?.id === "wy-test-song-4", `Media response raw should keep original plugin track for later restore, got ${JSON.stringify(mediaRawSnapshot.raw)}`);
   await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:restore-only-song",
+    ExternalSource: {
+      id: "plugin:wy-key:restore-only-song",
+      platform: "网易",
+      mediaUrl: "https://expired.example.test/media-response-only.mp3",
+      restore: {
+        pluginKey: "wy-key",
+        pluginName: "网易",
+        sourceId: "restore-only-song",
+        raw: { id: "restore-only-song", name: "只靠恢复快照播放" },
+      },
+      raw: {
+        url: "https://expired.example.test/media-response-only.mp3",
+        bitrate: 320000,
+      },
+    },
+  });
+  const restoreOnlySnapshotUrl = new URL(snapshotRequests[4]);
+  const restoreOnlySnapshot = JSON.parse(restoreOnlySnapshotUrl.searchParams.get("track") || "{}");
+  assert(restoreOnlySnapshot.pluginKey === "wy-key", `Dedicated restore snapshot should keep pluginKey, got ${restoreOnlySnapshot.pluginKey || "-"}`);
+  assert(restoreOnlySnapshot.raw?.id === "restore-only-song", `Dedicated restore snapshot should preserve raw plugin track, got ${JSON.stringify(restoreOnlySnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
     Id: "external:plugin:legacy-song",
     ExternalSource: {
       id: "plugin:wy-key:legacy-song",
@@ -574,7 +629,7 @@ async function checkExternalSourceLyrics() {
       raw: { id: "legacy-song", name: "旧缓存歌曲", artist: "测试艺人" },
     },
   });
-  const legacySnapshotUrl = new URL(snapshotRequests[4]);
+  const legacySnapshotUrl = new URL(snapshotRequests[5]);
   const legacySnapshot = JSON.parse(legacySnapshotUrl.searchParams.get("track") || "{}");
   assert(legacySnapshot.pluginKey === "wy-key", `Legacy restored plugin track should infer pluginKey from id, got ${legacySnapshot.pluginKey || "-"}`);
   assert(legacySnapshot.sourceId === "legacy-song", `Legacy restored plugin track should infer sourceId from id, got ${legacySnapshot.sourceId || "-"}`);

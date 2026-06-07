@@ -255,31 +255,28 @@ function appendExternalTrackSnapshot(url, track) {
 
 function createExternalTrackSnapshot(track) {
   const external = track?.ExternalSource || {};
+  const restore = external.restore && typeof external.restore === "object" ? external.restore : {};
   const raw = external.raw;
 
-  if (!raw || typeof raw !== "object") {
+  if ((!raw || typeof raw !== "object") && (!restore.raw || typeof restore.raw !== "object")) {
     return "";
   }
 
-  const pluginMeta = raw.pluginKey
+  const pluginMeta = raw?.pluginKey
     ? raw
-    : (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey ? raw.raw : {});
-  const pluginRaw = pluginMeta.raw && typeof pluginMeta.raw === "object"
-    ? pluginMeta.raw
-    : (raw.raw?.raw && typeof raw.raw.raw === "object"
-      ? raw.raw.raw
-      : (raw.media && typeof raw.media === "object" ? raw.media : raw));
+    : (raw?.raw && typeof raw.raw === "object" && raw.raw.pluginKey ? raw.raw : {});
+  const pluginRaw = getExternalPluginRestoreRaw(raw, restore);
   const pluginIdParts = getExternalPluginIdParts(track, external);
   const snapshot = {
     id: external.id || stripExternalTrackPrefix(track?.Id),
-    pluginKey: pluginMeta.pluginKey || external.pluginKey || pluginIdParts.pluginKey,
-    pluginName: pluginMeta.pluginName || external.platform,
-    sourceId: pluginMeta.sourceId || external.sourceId || pluginIdParts.sourceId || external.id,
-    mediaKind: pluginMeta.mediaKind || external.mediaKind,
-    sourceQuality: pluginMeta.sourceQuality || external.sourceQuality,
-    qualityLabel: pluginMeta.qualityLabel || external.qualityLabel,
-    resolution: pluginMeta.resolution || external.resolution,
-    qualityVerified: pluginMeta.qualityVerified || external.qualityVerified,
+    pluginKey: restore.pluginKey || pluginMeta.pluginKey || external.pluginKey || pluginIdParts.pluginKey,
+    pluginName: restore.pluginName || pluginMeta.pluginName || external.platform,
+    sourceId: restore.sourceId || pluginMeta.sourceId || external.sourceId || pluginIdParts.sourceId || external.id,
+    mediaKind: restore.mediaKind || pluginMeta.mediaKind || external.mediaKind,
+    sourceQuality: restore.sourceQuality || pluginMeta.sourceQuality || external.sourceQuality,
+    qualityLabel: restore.qualityLabel || pluginMeta.qualityLabel || external.qualityLabel,
+    resolution: restore.resolution || pluginMeta.resolution || external.resolution,
+    qualityVerified: restore.qualityVerified || pluginMeta.qualityVerified || external.qualityVerified,
     raw: pluginRaw,
   };
 
@@ -296,6 +293,99 @@ function createExternalTrackSnapshot(track) {
 
 function hasRestorableExternalPluginSnapshot(track) {
   return Boolean(createExternalTrackSnapshot(track));
+}
+
+function createExternalPluginRestoreSnapshot(rawTrack, meta = {}) {
+  if (!rawTrack || typeof rawTrack !== "object") {
+    return null;
+  }
+
+  return {
+    id: meta.id || meta.sourceId || "",
+    pluginKey: meta.pluginKey || "",
+    pluginName: meta.pluginName || "",
+    sourceId: meta.sourceId || meta.id || "",
+    mediaKind: meta.mediaKind || "",
+    sourceQuality: meta.sourceQuality || "",
+    qualityLabel: meta.qualityLabel || "",
+    resolution: meta.resolution || "",
+    qualityVerified: Boolean(meta.qualityVerified),
+    raw: rawTrack,
+  };
+}
+
+function normalizeExternalPluginRestoreSnapshot(restore, fallbackRawTrack, meta = {}) {
+  if (restore && typeof restore === "object" && restore.raw && typeof restore.raw === "object") {
+    return {
+      id: restore.id || meta.id || meta.sourceId || "",
+      pluginKey: restore.pluginKey || meta.pluginKey || "",
+      pluginName: restore.pluginName || meta.pluginName || "",
+      sourceId: restore.sourceId || meta.sourceId || meta.id || "",
+      mediaKind: restore.mediaKind || meta.mediaKind || "",
+      sourceQuality: restore.sourceQuality || meta.sourceQuality || "",
+      qualityLabel: restore.qualityLabel || meta.qualityLabel || "",
+      resolution: restore.resolution || meta.resolution || "",
+      qualityVerified: Boolean(restore.qualityVerified || meta.qualityVerified),
+      raw: restore.raw,
+    };
+  }
+
+  return createExternalPluginRestoreSnapshot(fallbackRawTrack, meta);
+}
+
+function getExternalPluginRestoreRaw(raw, restore = {}) {
+  if (restore.raw && typeof restore.raw === "object") {
+    return restore.raw;
+  }
+
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  if (raw.raw && typeof raw.raw === "object" && raw.raw.pluginKey && raw.raw.raw && typeof raw.raw.raw === "object") {
+    return raw.raw.raw;
+  }
+
+  if (raw.raw && typeof raw.raw === "object" && !raw.raw.pluginKey) {
+    return raw.raw;
+  }
+
+  if (raw.track && typeof raw.track === "object") {
+    return raw.track;
+  }
+
+  if (raw.originalTrack && typeof raw.originalTrack === "object") {
+    return raw.originalTrack;
+  }
+
+  if (raw.sourceTrack && typeof raw.sourceTrack === "object") {
+    return raw.sourceTrack;
+  }
+
+  if (raw.item && typeof raw.item === "object") {
+    return raw.item;
+  }
+
+  if (raw.song && typeof raw.song === "object") {
+    return raw.song;
+  }
+
+  if (raw.media && typeof raw.media === "object" && !looksLikeMediaPayloadOnly(raw.media)) {
+    return raw.media;
+  }
+
+  return raw;
+}
+
+function looksLikeMediaPayloadOnly(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return Boolean(
+    pickString(value.url, value.streamUrl, value.src, value.playUrl, value.play_url, value.location, value.link)
+      && !pickString(value.id, value.Id, value.mid, value.songmid, value.hash, value.rid, value.name, value.title, value.songName)
+  );
 }
 
 function getExternalPluginIdParts(track, external = {}) {
@@ -748,6 +838,17 @@ function normalizeExternalTrack(item, context = {}) {
       mediaUrl: normalizeUrl(pickString(item.url, item.streamUrl, item.src, item.playUrl), context.apiUrl),
       lyric: pickString(item.lyric, item.lyrics, item.lrc, item.rawLrc),
       raw: item,
+      restore: normalizeExternalPluginRestoreSnapshot(item.restore, item, {
+        id: sourceId,
+        pluginKey: pickString(item.pluginKey, item.raw?.pluginKey),
+        pluginName: pickString(item.pluginName, item.raw?.pluginName, platform),
+        sourceId: pickString(item.sourceId, item.raw?.sourceId, sourceId),
+        mediaKind,
+        sourceQuality,
+        qualityLabel,
+        resolution,
+        qualityVerified,
+      }),
     },
     MediaSources: [{
       Id: mediaSourceId,

@@ -14086,6 +14086,7 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
     qualityVerified,
     contentType: media.contentType || track.ExternalSource?.contentType || "",
     raw: media.raw || track.ExternalSource?.raw,
+    restore: media.restore || track.ExternalSource?.restore,
   };
   track.MediaSources = [{
     ...(currentSource || {}),

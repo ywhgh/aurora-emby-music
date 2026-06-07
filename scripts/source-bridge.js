@@ -334,6 +334,17 @@ function toApiTrack(request, track) {
       qualityVerified: Boolean(track.qualityVerified),
       raw: track.raw,
     } : undefined,
+    restore: isPluginTrack ? {
+      pluginKey: track.pluginKey,
+      pluginName: track.pluginName,
+      sourceId: track.sourceId,
+      mediaKind: track.mediaKind || "audio",
+      sourceQuality: track.sourceQuality || "",
+      qualityLabel: track.qualityLabel || "",
+      resolution: track.resolution || "",
+      qualityVerified: Boolean(track.qualityVerified),
+      raw: track.raw,
+    } : undefined,
   };
 }
 
