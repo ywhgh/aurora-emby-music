@@ -6,6 +6,7 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
+const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
 const { URL } = require("node:url");
@@ -35,6 +36,13 @@ const COVER_NAMES = [
 const options = parseArgs(process.argv.slice(2));
 const host = options.host || process.env.SOURCE_BRIDGE_HOST || "127.0.0.1";
 const port = Number(options.port || process.env.SOURCE_BRIDGE_PORT || process.env.PORT || 5174);
+const pluginTrackCachePath = options.pluginCache
+  || process.env.SOURCE_BRIDGE_PLUGIN_CACHE
+  || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir(), "emby-music-source-bridge", "plugin-tracks.json");
+const isPluginTrackCacheDisabled = /^(1|true|yes)$/i.test(String(options.noPluginCache || process.env.SOURCE_BRIDGE_DISABLE_PLUGIN_CACHE || ""));
+const PLUGIN_TRACK_CACHE_VERSION = 1;
+const PLUGIN_TRACK_CACHE_LIMIT = 2000;
+const PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS = 250;
 let musicDirs = uniqueStrings([
   ...splitList(options.musicDir),
   ...splitList(process.env.MUSIC_DIR),
@@ -54,6 +62,9 @@ const state = {
   plugins: [],
   pluginTrackMap: new Map(),
   pluginRuntimeMap: new Map(),
+  pluginTrackCache: new Map(),
+  pluginTrackCacheDirty: false,
+  pluginTrackCacheFlushTimer: null,
   lastScanAt: "",
 };
 
@@ -98,6 +109,7 @@ async function refreshState() {
   }));
   state.pluginTrackMap = new Map();
   state.pluginRuntimeMap = new Map();
+  state.pluginTrackCache = loadPluginTrackCache();
   state.lastScanAt = new Date().toISOString();
 }
 
@@ -603,7 +615,184 @@ function createPluginTrack(plugin, item, index) {
 
   state.pluginTrackMap.set(id, track);
   state.pluginTrackMap.set(sourceId, track);
+  rememberPluginTrack(track);
   return track;
+}
+
+function rememberPluginTrack(track) {
+  if (
+    isPluginTrackCacheDisabled
+    || !track?.pluginKey
+    || !track?.sourceId
+    || !track.raw
+    || typeof track.raw !== "object"
+  ) {
+    return;
+  }
+
+  const snapshot = normalizePluginTrackCacheEntry({
+    pluginKey: track.pluginKey,
+    pluginName: track.pluginName,
+    pluginUrl: track.pluginUrl,
+    pluginPlatform: track.pluginPlatform,
+    sourceId: track.sourceId,
+    mediaKind: track.mediaKind || "audio",
+    sourceQuality: track.sourceQuality || "",
+    qualityLabel: track.qualityLabel || "",
+    resolution: track.resolution || "",
+    qualityVerified: Boolean(track.qualityVerified),
+    raw: track.raw,
+    savedAt: new Date().toISOString(),
+  });
+
+  if (!snapshot) {
+    return;
+  }
+
+  getPluginTrackCacheKeys(snapshot).forEach((key) => {
+    state.pluginTrackCache.set(key, snapshot);
+  });
+  trimPluginTrackCache();
+  schedulePluginTrackCacheFlush();
+}
+
+function loadPluginTrackCache() {
+  const cache = new Map();
+
+  if (isPluginTrackCacheDisabled) {
+    return cache;
+  }
+
+  try {
+    const payload = JSON.parse(fs.readFileSync(pluginTrackCachePath, "utf8"));
+    const entries = Array.isArray(payload?.tracks)
+      ? payload.tracks
+      : (Array.isArray(payload) ? payload : []);
+
+    entries.forEach((entry) => {
+      const snapshot = normalizePluginTrackCacheEntry(entry);
+
+      if (!snapshot) {
+        return;
+      }
+
+      getPluginTrackCacheKeys(snapshot).forEach((key) => {
+        cache.set(key, snapshot);
+      });
+    });
+  } catch {
+    return cache;
+  }
+
+  return cache;
+}
+
+function normalizePluginTrackCacheEntry(entry) {
+  if (!entry || typeof entry !== "object" || !entry.raw || typeof entry.raw !== "object") {
+    return null;
+  }
+
+  const pluginKey = String(entry.pluginKey || "").trim();
+  const sourceId = String(entry.sourceId || getPluginItemId(entry.raw, 0) || "").trim();
+
+  if (!pluginKey || !sourceId) {
+    return null;
+  }
+
+  return {
+    pluginKey,
+    pluginName: String(entry.pluginName || "").trim(),
+    pluginUrl: String(entry.pluginUrl || "").trim(),
+    pluginPlatform: String(entry.pluginPlatform || "").trim(),
+    sourceId,
+    mediaKind: String(entry.mediaKind || "audio").trim() || "audio",
+    sourceQuality: String(entry.sourceQuality || "").trim(),
+    qualityLabel: String(entry.qualityLabel || "").trim(),
+    resolution: String(entry.resolution || "").trim(),
+    qualityVerified: Boolean(entry.qualityVerified),
+    raw: entry.raw,
+    savedAt: entry.savedAt || new Date().toISOString(),
+  };
+}
+
+function getPluginTrackCacheKeys(snapshot) {
+  const pluginKey = String(snapshot?.pluginKey || "").trim();
+  const sourceId = String(snapshot?.sourceId || "").trim();
+
+  if (!pluginKey || !sourceId) {
+    return [];
+  }
+
+  return uniqueStrings([
+    `${pluginKey}:${sourceId}`,
+    `plugin:${pluginKey}:${sourceId}`,
+    `plugin:${pluginKey}:${encodeURIComponent(sourceId)}`,
+  ]);
+}
+
+function trimPluginTrackCache() {
+  if (state.pluginTrackCache.size <= PLUGIN_TRACK_CACHE_LIMIT * 3) {
+    return;
+  }
+
+  const uniqueEntries = getUniquePluginTrackCacheEntries()
+    .sort((left, right) => (Date.parse(right.savedAt) || 0) - (Date.parse(left.savedAt) || 0))
+    .slice(0, PLUGIN_TRACK_CACHE_LIMIT);
+
+  state.pluginTrackCache = new Map();
+  uniqueEntries.forEach((entry) => {
+    getPluginTrackCacheKeys(entry).forEach((key) => {
+      state.pluginTrackCache.set(key, entry);
+    });
+  });
+}
+
+function getUniquePluginTrackCacheEntries() {
+  const unique = new Map();
+
+  for (const entry of state.pluginTrackCache.values()) {
+    unique.set(`${entry.pluginKey}\0${entry.sourceId}`, entry);
+  }
+
+  return [...unique.values()];
+}
+
+function schedulePluginTrackCacheFlush() {
+  if (isPluginTrackCacheDisabled) {
+    return;
+  }
+
+  state.pluginTrackCacheDirty = true;
+
+  if (state.pluginTrackCacheFlushTimer) {
+    clearTimeout(state.pluginTrackCacheFlushTimer);
+  }
+
+  state.pluginTrackCacheFlushTimer = setTimeout(flushPluginTrackCache, PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS);
+}
+
+function flushPluginTrackCache() {
+  if (isPluginTrackCacheDisabled || !state.pluginTrackCacheDirty) {
+    return;
+  }
+
+  state.pluginTrackCacheFlushTimer = null;
+  state.pluginTrackCacheDirty = false;
+
+  const tracks = getUniquePluginTrackCacheEntries()
+    .sort((left, right) => (Date.parse(right.savedAt) || 0) - (Date.parse(left.savedAt) || 0))
+    .slice(0, PLUGIN_TRACK_CACHE_LIMIT);
+
+  try {
+    fs.mkdirSync(path.dirname(pluginTrackCachePath), { recursive: true });
+    fs.writeFileSync(pluginTrackCachePath, JSON.stringify({
+      version: PLUGIN_TRACK_CACHE_VERSION,
+      savedAt: new Date().toISOString(),
+      tracks,
+    }, null, 2));
+  } catch (error) {
+    console.warn(`[source-bridge] failed to write plugin cache: ${error.message}`);
+  }
 }
 
 async function resolvePluginMedia(track, quality) {
@@ -2438,6 +2627,8 @@ function getTrackFromUrl(url) {
     || state.pluginTrackMap.get(id)
     || state.pluginTrackMap.get(decodeURIComponentSafe(id))
     || restorePluginTrackFromSnapshot(url, id)
+    || restorePluginTrackFromCache(id)
+    || restorePluginTrackFromId(id)
     || null;
 }
 
@@ -2475,8 +2666,121 @@ function restorePluginTrackFromSnapshot(url, id) {
   if (requestedId) {
     state.pluginTrackMap.set(requestedId, restored);
   }
+  rememberPluginTrack(restored);
 
   return restored;
+}
+
+function restorePluginTrackFromCache(id) {
+  const parts = parsePluginTrackId(id);
+
+  if (!parts.pluginKey || !parts.sourceId) {
+    return null;
+  }
+
+  const snapshot = state.pluginTrackCache.get(`${parts.pluginKey}:${parts.sourceId}`)
+    || state.pluginTrackCache.get(`plugin:${parts.pluginKey}:${parts.sourceId}`)
+    || state.pluginTrackCache.get(`plugin:${parts.pluginKey}:${encodeURIComponent(parts.sourceId)}`);
+
+  if (!snapshot?.raw || typeof snapshot.raw !== "object") {
+    return null;
+  }
+
+  return restorePluginTrackFromSnapshotObject(snapshot, id);
+}
+
+function restorePluginTrackFromId(id) {
+  const parts = parsePluginTrackId(id);
+
+  if (!parts.pluginKey || !parts.sourceId) {
+    return null;
+  }
+
+  const plugin = getPluginByKeySafe(parts.pluginKey);
+
+  if (!plugin) {
+    return null;
+  }
+
+  return registerRestoredPluginTrack(createPluginTrack(plugin, {
+    id: parts.sourceId,
+    Id: parts.sourceId,
+    sourceId: parts.sourceId,
+    mid: parts.sourceId,
+    songmid: parts.sourceId,
+    hash: parts.sourceId,
+    rid: parts.sourceId,
+    songId: parts.sourceId,
+  }, 0), {
+    id,
+    sourceId: parts.sourceId,
+  });
+}
+
+function restorePluginTrackFromSnapshotObject(snapshot, id) {
+  const plugin = getPluginForSnapshot(snapshot);
+
+  if (!plugin) {
+    return null;
+  }
+
+  return registerRestoredPluginTrack(createPluginTrack(plugin, snapshot.raw, 0), {
+    id,
+    pluginName: snapshot.pluginName,
+    pluginUrl: snapshot.pluginUrl,
+    pluginPlatform: snapshot.pluginPlatform || snapshot.platform,
+    mediaKind: snapshot.mediaKind,
+    sourceId: snapshot.sourceId || snapshot.id,
+    sourceQuality: snapshot.sourceQuality,
+    qualityLabel: snapshot.qualityLabel,
+    resolution: snapshot.resolution,
+    qualityVerified: snapshot.qualityVerified,
+  });
+}
+
+function registerRestoredPluginTrack(restored, snapshot = {}) {
+  const requestedId = decodeURIComponentSafe(snapshot.id);
+  const sourceId = String(snapshot.sourceId || restored.sourceId || "").trim();
+
+  restored.id = requestedId || restored.id;
+  restored.sourceId = sourceId || restored.sourceId;
+  restored.pluginName = snapshot.pluginName || restored.pluginName;
+  restored.pluginUrl = snapshot.pluginUrl || restored.pluginUrl;
+  restored.pluginPlatform = snapshot.pluginPlatform || restored.pluginPlatform;
+  restored.mediaKind = snapshot.mediaKind || restored.mediaKind;
+  restored.sourceQuality = snapshot.sourceQuality || restored.sourceQuality;
+  restored.qualityLabel = snapshot.qualityLabel || restored.qualityLabel;
+  restored.resolution = snapshot.resolution || restored.resolution;
+  restored.qualityVerified = Boolean(snapshot.qualityVerified || restored.qualityVerified);
+
+  state.pluginTrackMap.set(restored.id, restored);
+  state.pluginTrackMap.set(restored.sourceId, restored);
+  if (snapshot.id) {
+    state.pluginTrackMap.set(snapshot.id, restored);
+  }
+  if (requestedId) {
+    state.pluginTrackMap.set(requestedId, restored);
+  }
+  rememberPluginTrack(restored);
+
+  return restored;
+}
+
+function parsePluginTrackId(id) {
+  const decoded = decodeURIComponentSafe(id);
+  const match = decoded.match(/^plugin:([^:]+):(.+)$/);
+
+  if (!match) {
+    return {
+      pluginKey: "",
+      sourceId: "",
+    };
+  }
+
+  return {
+    pluginKey: match[1],
+    sourceId: decodeURIComponentSafe(match[2]),
+  };
 }
 
 function getPluginForSnapshot(snapshot) {

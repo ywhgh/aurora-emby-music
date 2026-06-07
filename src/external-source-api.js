@@ -257,23 +257,26 @@ function createExternalTrackSnapshot(track) {
   const external = track?.ExternalSource || {};
   const restore = external.restore && typeof external.restore === "object" ? external.restore : {};
   const raw = external.raw;
-
-  if ((!raw || typeof raw !== "object") && (!restore.raw || typeof restore.raw !== "object")) {
-    return "";
-  }
+  const pluginIdParts = getExternalPluginIdParts(track, external);
 
   const pluginMeta = raw?.pluginKey
     ? raw
     : (raw?.raw && typeof raw.raw === "object" && raw.raw.pluginKey ? raw.raw : {});
-  const pluginRaw = getExternalPluginRestoreRaw(raw, restore);
-  const pluginIdParts = getExternalPluginIdParts(track, external);
+  const pluginRaw = getExternalPluginRestoreRaw(raw, restore)
+    || createExternalPluginFallbackRawTrack(track, external, restore, pluginIdParts);
+  const sourceId = restore.sourceId
+    || pluginMeta.sourceId
+    || external.sourceId
+    || pluginIdParts.sourceId
+    || getExternalPluginRawSourceId(pluginRaw)
+    || external.id;
   const snapshot = {
     id: external.id || stripExternalTrackPrefix(track?.Id),
     pluginKey: restore.pluginKey || pluginMeta.pluginKey || external.pluginKey || pluginIdParts.pluginKey,
     pluginName: restore.pluginName || pluginMeta.pluginName || external.platform,
     pluginUrl: restore.pluginUrl || pluginMeta.pluginUrl || external.pluginUrl,
     pluginPlatform: restore.pluginPlatform || pluginMeta.pluginPlatform || external.pluginPlatform || external.platform,
-    sourceId: restore.sourceId || pluginMeta.sourceId || external.sourceId || pluginIdParts.sourceId || external.id,
+    sourceId,
     mediaKind: restore.mediaKind || pluginMeta.mediaKind || external.mediaKind,
     sourceQuality: restore.sourceQuality || pluginMeta.sourceQuality || external.sourceQuality,
     qualityLabel: restore.qualityLabel || pluginMeta.qualityLabel || external.qualityLabel,
@@ -394,6 +397,79 @@ function getExternalPluginRestoreRaw(raw, restore = {}) {
   }
 
   return raw;
+}
+
+function createExternalPluginFallbackRawTrack(track, external = {}, restore = {}, pluginIdParts = {}) {
+  const sourceId = restore.sourceId
+    || external.sourceId
+    || pluginIdParts.sourceId
+    || getExternalPluginRawSourceId(external.raw)
+    || "";
+
+  if (!sourceId) {
+    return null;
+  }
+
+  const title = pickString(
+    track?.Name,
+    external.title,
+    external.name,
+    external.raw?.title,
+    external.raw?.name,
+  );
+  const artist = pickString(
+    Array.isArray(track?.Artists) ? track.Artists.join(", ") : "",
+    track?.AlbumArtist,
+    external.artist,
+    external.singer,
+    external.raw?.artist,
+    external.raw?.singer,
+  );
+  const album = pickString(track?.Album, external.album, external.raw?.album);
+
+  return {
+    id: sourceId,
+    Id: sourceId,
+    sourceId,
+    mid: sourceId,
+    songmid: sourceId,
+    hash: sourceId,
+    rid: sourceId,
+    songId: sourceId,
+    title,
+    name: title,
+    Name: title,
+    songName: title,
+    artist,
+    singer: artist,
+    author: artist,
+    artistName: artist,
+    album,
+    albumName: album,
+    artwork: external.artwork || "",
+    cover: external.artwork || "",
+    mediaKind: external.mediaKind || "",
+    sourceQuality: external.sourceQuality || "",
+    qualityLabel: external.qualityLabel || "",
+    resolution: external.resolution || "",
+  };
+}
+
+function getExternalPluginRawSourceId(raw) {
+  if (!raw || typeof raw !== "object") {
+    return "";
+  }
+
+  return pickString(
+    raw.sourceId,
+    raw.id,
+    raw.Id,
+    raw.mid,
+    raw.songmid,
+    raw.hash,
+    raw.rid,
+    raw.songId,
+  );
 }
 
 function looksLikeMediaPayloadOnly(value) {

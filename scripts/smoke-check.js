@@ -337,8 +337,10 @@ function checkLyrics() {
   assert(!app.includes("--word-progress-ratio"), "Lyric word progress should not use transform ratios that visually compress glyphs");
   const wordAfterMatch = css.match(/\.immersive-lyric-list \.word::after \{[^}]*\}/);
   const wordAfterRule = wordAfterMatch?.[0] || "";
+  const activeWordAfterRule = getCssRule(css, ".immersive-lyric-list .lyric-line.active .word::after,");
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
-  assert(/clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?content: attr\(data-word-text\);[\s\S]*?will-change: clip-path;/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded clip-path text overlay");
+  assert(/clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?content: attr\(data-word-text\);/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded clip-path text overlay");
+  assert(activeWordAfterRule.includes("will-change: clip-path"), "Immersive lyric word highlights should limit clip-path compositing hints to active lines");
   assert(wordAfterRule && !wordAfterRule.includes("width: var(--word-progress"), "Immersive lyric word highlights should avoid width layout writes on the hot path");
   assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");
   assert(!/\.immersive-lyric-list \.word \{[\s\S]*?background:\s*[\s\S]*?background-clip: text;/.test(css), "Immersive lyric word highlights should not return to background-gradient text fills");
@@ -662,6 +664,25 @@ async function checkExternalSourceLyrics() {
   assert(legacySnapshot.pluginKey === "wy-key", `Legacy restored plugin track should infer pluginKey from id, got ${legacySnapshot.pluginKey || "-"}`);
   assert(legacySnapshot.sourceId === "legacy-song", `Legacy restored plugin track should infer sourceId from id, got ${legacySnapshot.sourceId || "-"}`);
   assert(legacySnapshot.raw?.id === "legacy-song", `Legacy restored plugin track should keep raw payload, got ${JSON.stringify(legacySnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:plugin:cached-only-song",
+    Name: "只有旧缓存的歌",
+    Artists: ["测试艺人"],
+    Album: "测试专辑",
+    ExternalSource: {
+      id: "plugin:wy-key:cached-only-song",
+      platform: "网易",
+      pluginKey: "wy-key",
+      pluginName: "网易",
+      mediaKind: "audio",
+    },
+  }, { forceResolve: true });
+  const cachedOnlySnapshotUrl = new URL(snapshotRequests[7]);
+  const cachedOnlySnapshot = JSON.parse(cachedOnlySnapshotUrl.searchParams.get("track") || "{}");
+  assert(cachedOnlySnapshot.pluginKey === "wy-key", `Cached-only plugin track should keep pluginKey, got ${cachedOnlySnapshot.pluginKey || "-"}`);
+  assert(cachedOnlySnapshot.sourceId === "cached-only-song", `Cached-only plugin track should infer sourceId from plugin id, got ${cachedOnlySnapshot.sourceId || "-"}`);
+  assert(cachedOnlySnapshot.raw?.id === "cached-only-song", `Cached-only plugin track should include fallback raw id, got ${JSON.stringify(cachedOnlySnapshot.raw)}`);
+  assert(cachedOnlySnapshot.raw?.title === "只有旧缓存的歌", `Cached-only plugin track should include fallback title, got ${JSON.stringify(cachedOnlySnapshot.raw)}`);
 
   const forceResolveRequests = [];
   const forceResolveContext = {
@@ -733,6 +754,12 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("line?.StartPositionTicks"), "Source bridge should support Emby-style lyric tick fields");
   assert(bridge.includes("function formatLrcTimestamp"), "Source bridge should format converted lyric line timestamps");
   assert(bridge.includes("function restorePluginTrackFromSnapshot"), "Source bridge should restore plugin tracks from persisted snapshots");
+  assert(bridge.includes("pluginTrackCachePath"), "Source bridge should persist plugin track cache between bridge restarts");
+  assert(bridge.includes("function rememberPluginTrack"), "Source bridge should remember plugin search results for later playback");
+  assert(bridge.includes("function loadPluginTrackCache"), "Source bridge should load plugin tracks from persistent cache");
+  assert(bridge.includes("function restorePluginTrackFromCache"), "Source bridge should restore plugin tracks from cache without requiring a new search");
+  assert(bridge.includes("function restorePluginTrackFromId"), "Source bridge should rebuild plugin tracks from plugin ids when no cache snapshot exists");
+  assert(/function getTrackFromUrl\(url\) \{[\s\S]*?restorePluginTrackFromSnapshot\(url, id\)[\s\S]*?restorePluginTrackFromCache\(id\)[\s\S]*?restorePluginTrackFromId\(id\)/.test(bridge), "Source bridge media lookup should restore plugin tracks before returning 404");
   assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should recover persisted plugin tracks when the plugin key changes");
   assert(bridge.includes("function getPluginByUrlSafe"), "Source bridge should match restored plugin tracks by plugin URL");
   assert(bridge.includes("function getPluginByNameSafe"), "Source bridge should match restored plugin tracks by plugin name");

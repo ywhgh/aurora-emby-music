@@ -9850,6 +9850,10 @@ body.action-sheet-open .content {
   transform: translateZ(0);
   transform-origin: left center;
   pointer-events: none;
+}
+
+.immersive-lyric-list .lyric-line.active .word::after,
+.immersive-lyric-list p.active .word::after {
   will-change: clip-path;
 }
 
