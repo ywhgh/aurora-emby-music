@@ -127,6 +127,31 @@ function checkCss() {
   ].forEach((selector) => {
     assert(css.includes(selector), `Missing CSS selector ${selector}`);
   });
+
+  const lyricBaseRule = getCssRule(css, ".lyric-line {");
+  const lyricHoverRule = getCssRule(css, ".lyric-line:hover,");
+  const lyricActiveRule = getCssRule(css, ".lyric-line.active {");
+  const immersiveLyricBaseRule = getCssRule(css, ".immersive-lyric-list .lyric-line,\n.immersive-lyric-list p {");
+  const immersiveLyricActiveRule = getCssRule(css, ".immersive-lyric-list .lyric-line.active,");
+
+  assert(/width:\s*100%;/.test(lyricBaseRule), "Lyric rows should span the full row width");
+  assert(/background:\s*transparent;/.test(lyricBaseRule), "Inactive lyric rows should stay background-transparent");
+  assert(/border-radius:\s*0;/.test(lyricBaseRule), "Lyric rows should not use rounded rectangle backgrounds");
+  assert(
+    /background\s+0\.35s cubic-bezier\(0\.25, 1, 0\.5, 1\),\s*opacity\s+0\.35s ease;/.test(lyricBaseRule),
+    "Lyric row fog transitions should use the shared smooth easing"
+  );
+  assert(css.includes(".lyric-line:hover,\n.lyric-line:focus-visible"), "Lyric hover fog should apply to every lyric row");
+  assert(!css.includes(".lyric-line[role=\"button\"]:hover,\n.lyric-line[role=\"button\"]:focus-visible"), "Lyric hover fog should not be limited to seekable rows");
+  assert(/rgba\(255, 255, 255, 0\.03\) 25%/.test(lyricHoverRule), "Inactive lyric hover fog should stay subtle and feathered");
+  assert(/rgba\(255, 255, 255, 0\.08\) 20%/.test(lyricActiveRule), "Active lyric fog should use a brighter feathered center");
+  assert(/-webkit-backdrop-filter:\s*blur\(12px\);/.test(lyricActiveRule), "Active lyric fog should include webkit backdrop blur");
+  assert(/backdrop-filter:\s*blur\(12px\);/.test(lyricActiveRule), "Active lyric fog should include backdrop blur");
+  assert(/width:\s*100%;/.test(immersiveLyricBaseRule), "Immersive lyric rows should span the full row width");
+  assert(/background:\s*transparent;/.test(immersiveLyricBaseRule), "Inactive immersive lyric rows should stay background-transparent");
+  assert(/border-radius:\s*0;/.test(immersiveLyricBaseRule), "Immersive lyric rows should not use rounded rectangle backgrounds");
+  assert(/width:\s*100%;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should span the full row width");
+  assert(/box-shadow:\s*none;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should not add a framed shadow");
 }
 
 function checkLyrics() {
@@ -532,6 +557,48 @@ async function checkExternalSourceLyrics() {
   assert(legacySnapshot.sourceId === "legacy-song", `Legacy restored plugin track should infer sourceId from id, got ${legacySnapshot.sourceId || "-"}`);
   assert(legacySnapshot.raw?.id === "legacy-song", `Legacy restored plugin track should keep raw payload, got ${JSON.stringify(legacySnapshot.raw)}`);
 
+  const forceResolveRequests = [];
+  const forceResolveContext = {
+    URL,
+    AbortController,
+    clearTimeout,
+    location: { href: "http://localhost:5174/" },
+    setTimeout,
+    fetch: async (url) => {
+      forceResolveRequests.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({ url: "https://fresh.example.test/new-token.mp3" }),
+      };
+    },
+    window: {},
+  };
+  vm.runInNewContext(externalSourceCode, forceResolveContext, { filename: "src/external-source-api.js" });
+  const forceResolveApi = forceResolveContext.window.EmbyMusicExternalSource.createExternalSourceApi();
+  const cachedInlineMedia = await forceResolveApi.fetchMediaSource("http://localhost:5174", {
+    Id: "external:direct:cached-song",
+    ExternalSource: {
+      id: "cached-song",
+      platform: "direct",
+      mediaUrl: "https://expired.example.test/cached-token.mp3",
+    },
+  });
+  assert(cachedInlineMedia.streamUrl === "https://expired.example.test/cached-token.mp3", `External media should keep direct inline URL by default, got ${cachedInlineMedia.streamUrl}`);
+  assert(forceResolveRequests.length === 0, `Direct inline media should not hit /media by default, got ${forceResolveRequests.join(", ") || "-"}`);
+  const freshMedia = await forceResolveApi.fetchMediaSource("http://localhost:5174", {
+    Id: "external:direct:cached-song",
+    ExternalSource: {
+      id: "cached-song",
+      platform: "direct",
+      mediaUrl: "https://expired.example.test/cached-token.mp3",
+    },
+  }, { forceResolve: true });
+  const freshMediaUrl = new URL(forceResolveRequests[0]);
+  assert(freshMediaUrl.pathname === "/media", `Force-resolved external media should bypass stale inline URL and call /media, got ${freshMediaUrl.href}`);
+  assert(freshMedia.streamUrl === "https://fresh.example.test/new-token.mp3", `Force-resolved external media should use the fresh bridge URL, got ${freshMedia.streamUrl}`);
+
   try {
     await timeoutContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174", { timeoutMs: 5 });
     assert(false, "External source requests should time out when the bridge does not respond");
@@ -568,6 +635,7 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("resolvePluginMediaPayload"), "Source bridge should resolve plugin media with fallback quality attempts");
   assert(externalSourceCode.includes("function hasRestorableExternalPluginSnapshot"), "External source playback should detect restorable plugin snapshots");
   assert(/function shouldResolveInlineUrlThroughBridge\(url, track\) \{[\s\S]*?hasRestorableExternalPluginSnapshot\(track\)/.test(externalSourceCode), "Restored plugin tracks should ignore stale inline URLs and re-resolve through the bridge");
+  assert(externalSourceCode.includes("options.forceResolve"), "External source playback should support bypassing stale inline URLs on retry");
 }
 
 function checkAppFunctionReferences() {
@@ -596,6 +664,13 @@ function checkAppFunctionReferences() {
   assert(app.includes("window.addEventListener(\"emby-music-hls-ready\", handleHlsReady)"), "hls.js loading should refresh playback capability without blocking init");
   assert(app.includes("function clearPlaybackCache"), "Missing playback cache clearing action");
   assert(app.includes("function takePreloadedPlaybackSession"), "Missing playback preloaded session handoff");
+  assert(app.includes("externalResolveRetryTrackId"), "External source playback should track one-shot fresh resolve retries");
+  assert(app.includes("state.externalResolveRetryTrackId = \"\";\n        clearPlaybackErrorState();"), "Successful playback should clear the external fresh resolve retry marker");
+  assert(app.includes("forceExternalResolve: isExternalSourceTrack(state.currentTrack)"), "Restored external queue playback should force a fresh bridge resolve");
+  assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
+  assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
+  assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
+  assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
   assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");
   assert(app.includes("shuffleHistory: []"), "Shuffle playback should keep an in-memory previous-track history");

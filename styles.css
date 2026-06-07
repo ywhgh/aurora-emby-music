@@ -9102,16 +9102,15 @@ body.action-sheet-open .content {
   opacity: 0.4;
   transition:
     background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
-    opacity 0.35s ease,
-    color 0.35s ease;
+    opacity 0.35s ease;
 }
 
 .lyric-line[role="button"] {
   cursor: pointer;
 }
 
-.lyric-line[role="button"]:hover,
-.lyric-line[role="button"]:focus-visible {
+.lyric-line:hover,
+.lyric-line:focus-visible {
   background:
     linear-gradient(
       90deg,
@@ -9233,12 +9232,15 @@ body.action-sheet-open .content {
 }
 
 #nowPlayingPanel .lyric-line {
+  width: 100%;
   padding-right: 0;
   padding-left: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-#nowPlayingPanel .lyric-line[role="button"]:hover,
-#nowPlayingPanel .lyric-line[role="button"]:focus-visible {
+#nowPlayingPanel .lyric-line:hover,
+#nowPlayingPanel .lyric-line:focus-visible {
   background:
     linear-gradient(
       90deg,
@@ -9250,6 +9252,8 @@ body.action-sheet-open .content {
 }
 
 #nowPlayingPanel .lyric-line.active {
+  width: 100%;
+  border-radius: 0;
   background:
     linear-gradient(
       90deg,
@@ -9642,9 +9646,7 @@ body.action-sheet-open .content {
   transform-origin: left center;
   transition:
     background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
-    opacity 0.35s ease,
-    color 0.35s ease,
-    transform 0.2s ease;
+    opacity 0.35s ease;
 }
 
 .immersive-lyric-list .lyric-line[role="button"] {
@@ -9667,6 +9669,7 @@ body.action-sheet-open .content {
 
 .immersive-lyric-list .lyric-line.active,
 .immersive-lyric-list p.active {
+  width: 100%;
   background:
     linear-gradient(
       90deg,

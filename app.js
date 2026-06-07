@@ -916,6 +916,7 @@ const state = {
   albumAmbientRequestId: 0,
   fallbackAttempted: false,
   qualityFallbackAttempted: false,
+  externalResolveRetryTrackId: "",
   lastPlaybackInfoError: "",
   lastPlaybackError: "",
   lastProgressReportAt: 0,
@@ -3866,6 +3867,7 @@ function resumeSavedQueuePlayback() {
 
   playTrack(state.currentTrack, state.queue, {
     positionSeconds: state.savedPlaybackPositionSeconds,
+    forceExternalResolve: isExternalSourceTrack(state.currentTrack),
   });
 }
 
@@ -6443,6 +6445,7 @@ function retryPlaybackFromRecovery() {
 
   playTrack(state.currentTrack, getPlaybackRetryQueue(state.currentTrack), {
     positionSeconds: getRetryPositionSeconds(),
+    forceExternalResolve: isExternalSourceTrack(state.currentTrack),
   });
 }
 
@@ -13188,6 +13191,9 @@ async function playTrack(track, queue, options = {}) {
   state.currentMediaSourceId = getMediaSourceId(track);
   state.currentPlaySessionId = "";
   state.hasReportedPlaybackStart = false;
+  if (!options.forceExternalResolve) {
+    state.externalResolveRetryTrackId = "";
+  }
   state.fallbackAttempted = mode !== "direct";
   state.qualityFallbackAttempted = Boolean(options.qualityFallbackAttempted);
   state.savedPlaybackPositionSeconds = 0;
@@ -13202,7 +13208,7 @@ async function playTrack(track, queue, options = {}) {
     ? `正在加载${getTranscodeMethodLabel()}（${getAudioQualityButtonLabel()}）...`
     : "正在加载歌曲...");
 
-  const playbackSession = takePreloadedPlaybackSession(track, mode) || await preparePlaybackSession(track, mode, requestId);
+  const playbackSession = takePreloadedPlaybackSession(track, mode) || await preparePlaybackSession(track, mode, requestId, options);
 
   if (requestId !== state.playRequestId || !playbackSession) {
     return;
@@ -13229,6 +13235,7 @@ async function playTrack(track, queue, options = {}) {
       if (requestId === state.playRequestId) {
         state.isChangingTrack = false;
         setPlaybackBuffering(false);
+        state.externalResolveRetryTrackId = "";
         clearPlaybackErrorState();
         setLibraryStatus("");
         addRecentTrack(track);
@@ -13353,12 +13360,13 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
   }];
 }
 
-async function preparePlaybackSession(track, mode, requestId) {
+async function preparePlaybackSession(track, mode, requestId, options = {}) {
   if (isExternalSourceTrack(track)) {
     try {
       const media = await externalSourceApi.fetchMediaSource(track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl(), track, {
         quality: getExternalPlaybackQuality(track),
         videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
+        forceResolve: Boolean(options.forceExternalResolve),
       });
 
       if (requestId !== state.playRequestId) {
@@ -13570,6 +13578,10 @@ function handleHlsPlayerError(event, data = {}) {
   if (data.type === window.Hls?.ErrorTypes?.MEDIA_ERROR) {
     hlsPlayer?.recoverMediaError();
     renderSettings();
+    return;
+  }
+
+  if (retryExternalPlaybackWithFreshMedia(state.currentTrack, "HLS 播放失败，正在重新解析音源...")) {
     return;
   }
 
@@ -14621,6 +14633,7 @@ function buildDiagnostics() {
     `Audio quality profile: ${state.audioQualityProfileId}`,
     `External source quality: ${isExternalSourceSession() ? `${state.externalSourceQualityId} / ${getExternalSourceQuality()}` : "-"}`,
     `External video quality: ${isExternalSourceSession() ? `${state.externalSourceVideoQualityId} / ${getExternalSourceVideoQuality()}` : "-"}`,
+    `External fresh resolve retry: ${state.externalResolveRetryTrackId || "-"}`,
     `Audio quality method: ${isExternalSourceSession() ? getSettingsEffectiveProtocolLabel() : `${getEffectiveTranscodeMethodLabel()} / ${getAudioQualityProfile().transferFormat || "-"} / ${getAudioQualityProfile().codec} / ${getAudioQualityProfile().bitrateLabel || "-"}`}`,
     `Playback preload: ${state.playbackPreloadEnabled ? "enabled" : "disabled"} / lossless ${state.playbackLosslessPrecacheEnabled ? "enabled" : "disabled"} / ${state.preloadTrackId || "-"} / ${state.preloadCacheStatus || "-"}`,
     `Quality fallback attempted: ${state.qualityFallbackAttempted ? "yes" : "no"}`,
@@ -15152,6 +15165,7 @@ function retryWithOppositePlaybackMode(track) {
   if (isExternalSourceTrack(track)) {
     playTrack(track, state.queue, {
       positionSeconds: getRetryPositionSeconds(),
+      forceExternalResolve: true,
     });
     return;
   }
@@ -15268,6 +15282,24 @@ function getRetryPositionSeconds() {
   return state.savedPlaybackPositionSeconds || 0;
 }
 
+function retryExternalPlaybackWithFreshMedia(track = state.currentTrack, reason = "") {
+  if (!isExternalSourceTrack(track) || !track?.Id) {
+    return false;
+  }
+
+  if (state.externalResolveRetryTrackId === track.Id) {
+    return false;
+  }
+
+  state.externalResolveRetryTrackId = track.Id;
+  setLibraryStatus(reason || "播放地址失效，正在重新解析音源...");
+  playTrack(track, getPlaybackRetryQueue(track), {
+    positionSeconds: getRetryPositionSeconds(),
+    forceExternalResolve: true,
+  });
+  return true;
+}
+
 function getPlaybackRetryQueue(track) {
   if (state.queue.length) {
     return state.queue;
@@ -15375,6 +15407,10 @@ function handlePlayError(error, track, requestId) {
     return;
   }
 
+  if (retryExternalPlaybackWithFreshMedia(track)) {
+    return;
+  }
+
   if (shouldFallbackToCompatibleQuality()) {
     fallbackToCompatibleQuality(track);
     return;
@@ -15447,6 +15483,10 @@ function handleAudioElementError() {
       mode: "universal",
       positionSeconds: getRetryPositionSeconds(),
     });
+    return;
+  }
+
+  if (retryExternalPlaybackWithFreshMedia(state.currentTrack)) {
     return;
   }
 

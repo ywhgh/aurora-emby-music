@@ -70,8 +70,9 @@ function createExternalSourceApi() {
 
   async function fetchMediaSource(apiUrl, track, options = {}) {
     const inlineUrl = normalizeUrl(track?.ExternalSource?.mediaUrl || track?.ExternalSource?.url || track?.Path, apiUrl);
+    const forceResolve = Boolean(options.forceResolve);
 
-    if (inlineUrl && !shouldResolveInlineUrlThroughBridge(inlineUrl, track)) {
+    if (inlineUrl && !forceResolve && !shouldResolveInlineUrlThroughBridge(inlineUrl, track)) {
       const codec = getExternalTrackCodec(track);
       const bitrate = getExternalTrackBitrate(track);
       const sourceQuality = track.ExternalSource?.sourceQuality || "";
