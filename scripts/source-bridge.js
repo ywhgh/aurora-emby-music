@@ -13,6 +13,7 @@ const { URL } = require("node:url");
 const BRIDGE_VERSION = "0.1.0";
 const AUDIO_EXTENSIONS = new Set([".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".flv", ".ts"]);
+const STREAMING_EXTENSIONS = new Set([".m3u8", ".m3u"]);
 const LYRIC_EXTENSIONS = [".lrc", ".txt"];
 const BILIBILI_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 const ARTWORK_LOOKUP_TIMEOUT_MS = 6500;
@@ -609,6 +610,27 @@ async function resolvePluginMedia(track, quality) {
   }
 
   const directUrl = getPluginDirectMediaUrl(track);
+  const plugin = getPluginByKeySafe(track.pluginKey);
+
+  if (plugin) {
+    const runtime = await loadPluginRuntime(plugin);
+
+    if (typeof runtime.module.getMediaSource === "function") {
+      try {
+        const resolved = await resolvePluginMediaPayload(runtime, track, quality);
+
+        return buildPluginMediaResponse(track, {
+          url: resolved.mediaUrl,
+          payload: resolved.payload,
+          quality: resolved.quality,
+        });
+      } catch (error) {
+        if (!directUrl) {
+          throw error;
+        }
+      }
+    }
+  }
 
   if (directUrl) {
     return buildPluginMediaResponse(track, {
@@ -618,39 +640,66 @@ async function resolvePluginMedia(track, quality) {
     });
   }
 
-  const runtime = await loadPluginRuntime(getPluginByKey(track.pluginKey));
-
-  if (typeof runtime.module.getMediaSource !== "function") {
-    throw new Error("这个插件没有提供播放地址解析。");
+  if (!plugin) {
+    throw new Error("找不到对应音源插件。");
   }
 
-  const resolved = await resolvePluginMediaPayload(runtime, track, quality);
-
-  return buildPluginMediaResponse(track, {
-    url: resolved.mediaUrl,
-    payload: resolved.payload,
-    quality: resolved.quality,
-  });
+  throw new Error("这个插件没有提供播放地址解析。");
 }
 
 function getPluginDirectMediaUrl(track) {
-  return normalizeRemoteUrl(pickFirstString(
-    track.mediaUrl,
-    track.url,
-    track.streamUrl,
-    track.raw?.url,
-    track.raw?.streamUrl,
-    track.raw?.src,
-    track.raw?.playUrl,
-    track.raw?.play_url,
-    track.raw?.play_url128,
-    track.raw?.playUrl128,
-    track.raw?.data?.url,
-    track.raw?.data?.streamUrl,
-    track.raw?.data?.src,
-    track.raw?.data?.playUrl,
-    track.raw?.data?.play_url,
-  ));
+  return pickPluginDirectMediaUrl([
+    [track.mediaUrl, true],
+    [track.streamUrl, true],
+    [track.raw?.streamUrl, true],
+    [track.raw?.src, true],
+    [track.raw?.playUrl, true],
+    [track.raw?.play_url, true],
+    [track.raw?.play_url128, true],
+    [track.raw?.playUrl128, true],
+    [track.raw?.data?.streamUrl, true],
+    [track.raw?.data?.src, true],
+    [track.raw?.data?.playUrl, true],
+    [track.raw?.data?.play_url, true],
+    [track.url, false],
+    [track.raw?.url, false],
+    [track.raw?.data?.url, false],
+    [track.raw?.result?.url, false],
+  ]);
+}
+
+function pickPluginDirectMediaUrl(candidates) {
+  for (const [value, trusted] of candidates) {
+    const url = normalizeRemoteUrl(value);
+
+    if (!url) {
+      continue;
+    }
+
+    if (isPluginDirectMediaUrlPlayable(url)) {
+      return url;
+    }
+  }
+
+  return "";
+}
+
+function isPluginDirectMediaUrlPlayable(url) {
+  const extension = getUrlExtension(url);
+
+  if (AUDIO_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension) || STREAMING_EXTENSIONS.has(extension)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const text = `${parsed.pathname} ${parsed.search}`.toLowerCase();
+
+    return /\/remote-stream(?:$|[/?#])/.test(parsed.pathname)
+      || /(?:audio|video|mpegurl|m3u8|mp3|flac|m4a|aac|ogg|opus|mp4)/.test(text);
+  } catch {
+    return false;
+  }
 }
 
 async function resolvePluginMediaPayload(runtime, track, quality) {

@@ -185,7 +185,7 @@ function createExternalSourceApi() {
   }
 
   function shouldResolveInlineUrlThroughBridge(url, track) {
-    if (hasRestorableExternalPluginSnapshot(track)) {
+    if (isRestorableExternalPluginTrack(track) || hasRestorableExternalPluginSnapshot(track)) {
       return true;
     }
 
@@ -293,6 +293,19 @@ function createExternalTrackSnapshot(track) {
 
 function hasRestorableExternalPluginSnapshot(track) {
   return Boolean(createExternalTrackSnapshot(track));
+}
+
+function isRestorableExternalPluginTrack(track) {
+  const external = track?.ExternalSource || {};
+  const idParts = getExternalPluginIdParts(track, external);
+
+  return Boolean(
+    idParts.pluginKey
+      || external.pluginKey
+      || external.restore?.pluginKey
+      || external.raw?.pluginKey
+      || external.raw?.raw?.pluginKey
+  );
 }
 
 function createExternalPluginRestoreSnapshot(rawTrack, meta = {}) {

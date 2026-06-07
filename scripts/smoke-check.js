@@ -586,6 +586,20 @@ async function checkExternalSourceLyrics() {
   assert(restoredInlineUrl.searchParams.get("id") === "plugin:wy-key:wy-test-song-3", `Restored plugin media request should keep the plugin id, got ${restoredInlineUrl.searchParams.get("id") || "-"}`);
   assert(restoredInlineSnapshot.raw?.id === "wy-test-song-3", `Restored plugin media request should preserve raw track snapshot, got ${JSON.stringify(restoredInlineSnapshot.raw)}`);
   await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
+    Id: "external:qq:7063423",
+    ExternalSource: {
+      id: "plugin:qq-key:7063423",
+      platform: "qq",
+      mediaUrl: "https://expired.example.test/not-a-real-audio-page",
+      raw: { id: 7063423, title: "插件音源必须实时解析" },
+    },
+  });
+  const pluginIdOnlyUrl = new URL(snapshotRequests[3]);
+  const pluginIdOnlySnapshot = JSON.parse(pluginIdOnlyUrl.searchParams.get("track") || "{}");
+  assert(pluginIdOnlyUrl.pathname === "/media", `Plugin id tracks should always resolve through /media instead of stale mediaUrl, got ${pluginIdOnlyUrl.href}`);
+  assert(pluginIdOnlySnapshot.pluginKey === "qq-key", `Plugin id tracks should infer pluginKey from ExternalSource.id, got ${pluginIdOnlySnapshot.pluginKey || "-"}`);
+  assert(pluginIdOnlySnapshot.raw?.id === 7063423, `Plugin id tracks should preserve raw search payload, got ${JSON.stringify(pluginIdOnlySnapshot.raw)}`);
+  await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
     Id: "external:plugin:wy-test-song-4",
     ExternalSource: {
       id: "plugin:wy-key:wy-test-song-4",
@@ -600,7 +614,7 @@ async function checkExternalSourceLyrics() {
       },
     },
   });
-  const mediaRawSnapshotUrl = new URL(snapshotRequests[3]);
+  const mediaRawSnapshotUrl = new URL(snapshotRequests[4]);
   const mediaRawSnapshot = JSON.parse(mediaRawSnapshotUrl.searchParams.get("track") || "{}");
   assert(mediaRawSnapshot.raw?.id === "wy-test-song-4", `Media response raw should keep original plugin track for later restore, got ${JSON.stringify(mediaRawSnapshot.raw)}`);
   await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
@@ -621,7 +635,7 @@ async function checkExternalSourceLyrics() {
       },
     },
   });
-  const restoreOnlySnapshotUrl = new URL(snapshotRequests[4]);
+  const restoreOnlySnapshotUrl = new URL(snapshotRequests[5]);
   const restoreOnlySnapshot = JSON.parse(restoreOnlySnapshotUrl.searchParams.get("track") || "{}");
   assert(restoreOnlySnapshot.pluginKey === "wy-key", `Dedicated restore snapshot should keep pluginKey, got ${restoreOnlySnapshot.pluginKey || "-"}`);
   assert(restoreOnlySnapshot.raw?.id === "restore-only-song", `Dedicated restore snapshot should preserve raw plugin track, got ${JSON.stringify(restoreOnlySnapshot.raw)}`);
@@ -634,7 +648,7 @@ async function checkExternalSourceLyrics() {
       raw: { id: "legacy-song", name: "旧缓存歌曲", artist: "测试艺人" },
     },
   });
-  const legacySnapshotUrl = new URL(snapshotRequests[5]);
+  const legacySnapshotUrl = new URL(snapshotRequests[6]);
   const legacySnapshot = JSON.parse(legacySnapshotUrl.searchParams.get("track") || "{}");
   assert(legacySnapshot.pluginKey === "wy-key", `Legacy restored plugin track should infer pluginKey from id, got ${legacySnapshot.pluginKey || "-"}`);
   assert(legacySnapshot.sourceId === "legacy-song", `Legacy restored plugin track should infer sourceId from id, got ${legacySnapshot.sourceId || "-"}`);
@@ -714,10 +728,14 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("raw: track.raw"), "Source bridge API tracks should preserve plugin raw payloads for later playback");
   assert(/function buildPluginMediaResponse\(track, options = \{\}\) \{[\s\S]*?pluginKey: track\.pluginKey[\s\S]*?media: payload/.test(bridge), "Source bridge media responses should preserve original plugin snapshots after playback resolution");
   assert(bridge.includes("function getPluginDirectMediaUrl"), "Source bridge should reuse direct plugin media URLs before plugin retries");
+  assert(/async function resolvePluginMedia\(track, quality\) \{[\s\S]*?runtime\.module\.getMediaSource[\s\S]*?if \(directUrl\)/.test(bridge), "Source bridge should prefer live plugin media resolution before direct URL fallback");
+  assert(bridge.includes("function isPluginDirectMediaUrlPlayable"), "Source bridge should not treat arbitrary plugin url fields as playable media");
+  assert(bridge.includes("STREAMING_EXTENSIONS"), "Source bridge direct URL fallback should recognize streaming media URLs");
   assert(bridge.includes("function getPluginQualityCandidates"), "Source bridge should retry plugin media quality candidates");
   assert(bridge.includes("resolvePluginMediaPayload"), "Source bridge should resolve plugin media with fallback quality attempts");
   assert(externalSourceCode.includes("function hasRestorableExternalPluginSnapshot"), "External source playback should detect restorable plugin snapshots");
   assert(/function shouldResolveInlineUrlThroughBridge\(url, track\) \{[\s\S]*?hasRestorableExternalPluginSnapshot\(track\)/.test(externalSourceCode), "Restored plugin tracks should ignore stale inline URLs and re-resolve through the bridge");
+  assert(/function shouldResolveInlineUrlThroughBridge\(url, track\) \{[\s\S]*?isRestorableExternalPluginTrack\(track\)/.test(externalSourceCode), "Plugin source tracks should ignore stale inline URLs even before a complete restore snapshot exists");
   assert(externalSourceCode.includes("options.forceResolve"), "External source playback should support bypassing stale inline URLs on retry");
 }
 
@@ -760,11 +778,15 @@ function checkAppFunctionReferences() {
   assert(app.includes("topLyricShardAnimationFrame"), "Topbar shard canvas animation should use one shared RAF scheduler");
   assert(app.includes("requestAnimationFrame(updateTopLyricShardEffectsFrame)"), "Topbar shard canvas animation should be RAF-driven");
   assert(!app.includes("requestAnimationFrame(() => animateTopLyricShardEffect(effect))"), "Topbar shard canvases should not each schedule their own RAF loop");
-  assert(app.includes("TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS"), "Topbar shard timeline should throttle catch-up triggers");
+  assert(app.includes("const TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS = 1"), "Topbar shard timeline should trigger at most one character per frame");
+  assert(app.includes("TOP_LYRIC_SHARD_CATCHUP_ALIGN_SECONDS"), "Topbar shard timeline should align stale catch-up characters instead of replaying a burst");
+  assert(app.includes("function shouldAlignTopLyricShardCatchup"), "Topbar shard timeline should detect stale catch-up spans");
   assert(app.includes("TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS"), "Topbar shard canvases should have a bounded active effect count");
+  assert(app.includes("flash: {"), "Topbar shard effect should include a single per-character flash layer");
+  assert(app.includes("function renderTopLyricShardFlash"), "Topbar shard flash should be rendered separately from particles");
   assert(/if \(span\.textContent\?\.trim\(\)\) \{\s*spawnTopLyricShardCanvas\(span\);/.test(app), "Topbar shard trigger should not spawn particles for whitespace");
-  assert(/vx:\s*0\.28 \+ \(burst \* 1\.1\)/.test(app), "Topbar shard physics should launch particles to the right with a soft sweep");
-  assert(/vy:\s*-\(\(0\.28 \+ \(Math\.random\(\) \* 0\.72\)\)/.test(app), "Topbar shard physics should drift upward without overshooting the topbar");
+  assert(/vx:\s*0\.48 \+ \(burst \* 0\.94\)/.test(app), "Topbar shard physics should launch particles to the right with a controlled sweep");
+  assert(/vy:\s*-\(\(0\.38 \+ \(Math\.random\(\) \* 0\.68\)\)/.test(app), "Topbar shard physics should drift upward without overshooting the topbar");
   assert(app.includes("shard.vx *= TOP_LYRIC_SHARD_DRAG"), "Topbar shard physics should apply air drag");
   assert(app.includes("shard.vy += TOP_LYRIC_SHARD_GRAVITY"), "Topbar shard physics should apply gravity");
   assert(app.includes("shard.alpha -= TOP_LYRIC_SHARD_FADE"), "Topbar shard physics should fade particles out");
@@ -784,6 +806,8 @@ function checkAppFunctionReferences() {
   assert(/applyExternalMediaMetadata\(track, media\);\s*clearRestoredQueueFreshResolveMarker\(track\);\s*syncExternalTrackReference\(track\);/.test(app), "Fresh external media resolution should clear the restored queue fresh-resolve marker");
   assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
   assert(app.includes("function sanitizeExternalSourceForPersistence"), "External source queue persistence should have an explicit sanitizer");
+  assert(app.includes("function isRestorableExternalSourcePlugin"), "External source persistence should detect plugin-backed tracks");
+  assert(/mediaUrl:\s*isRestorablePlugin \? "" : external\.mediaUrl/.test(app), "Persisted plugin source tracks should not keep stale media URLs");
   assert(/function getExternalSourceRawForPersistence\(raw, restore\) \{[\s\S]*?pluginKey: restore\.pluginKey[\s\S]*?raw: restore\.raw/.test(app), "External source persistence should keep a restorable raw plugin snapshot");
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");
   assert(/function takePreloadedPlaybackSession\(track, mode, options = \{\}\) \{[\s\S]*?if \(options\.forceExternalResolve\) \{[\s\S]*?clearPreload\(\);[\s\S]*?return null;/.test(app), "Preloaded sessions should be cleared and ignored during forced external media refreshes");

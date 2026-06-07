@@ -122,17 +122,19 @@ const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
-const TOP_LYRIC_SHARD_MIN_COUNT = 10;
-const TOP_LYRIC_SHARD_MAX_COUNT = 14;
-const TOP_LYRIC_SHARD_PADDING = 16;
-const TOP_LYRIC_SHARD_DRAG = 0.965;
-const TOP_LYRIC_SHARD_GRAVITY = 0.045;
-const TOP_LYRIC_SHARD_FADE = 0.036;
+const TOP_LYRIC_SHARD_MIN_COUNT = 16;
+const TOP_LYRIC_SHARD_MAX_COUNT = 22;
+const TOP_LYRIC_SHARD_PADDING = 24;
+const TOP_LYRIC_SHARD_DRAG = 0.972;
+const TOP_LYRIC_SHARD_GRAVITY = 0.034;
+const TOP_LYRIC_SHARD_FADE = 0.026;
 const TOP_LYRIC_SHARD_MAX_DPR = 2;
-const TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS = 2;
-const TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS = 9;
+const TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS = 1;
+const TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS = 12;
+const TOP_LYRIC_SHARD_CATCHUP_ALIGN_SECONDS = 0.32;
+const TOP_LYRIC_SHARD_FLASH_FADE = 0.68;
 const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
-const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 177, 74, 0.9)";
+const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 126, 96, 0.88)";
 const TOP_LYRIC_SHARD_GLOW_COLOR = "rgba(236, 65, 65, 0.55)";
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
@@ -7702,6 +7704,12 @@ function updateTopLyricShardFrame() {
   const nextIndex = findTopLyricShardIndex(lyricSeconds);
 
   if (nextIndex >= 0) {
+    if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds)) {
+      alignTopLyricShardStateToIndex(nextIndex);
+      syncTopLyricShardLoop();
+      return;
+    }
+
     const triggerEndIndex = Math.min(
       nextIndex,
       topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS
@@ -7713,6 +7721,20 @@ function updateTopLyricShardFrame() {
   }
 
   syncTopLyricShardLoop();
+}
+
+function shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds) {
+  if (nextIndex <= topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS) {
+    return false;
+  }
+
+  const firstPendingIndex = topLyricTriggeredWordIndex + 1;
+  const firstPendingTime = topLyricCharacterTimings[firstPendingIndex];
+  if (!Number.isFinite(firstPendingTime)) {
+    return true;
+  }
+
+  return lyricSeconds - firstPendingTime > TOP_LYRIC_SHARD_CATCHUP_ALIGN_SECONDS;
 }
 
 function findTopLyricShardIndex(lyricSeconds) {
@@ -7753,7 +7775,10 @@ function triggerNextWord(index) {
 
 function alignTopLyricShardStateToTime(lyricSeconds) {
   const currentIndex = findTopLyricShardIndex(lyricSeconds);
+  alignTopLyricShardStateToIndex(currentIndex);
+}
 
+function alignTopLyricShardStateToIndex(currentIndex) {
   topLyricCharacterSpans.forEach((span, index) => {
     span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(topLyricCharacterTimings[index]));
   });
@@ -7796,10 +7821,13 @@ function spawnTopLyricShardCanvas(span) {
 
   ctx.scale(dpr, dpr);
   const fontStyle = window.getComputedStyle(span);
+  const shardColor = topLyricShardOptions.color || getTopLyricShardColor(span);
+  const shardAccentColor = topLyricShardOptions.accentColor || getTopLyricShardAccentColor();
+  const shardGlowColor = topLyricShardOptions.glowColor || getTopLyricShardGlowColor();
   const shards = createTopLyricShards(span.textContent || "", spanRect, fontStyle, {
-    color: topLyricShardOptions.color || getTopLyricShardColor(span),
-    accentColor: topLyricShardOptions.accentColor || getTopLyricShardAccentColor(),
-    glowColor: topLyricShardOptions.glowColor || getTopLyricShardGlowColor(),
+    color: shardColor,
+    accentColor: shardAccentColor,
+    glowColor: shardGlowColor,
     width,
     height,
     originX: spanRect.left - focusRect.left - left,
@@ -7811,7 +7839,23 @@ function spawnTopLyricShardCanvas(span) {
   }
 
   topLyricFocus.append(canvas);
-  const effect = { canvas, ctx, shards, width, height };
+  const effect = {
+    canvas,
+    ctx,
+    shards,
+    width,
+    height,
+    flash: {
+      alpha: TOP_LYRIC_SHARD_FLASH_FADE,
+      character: span.textContent || "",
+      centerX: spanRect.left - focusRect.left - left + (spanRect.width / 2),
+      centerY: spanRect.top - focusRect.top - top + (spanRect.height / 2),
+      color: shardAccentColor,
+      font: `${fontStyle.fontWeight || 800} ${parseFloat(fontStyle.fontSize) || spanRect.height || 16}px ${fontStyle.fontFamily || "system-ui"}`,
+      glowColor: shardGlowColor,
+      scale: 1.04,
+    },
+  };
   topLyricShardEffects.push(effect);
   syncTopLyricShardAnimationLoop();
 }
@@ -7832,7 +7876,7 @@ function getTopLyricShardColor(span) {
 }
 
 function getTopLyricShardAccentColor() {
-  return "rgba(255, 160, 91, 0.68)";
+  return "rgba(255, 126, 96, 0.82)";
 }
 
 function getTopLyricShardGlowColor() {
@@ -7854,13 +7898,14 @@ function createTopLyricShards(character, rect, fontStyle, options) {
   const color = options.color || TOP_LYRIC_SHARD_DEFAULT_COLOR;
   const accentColor = options.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR;
   const glowColor = options.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
+  const font = `${fontStyle.fontWeight || 800} ${fontSize}px ${fontStyle.fontFamily || "system-ui"}`;
   const points = sampleTopLyricGlyphPoints(character, {
     count,
     width: options.width,
     height: options.height,
     centerX,
     centerY,
-    font: `${fontStyle.fontWeight || 800} ${fontSize}px ${fontStyle.fontFamily || "system-ui"}`,
+    font,
   });
 
   return points.map((point) => {
@@ -7872,19 +7917,15 @@ function createTopLyricShards(character, rect, fontStyle, options) {
     return {
       x: point.x,
       y: point.y,
-      vx: 0.28 + (burst * 1.1) + Math.max(0, distanceFromCenter) * 0.32,
-      vy: -((0.28 + (Math.random() * 0.72)) + Math.max(0, -distanceFromCenter) * 0.16),
+      vx: 0.48 + (burst * 0.94) + Math.max(0, distanceFromCenter) * 0.26,
+      vy: -((0.38 + (Math.random() * 0.68)) + Math.max(0, -distanceFromCenter) * 0.1),
       angle: Math.random() * Math.PI * 2,
-      vAngle: (Math.random() - 0.5) * 0.16,
+      vAngle: (Math.random() - 0.5) * 0.11,
       alpha: 1,
       size,
       color,
       accentColor,
       glowColor,
-      character,
-      centerX,
-      centerY,
-      font: `${fontStyle.fontWeight || 800} ${fontSize}px ${fontStyle.fontFamily || "system-ui"}`,
       points: createTopLyricShardPolygon(size),
     };
   });
@@ -8010,6 +8051,7 @@ function animateTopLyricShardEffect(effect) {
 
   const { ctx, shards, width, height } = effect;
   ctx.clearRect(0, 0, width, height);
+  renderTopLyricShardFlash(ctx, effect.flash);
 
   for (let index = shards.length - 1; index >= 0; index -= 1) {
     const shard = shards[index];
@@ -8029,9 +8071,33 @@ function animateTopLyricShardEffect(effect) {
     renderTopLyricShard(ctx, shard);
   }
 
+  if (effect.flash) {
+    effect.flash.alpha = Math.max(0, effect.flash.alpha - 0.09);
+    effect.flash.scale += 0.008;
+  }
+
   if (!shards.length) {
     cleanupTopLyricShardEffect(effect);
   }
+}
+
+function renderTopLyricShardFlash(ctx, flash) {
+  if (!flash || flash.alpha <= 0) {
+    return;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = Math.min(0.34, flash.alpha);
+  ctx.translate(flash.centerX, flash.centerY);
+  ctx.scale(flash.scale, flash.scale);
+  ctx.font = flash.font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = flash.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
+  ctx.fillStyle = flash.color || TOP_LYRIC_SHARD_ACCENT_COLOR;
+  ctx.fillText(flash.character, 0, 0);
+  ctx.restore();
 }
 
 function renderTopLyricShard(ctx, shard) {
@@ -8039,13 +8105,13 @@ function renderTopLyricShard(ctx, shard) {
   ctx.globalAlpha = Math.max(0, shard.alpha);
   ctx.translate(shard.x, shard.y);
   ctx.rotate(shard.angle);
-  ctx.shadowBlur = 2.5;
+  ctx.shadowBlur = 4;
   ctx.shadowColor = shard.glowColor || TOP_LYRIC_SHARD_GLOW_COLOR;
 
   const gradient = ctx.createLinearGradient(-shard.size, -shard.size, shard.size, shard.size);
   gradient.addColorStop(0, shard.color);
   gradient.addColorStop(0.62, shard.accentColor || TOP_LYRIC_SHARD_ACCENT_COLOR);
-  gradient.addColorStop(1, "rgba(255, 238, 214, 0.82)");
+  gradient.addColorStop(1, "rgba(255, 218, 168, 0.74)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   shard.points.forEach((point, index) => {
@@ -18811,6 +18877,7 @@ function sanitizeExternalSourceForPersistence(external) {
   }
 
   const restore = sanitizeExternalRestoreSnapshot(external.restore);
+  const isRestorablePlugin = isRestorableExternalSourcePlugin(external, restore);
   return {
     apiUrl: external.apiUrl,
     id: external.id,
@@ -18826,12 +18893,22 @@ function sanitizeExternalSourceForPersistence(external) {
     qualityVerified: external.qualityVerified,
     contentType: external.contentType,
     artwork: external.artwork,
-    mediaUrl: external.mediaUrl,
+    mediaUrl: isRestorablePlugin ? "" : external.mediaUrl,
     lyric: external.lyric,
     lyrics: external.lyrics,
     raw: getExternalSourceRawForPersistence(external.raw, restore),
     restore,
   };
+}
+
+function isRestorableExternalSourcePlugin(external, restore = null) {
+  return Boolean(
+    String(external?.id || "").startsWith("plugin:")
+      || external?.pluginKey
+      || restore?.pluginKey
+      || external?.raw?.pluginKey
+      || external?.raw?.raw?.pluginKey
+  );
 }
 
 function sanitizeExternalRestoreSnapshot(restore) {
