@@ -14082,6 +14082,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
       }
 
       applyExternalMediaMetadata(track, media);
+      syncExternalTrackReference(track);
       updateMediaElementPresentation(track);
       state.lastPlaybackInfoError = "";
 

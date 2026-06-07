@@ -715,6 +715,7 @@ function checkAppFunctionReferences() {
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
+  assert(/applyExternalMediaMetadata\(track, media\);\s*syncExternalTrackReference\(track\);\s*updateMediaElementPresentation\(track\);/.test(app), "Fresh external media resolution should sync updated URLs back to queue and library references");
   assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
   assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");
