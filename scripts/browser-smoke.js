@@ -670,8 +670,10 @@ function checkPageState(check, page) {
   assert(topLyricShard.firstSpanClass?.includes("is-sharded"), `${label} top lyric shard trigger should hide the activated character: ${JSON.stringify(topLyricShard)}`);
   if (check.name !== "mobile") {
     assert(topLyricShard.canvasCountAfterTrigger >= 1, `${label} top lyric shard trigger should create a canvas: ${JSON.stringify(topLyricShard)}`);
+    assert(topLyricShard.animationFrameAfterTrigger > 0, `${label} top lyric shard should start the shared animation scheduler: ${JSON.stringify(topLyricShard)}`);
   }
   assert(topLyricShard.canvasCountAfterCleanup === 0, `${label} top lyric shard cleanup should remove canvases: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.animationFrameAfterCleanup === 0, `${label} top lyric shard cleanup should cancel the shared animation scheduler: ${JSON.stringify(topLyricShard)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

@@ -823,6 +823,7 @@ let topLyricCharacterTimings = [];
 let topLyricTriggeredWordIndex = -1;
 let topLyricAlignPastOnNextLoop = false;
 let topLyricShardFrame = 0;
+let topLyricShardAnimationFrame = 0;
 let topLyricShardEffects = [];
 let topLyricShardOptions = {};
 let libraryAlphabetScrubber = null;
@@ -1621,8 +1622,10 @@ function collectBrowserSmokeTopLyricShardState() {
   triggerNextWord(0);
   const firstSpanClass = topLyricCharacterSpans[0]?.className || "";
   const canvasCountAfterTrigger = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  const animationFrameAfterTrigger = topLyricShardAnimationFrame;
   cancelTopLyricShardEffects();
   const canvasCountAfterCleanup = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  const animationFrameAfterCleanup = topLyricShardAnimationFrame;
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
 
   return {
@@ -1631,7 +1634,9 @@ function collectBrowserSmokeTopLyricShardState() {
     timingCount,
     firstSpanClass,
     canvasCountAfterTrigger,
+    animationFrameAfterTrigger,
     canvasCountAfterCleanup,
+    animationFrameAfterCleanup,
   };
 }
 
@@ -7758,7 +7763,7 @@ function spawnTopLyricShardCanvas(span) {
   topLyricFocus.append(canvas);
   const effect = { canvas, ctx, shards, width, height };
   topLyricShardEffects.push(effect);
-  requestAnimationFrame(() => animateTopLyricShardEffect(effect));
+  syncTopLyricShardAnimationLoop();
 }
 
 // Shard System：从字形像素中取样，生成 20-30 个带速度、旋转、寿命的不规则碎片。
@@ -7883,7 +7888,32 @@ function createTopLyricShardPolygon(size) {
   });
 }
 
-// Canvas 动画循环：位置、空气阻力、重力、自转和透明度全部逐帧更新。
+// Canvas 动画循环：集中调度所有碎裂 canvas，避免每个字符单独开一条 RAF 链。
+function syncTopLyricShardAnimationLoop() {
+  if (topLyricShardAnimationFrame || !topLyricShardEffects.length) {
+    return;
+  }
+
+  topLyricShardAnimationFrame = requestAnimationFrame(updateTopLyricShardEffectsFrame);
+}
+
+function updateTopLyricShardEffectsFrame() {
+  topLyricShardAnimationFrame = 0;
+
+  if (!topLyricShardEffects.length) {
+    return;
+  }
+
+  for (let index = topLyricShardEffects.length - 1; index >= 0; index -= 1) {
+    animateTopLyricShardEffect(topLyricShardEffects[index]);
+  }
+
+  if (topLyricShardEffects.length) {
+    syncTopLyricShardAnimationLoop();
+  }
+}
+
+// 单个 canvas 的物理步进：位置、空气阻力、重力、自转和透明度全部逐帧更新。
 function animateTopLyricShardEffect(effect) {
   if (!effect || !effect.canvas.isConnected) {
     cleanupTopLyricShardEffect(effect);
@@ -7911,9 +7941,7 @@ function animateTopLyricShardEffect(effect) {
     renderTopLyricShard(ctx, shard);
   }
 
-  if (shards.length) {
-    requestAnimationFrame(() => animateTopLyricShardEffect(effect));
-  } else {
+  if (!shards.length) {
     cleanupTopLyricShardEffect(effect);
   }
 }
@@ -7970,6 +7998,13 @@ function stopTopLyricShardLoop() {
   }
 }
 
+function stopTopLyricShardAnimationLoop() {
+  if (topLyricShardAnimationFrame) {
+    cancelAnimationFrame(topLyricShardAnimationFrame);
+    topLyricShardAnimationFrame = 0;
+  }
+}
+
 function resetTopLyricShardState(options = {}) {
   stopTopLyricShardLoop();
   cancelTopLyricShardEffects();
@@ -7988,6 +8023,7 @@ function resetTopLyricShardState(options = {}) {
 }
 
 function cancelTopLyricShardEffects() {
+  stopTopLyricShardAnimationLoop();
   topLyricShardEffects.forEach((effect) => {
     effect.canvas.remove();
     effect.shards.length = 0;

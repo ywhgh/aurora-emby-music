@@ -694,7 +694,9 @@ function checkAppFunctionReferences() {
   assert(app.includes('const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)"'), "Topbar shard particles should use the red brand color by default");
   assert(app.includes("TOP_LYRIC_SHARD_ACCENT_COLOR"), "Topbar shard particles should include a colored accent instead of fading to plain white");
   assert(app.includes("requestAnimationFrame(updateTopLyricShardFrame)"), "Topbar lyric shard timeline should be RAF-driven");
-  assert(app.includes("requestAnimationFrame(() => animateTopLyricShardEffect(effect))"), "Topbar shard canvas animation should be RAF-driven");
+  assert(app.includes("topLyricShardAnimationFrame"), "Topbar shard canvas animation should use one shared RAF scheduler");
+  assert(app.includes("requestAnimationFrame(updateTopLyricShardEffectsFrame)"), "Topbar shard canvas animation should be RAF-driven");
+  assert(!app.includes("requestAnimationFrame(() => animateTopLyricShardEffect(effect))"), "Topbar shard canvases should not each schedule their own RAF loop");
   assert(/vx:\s*Math\.random\(\) \* 3 \+ 1/.test(app), "Topbar shard physics should launch particles to the right");
   assert(/vy:\s*-\(Math\.random\(\) \* 4 \+ 2\)/.test(app), "Topbar shard physics should launch particles upward");
   assert(app.includes("shard.vx *= TOP_LYRIC_SHARD_DRAG"), "Topbar shard physics should apply air drag");
