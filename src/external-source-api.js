@@ -300,7 +300,7 @@ function createExternalTrackSnapshot(track) {
     raw: pluginRaw,
   };
 
-  if (!snapshot.pluginKey || !snapshot.raw) {
+  if (!hasExternalPluginSnapshotIdentity(snapshot) || !snapshot.raw) {
     return "";
   }
 
@@ -309,6 +309,15 @@ function createExternalTrackSnapshot(track) {
   } catch {
     return "";
   }
+}
+
+function hasExternalPluginSnapshotIdentity(snapshot) {
+  return Boolean(
+    snapshot?.pluginKey
+      || snapshot?.pluginUrl
+      || snapshot?.pluginName
+      || snapshot?.pluginPlatform
+  );
 }
 
 function hasRestorableExternalPluginSnapshot(track) {
@@ -322,9 +331,13 @@ function isRestorableExternalPluginTrack(track) {
   return Boolean(
     idParts.pluginKey
       || external.pluginKey
+      || external.pluginUrl
       || external.restore?.pluginKey
+      || external.restore?.pluginUrl
       || external.raw?.pluginKey
+      || external.raw?.pluginUrl
       || external.raw?.raw?.pluginKey
+      || external.raw?.raw?.pluginUrl
   );
 }
 

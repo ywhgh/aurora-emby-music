@@ -2399,7 +2399,7 @@ async function testExternalPlaybackChain(track) {
   setLibraryStatus(`正在测试外部播放链路：${track.Name || "未命名歌曲"}...`);
 
   try {
-    const media = await externalSourceApi.fetchMediaSource(track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl(), track, {
+    const media = await externalSourceApi.fetchMediaSource(getExternalTrackApiUrl(track), track, {
       quality: getExternalPlaybackQuality(track),
       videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
     });
@@ -7024,7 +7024,7 @@ function getLyricsEmptyActions() {
 
 async function fetchLyricsText(track) {
   if (isExternalSourceTrack(track)) {
-    const apiUrl = track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl();
+    const apiUrl = getExternalTrackApiUrl(track);
 
     if (!apiUrl) {
       return "";
@@ -9247,7 +9247,7 @@ function shouldResolveExternalTrackQuality(track) {
 }
 
 function getExternalTrackQualityResolveKey(track) {
-  const apiUrl = track?.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl();
+  const apiUrl = getExternalTrackApiUrl(track);
   const quality = getExternalSearchQualityProbeRequest(track);
   return [apiUrl, track?.Id || track?.ExternalSource?.id || "", quality].filter(Boolean).join("::");
 }
@@ -9277,7 +9277,7 @@ function drainExternalSearchQualityResolveQueue() {
 }
 
 async function resolveExternalSearchTrackQuality(track, token) {
-  const apiUrl = track?.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl();
+  const apiUrl = getExternalTrackApiUrl(track);
 
   if (!apiUrl || token !== externalSearchQualityResolveToken) {
     return;
@@ -14478,7 +14478,7 @@ function shouldForceResolveExternalTrack(track, options = {}, queue = []) {
 async function preparePlaybackSession(track, mode, requestId, options = {}) {
   if (isExternalSourceTrack(track)) {
     try {
-      const media = await externalSourceApi.fetchMediaSource(track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl(), track, {
+      const media = await externalSourceApi.fetchMediaSource(getExternalTrackApiUrl(track), track, {
         quality: getExternalPlaybackQuality(track),
         videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
         forceResolve: Boolean(options.forceExternalResolve),
@@ -18190,6 +18190,24 @@ function getSessionExternalSourceApiUrl(session = state.session) {
   return normalizeExternalSourceApiUrl(value);
 }
 
+function getExternalTrackApiUrl(track, session = state.session) {
+  const sessionApiUrl = getSessionExternalSourceApiUrl(session)
+    || normalizeExternalSourceApiUrl(state.externalSourceApiUrl || "")
+    || loadExternalSourceApiUrl();
+
+  if (sessionApiUrl) {
+    return sessionApiUrl;
+  }
+
+  const trackApiUrl = track?.ExternalSource?.apiUrl;
+
+  if (!trackApiUrl || isUnconfiguredSourceBridgeUrl(trackApiUrl) || looksLikeSourceBridgeManifestUrl(trackApiUrl)) {
+    return "";
+  }
+
+  return normalizeExternalSourceApiUrl(trackApiUrl);
+}
+
 function getExternalSourceApiUrlFromSession(session) {
   if (!session || !isExternalSourceSession(session)) {
     return "";
@@ -19232,17 +19250,20 @@ function createExternalRestoreSnapshotForPersistence(external, track = null) {
     || external.pluginKey
     || pluginIdParts.pluginKey
     || "";
+  const pluginUrl = restore?.pluginUrl || pluginMeta.pluginUrl || external.pluginUrl || "";
+  const pluginName = restore?.pluginName || pluginMeta.pluginName || external.pluginName || external.platform || "";
+  const pluginPlatform = restore?.pluginPlatform || pluginMeta.pluginPlatform || external.pluginPlatform || external.platform || "";
 
-  if (!pluginKey || !raw) {
+  if ((!pluginKey && !pluginUrl && !pluginName && !pluginPlatform) || !raw) {
     return restore;
   }
 
   return {
     id: restore?.id || sourceId || external.id || "",
     pluginKey,
-    pluginName: restore?.pluginName || pluginMeta.pluginName || external.pluginName || external.platform || "",
-    pluginUrl: restore?.pluginUrl || pluginMeta.pluginUrl || external.pluginUrl || "",
-    pluginPlatform: restore?.pluginPlatform || pluginMeta.pluginPlatform || external.pluginPlatform || external.platform || "",
+    pluginName,
+    pluginUrl,
+    pluginPlatform,
     sourceId,
     mediaKind: restore?.mediaKind || pluginMeta.mediaKind || external.mediaKind || "",
     sourceQuality: restore?.sourceQuality || pluginMeta.sourceQuality || external.sourceQuality || "",
@@ -19257,11 +19278,17 @@ function isRestorableExternalSourcePlugin(external, restore = null) {
   return Boolean(
     String(external?.id || "").startsWith("plugin:")
       || external?.pluginKey
+      || external?.pluginUrl
       || restore?.pluginKey
+      || restore?.pluginUrl
       || external?.raw?.pluginKey
+      || external?.raw?.pluginUrl
       || external?.raw?.raw?.pluginKey
+      || external?.raw?.raw?.pluginUrl
       || external?.raw?.restore?.pluginKey
+      || external?.raw?.restore?.pluginUrl
       || external?.raw?.data?.restore?.pluginKey
+      || external?.raw?.data?.restore?.pluginUrl
   );
 }
 
@@ -19446,13 +19473,28 @@ function getExternalPluginRawSourceIdForPersistence(raw) {
     raw.raw?.sourceId,
     raw.raw?.id,
     raw.raw?.Id,
+    raw.raw?.mid,
+    raw.raw?.songmid,
+    raw.raw?.hash,
+    raw.raw?.rid,
+    raw.raw?.songId,
+    raw.restore?.sourceId,
+    raw.restore?.id,
+    raw.data?.restore?.sourceId,
+    raw.data?.restore?.id,
   );
 }
 
 function getExternalPluginIdPartsForPersistence(external = {}, track = null) {
   const candidates = [
     external.id,
+    external.sourceId,
+    external.restore?.id,
+    external.restore?.sourceId,
     external.raw?.id,
+    external.raw?.sourceId,
+    external.raw?.raw?.id,
+    external.raw?.raw?.sourceId,
     stripExternalTrackPrefixForPersistence(track?.Id),
   ].map((item) => String(item || "").trim()).filter(Boolean);
 

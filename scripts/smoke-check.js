@@ -921,6 +921,8 @@ function checkStorageQueuePersistence() {
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const embyApi = read("src/emby-api.js");
+  const externalSourceCode = read("src/external-source-api.js");
+  const sourceBridge = read("scripts/source-bridge.js");
   const storageCode = read("src/storage.js");
   [
     "getAlbumQualityBucket",
@@ -1020,6 +1022,19 @@ function checkAppFunctionReferences() {
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
+  assert(app.includes("function getExternalTrackApiUrl"), "External source playback should centralize restored track bridge URL resolution");
+  assert(/function getExternalTrackApiUrl\(track, session = state\.session\) \{[\s\S]*?const sessionApiUrl = getSessionExternalSourceApiUrl\(session\)[\s\S]*?loadExternalSourceApiUrl\(\);[\s\S]*?if \(sessionApiUrl\) \{[\s\S]*?return sessionApiUrl;[\s\S]*?const trackApiUrl = track\?\.ExternalSource\?\.apiUrl;/.test(app), "Restored external tracks should prefer the current bridge session URL over stale per-track URLs");
+  assert(/fetchLyricsText\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");
+  assert(/preparePlaybackSession\(track, mode, requestId, options = \{\}\)[\s\S]*?fetchMediaSource\(getExternalTrackApiUrl\(track\), track/.test(app), "External playback should use the current bridge URL after app re-entry");
+  assert(/testExternalPlaybackChain\(track\)[\s\S]*?fetchMediaSource\(getExternalTrackApiUrl\(track\), track/.test(app), "External playback tests should use the current bridge URL after app re-entry");
+  assert(/getExternalTrackQualityResolveKey\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External quality probing should use the current bridge URL after app re-entry");
+  assert(/resolveExternalSearchTrackQuality\(track, token\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External search quality resolution should use the current bridge URL after app re-entry");
+  assert(!app.includes("track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl()"), "Restored external tracks should not prefer stale per-track bridge URLs");
+  assert(externalSourceCode.includes("function hasExternalPluginSnapshotIdentity"), "External source snapshots should allow plugin URL/name fallback when plugin key changes");
+  assert(sourceBridge.includes("function createRuntimePluginFromSnapshot"), "Source bridge should restore plugin tracks from persisted plugin URLs without requiring a fresh search");
+  assert(/function restorePluginTrackFromSnapshot\(url, id\) \{[\s\S]*?hasPluginSnapshotIdentity\(snapshot\)/.test(sourceBridge), "Source bridge snapshot restore should accept plugin URL/name identity, not only plugin key");
+  assert(/function getPluginForSnapshot\(snapshot\) \{[\s\S]*?createRuntimePluginFromSnapshot\(snapshot\)/.test(sourceBridge), "Source bridge should create a runtime plugin from a persisted snapshot if the manifest key changed");
+  assert(/function createRuntimePluginFromSnapshot\(snapshot\) \{[\s\S]*?state\.plugins\.push\(plugin\);[\s\S]*?return plugin;/.test(sourceBridge), "Runtime restored plugins should be registered before resolving media");
   assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
   assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");

@@ -2765,7 +2765,7 @@ function getTrackFromUrl(url) {
 function restorePluginTrackFromSnapshot(url, id) {
   const snapshot = parsePluginTrackSnapshot(url.searchParams.get("track"));
 
-  if (!snapshot?.pluginKey || !snapshot.raw || typeof snapshot.raw !== "object") {
+  if (!hasPluginSnapshotIdentity(snapshot) || !snapshot?.raw || typeof snapshot.raw !== "object") {
     return null;
   }
 
@@ -2917,7 +2917,49 @@ function getPluginForSnapshot(snapshot) {
   return getPluginByKeySafe(snapshot.pluginKey)
     || getPluginByUrlSafe(snapshot.pluginUrl || snapshot.url)
     || getPluginByNameSafe(snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform)
+    || createRuntimePluginFromSnapshot(snapshot)
     || null;
+}
+
+function hasPluginSnapshotIdentity(snapshot) {
+  return Boolean(
+    snapshot?.pluginKey
+      || snapshot?.pluginUrl
+      || snapshot?.url
+      || snapshot?.pluginName
+      || snapshot?.pluginPlatform
+      || snapshot?.platform
+  );
+}
+
+function createRuntimePluginFromSnapshot(snapshot) {
+  const pluginUrl = normalizeRemoteUrl(snapshot?.pluginUrl || snapshot?.url);
+
+  if (!pluginUrl || !/^https?:\/\//i.test(pluginUrl)) {
+    return null;
+  }
+
+  const existing = getPluginByUrlSafe(pluginUrl);
+
+  if (existing) {
+    return existing;
+  }
+
+  const plugin = {
+    key: snapshot.pluginKey || createPluginKey({
+      name: snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform || "restored-plugin",
+      url: pluginUrl,
+    }, state.plugins.length),
+    name: snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform || "恢复音源",
+    url: pluginUrl,
+    version: "",
+    platform: snapshot.pluginPlatform || snapshot.platform || snapshot.pluginName || "",
+    supported: true,
+    restored: true,
+  };
+
+  state.plugins.push(plugin);
+  return plugin;
 }
 
 function getPluginByUrlSafe(value) {
