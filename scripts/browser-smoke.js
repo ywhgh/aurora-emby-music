@@ -90,6 +90,27 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 
+async function readDevToolsPort(profileDir) {
+  const activePortPath = path.join(profileDir, "DevToolsActivePort");
+  const deadline = Date.now() + Math.min(CHROME_TIMEOUT_MS, 15000);
+
+  while (Date.now() < deadline) {
+    try {
+      const [portLine] = fs.readFileSync(activePortPath, "utf8").trim().split(/\r?\n/);
+      const port = Number(portLine);
+      if (Number.isInteger(port) && port > 0) {
+        return port;
+      }
+    } catch {
+      // Chrome writes DevToolsActivePort after the debugging endpoint is ready.
+    }
+
+    await delay(150);
+  }
+
+  throw new Error(`Chrome DevTools port file did not appear in ${profileDir}`);
+}
+
 async function waitForTarget(port) {
   const deadline = Date.now() + Math.min(CHROME_TIMEOUT_MS, 15000);
 
@@ -359,23 +380,10 @@ function removeDirectoryInBackground(directory) {
   }
 }
 
-async function findDebugPort() {
-  for (let port = 9330; port < 9360; port += 1) {
-    try {
-      await requestJson(`http://127.0.0.1:${port}/json/version`, 300);
-    } catch {
-      return port;
-    }
-  }
-
-  throw new Error("No available Chrome debugging port in 9330-9359");
-}
-
 async function createBrowser(chromePath) {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "emby-music-browser-smoke-"));
-  const port = await findDebugPort();
   const chrome = childProcess.spawn(chromePath, [
-    `--remote-debugging-port=${port}`,
+    "--remote-debugging-port=0",
     `--user-data-dir=${profileDir}`,
     "--headless=new",
     "--disable-gpu",
@@ -396,6 +404,7 @@ async function createBrowser(chromePath) {
 
   activeBrowserProfileDir = profileDir;
   activeChromePid = chrome.pid;
+  const port = await readDevToolsPort(profileDir);
   return { chrome, port, profileDir };
 }
 
@@ -552,6 +561,7 @@ function checkPageState(check, page) {
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
   const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
+  const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
@@ -616,7 +626,7 @@ function checkPageState(check, page) {
   assert(lyricProgressBeforeOffset.wordProgress?.[0] === 100, `${label} first word should be fully highlighted before offset`);
   assert(lyricProgressBeforeOffset.wordProgress?.[1] > 0 && lyricProgressBeforeOffset.wordProgress?.[1] < 100, `${label} second word should be partially highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
   assert(lyricProgressBeforeOffset.wordProgress?.[2] === 0, `${label} third word should not be highlighted before offset: ${JSON.stringify(lyricProgressBeforeOffset.wordProgress)}`);
-  assert(lyricProgressBeforeOffset.cssWordProgress?.[1]?.endsWith("%"), `${label} partial word should expose CSS progress before offset`);
+  assert(Number(lyricProgressBeforeOffset.cssWordRatio?.[1]) > 0 && Number(lyricProgressBeforeOffset.cssWordRatio?.[1]) < 1, `${label} partial word should expose transform progress before offset`);
   assert(/Delta epsilon zeta/.test(lyricProgressBeforeOffset.activeLineText || ""), `${label} active lyric line text mismatch before offset: ${lyricProgressBeforeOffset.activeLineText || "-"}`);
   assert(lyricProgressBeforeOffset.activeLineClass?.includes("active"), `${label} active lyric line should have active class before offset`);
   assert(lyricProgressAfterOffset.offsetLabel === "+0.68s", `${label} lyric offset smoke should adjust to +0.68s, got ${lyricProgressAfterOffset.offsetLabel || "-"}`);
@@ -633,6 +643,13 @@ function checkPageState(check, page) {
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[2] > 0 && enhancedLateWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric third word should be partially highlighted from inline timing: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
+  assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
+  assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
+  assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.ratioWriteCount > 60 && denseWordPerformance.ratioWriteCount < 260, `${label} dense lyric progress should only write changed transform ratios: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.averageUpdateMs < 4, `${label} dense lyric progress average update is too slow: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.partialWordCount <= 1, `${label} dense lyric progress should keep at most one partial word: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.maxRatio === 1, `${label} dense lyric transform ratio should reach fully lit words: ${JSON.stringify(denseWordPerformance)}`);
   assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
   assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
   assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);

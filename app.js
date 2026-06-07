@@ -1491,6 +1491,7 @@ function runLyricProgressScenario() {
   const enhancedMidWordProgress = collectBrowserSmokeLyricState();
   updateLyricsHighlight(1.45, true);
   const enhancedLateWordProgress = collectBrowserSmokeLyricState();
+  const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
     id: "browser-smoke-end-scroll-lyric-track",
@@ -1530,6 +1531,7 @@ function runLyricProgressScenario() {
     longGapIdleResumeDelayMs,
     enhancedMidWordProgress,
     enhancedLateWordProgress,
+    denseWordPerformance,
     endScrollLayout,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
@@ -1542,6 +1544,7 @@ function collectBrowserSmokeLyricState() {
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
   const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
+  const cssWordRatio = words.map((word) => word.style.getPropertyValue("--word-progress-ratio"));
 
   return {
     activeIndex: state.activeLyricIndex,
@@ -1555,8 +1558,77 @@ function collectBrowserSmokeLyricState() {
     wordCount: words.length,
     wordProgress,
     cssWordProgress,
+    cssWordRatio,
     offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
     scrollAllowedForced: shouldScrollLyricLine(true),
+  };
+}
+
+function runBrowserSmokeDenseLyricPerformanceScenario() {
+  const wordCount = 72;
+  const sampleCount = 180;
+  const wordStepSeconds = 0.18;
+  const words = Array.from({ length: wordCount }, (_, index) => {
+    const seconds = (index * wordStepSeconds).toFixed(2);
+    return `<${seconds}>字${index + 1}`;
+  }).join(" ");
+  const track = createBrowserSmokeTrack({
+    id: "browser-smoke-dense-lyric-track",
+    name: "Browser Smoke Dense Lyric Track",
+    durationSeconds: 22,
+    lyricsText: [
+      `[00:00.00]${words}`,
+      "[00:18.00]Next dense lyric line",
+    ].join("\n"),
+  });
+  const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
+  let ratioWriteCount = 0;
+  let progressWriteCount = 0;
+
+  state.lyricOffsetSeconds = 0;
+  state.currentTrack = track;
+  state.queue = [track];
+  state.tracks = [track];
+  state.filteredTracks = [track];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(track);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0, true);
+
+  CSSStyleDeclaration.prototype.setProperty = function setBrowserSmokeStyleProperty(propertyName, ...args) {
+    if (propertyName === "--word-progress-ratio") {
+      ratioWriteCount += 1;
+    } else if (propertyName === "--word-progress") {
+      progressWriteCount += 1;
+    }
+
+    return originalSetProperty.call(this, propertyName, ...args);
+  };
+
+  const startedAt = getMonotonicNowMs();
+  try {
+    for (let index = 0; index < sampleCount; index += 1) {
+      updateLyricsHighlight(index * 0.075);
+    }
+  } finally {
+    CSSStyleDeclaration.prototype.setProperty = originalSetProperty;
+  }
+  const durationMs = Math.round((getMonotonicNowMs() - startedAt) * 100) / 100;
+  const finalState = collectBrowserSmokeLyricState();
+  const ratioValues = finalState.cssWordRatio.map((value) => Number(value || 0));
+
+  return {
+    wordCount: finalState.wordCount,
+    sampleCount,
+    durationMs,
+    averageUpdateMs: Math.round((durationMs / sampleCount) * 1000) / 1000,
+    ratioWriteCount,
+    progressWriteCount,
+    activeIndex: finalState.activeIndex,
+    maxWordProgress: Math.max(...finalState.wordProgress),
+    partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
+    maxRatio: Math.max(...ratioValues),
   };
 }
 
@@ -7401,7 +7473,6 @@ function appendImmersiveLyricLineContent(container, line) {
     }
     word._lyricProgress = 0;
     word.style.setProperty("--word-progress", "0%");
-    word.style.setProperty("--word-progress-ratio", "0");
     original.append(word);
     words.push(word);
     timings.push(Number.isFinite(part.time) ? Number(part.time) : NaN);

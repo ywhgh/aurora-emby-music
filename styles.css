@@ -9246,11 +9246,13 @@ body.action-sheet-open .content {
   --immersive-lyric-primary: rgba(255, 244, 229, 0.28);
   --immersive-lyric-original: rgba(255, 244, 229, 0.42);
   --immersive-lyric-original-active: rgba(255, 244, 229, 0.68);
+  --immersive-lyric-word-active: var(--immersive-lyric-active);
   --immersive-lyric-secondary: inherit;
   --immersive-lyric-hover: rgba(255, 244, 229, 0.66);
   --immersive-lyric-hint: rgba(255, 244, 229, 0.42);
-  --immersive-lyric-active-bg: rgba(7, 10, 13, 0.42);
-  --immersive-lyric-active-edge: rgba(255, 244, 229, 0.06);
+  --immersive-lyric-active-bg: rgba(255, 255, 255, 0.085);
+  --immersive-lyric-active-bg-mid: rgba(255, 255, 255, 0.055);
+  --immersive-lyric-active-bg-tail: rgba(255, 255, 255, 0);
   --immersive-control-color: rgba(255, 244, 229, 0.64);
   --immersive-control-active: rgba(255, 244, 229, 0.94);
   --immersive-control-fill: rgba(255, 244, 229, 0.14);
@@ -9498,7 +9500,7 @@ body.action-sheet-open .content {
   max-width: 100%;
   margin: 0;
   overflow-wrap: anywhere;
-  color: rgba(255, 244, 229, 0.96);
+  color: rgba(255, 246, 235, 0.98);
   font-size: clamp(1.5rem, 2vw, 2rem);
   line-height: 1.2;
 }
@@ -9510,14 +9512,19 @@ body.action-sheet-open .content {
   margin-top: 0.42rem;
   margin-right: 0.45rem;
   padding: 0;
-  color: rgba(255, 244, 229, 0.68);
+  color: rgba(255, 246, 235, 0.82);
   font-size: 0.94rem;
   vertical-align: top;
 }
 
+.immersive-link:disabled {
+  opacity: 1;
+  color: rgba(255, 246, 235, 0.72);
+}
+
 .immersive-link:not(:disabled):hover,
 .immersive-link:focus-visible {
-  color: rgba(255, 244, 229, 0.96);
+  color: rgba(255, 246, 235, 0.98);
 }
 
 .immersive-meta {
@@ -9560,7 +9567,7 @@ body.action-sheet-open .content {
   overflow: hidden;
   padding-left: 60px;
   mask-image: linear-gradient(180deg, transparent, #000 12%, #000 84%, transparent);
-  transform: translateY(-2rem);
+  transform: translateY(-2.65rem);
 }
 
 .immersive-lyric-list {
@@ -9586,8 +9593,6 @@ body.action-sheet-open .content {
   line-height: 1.18;
   transform-origin: left center;
   transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease,
     color 0.2s ease,
     opacity 0.2s ease,
     transform 0.2s ease;
@@ -9605,13 +9610,19 @@ body.action-sheet-open .content {
 
 .immersive-lyric-list .lyric-line.active,
 .immersive-lyric-list p.active {
-  border-radius: 8px;
+  padding: 0.1em 0.42em 0.1em 0.52em;
   background:
-    linear-gradient(90deg, var(--immersive-lyric-active-bg), rgba(7, 10, 13, 0.26));
-  box-shadow: inset 0 0 0 1px var(--immersive-lyric-active-edge);
+    linear-gradient(
+      90deg,
+      var(--immersive-lyric-active-bg-tail) 0%,
+      var(--immersive-lyric-active-bg) 7%,
+      var(--immersive-lyric-active-bg-mid) 58%,
+      var(--immersive-lyric-active-bg-tail) 100%
+    );
+  box-shadow: none;
   opacity: 1;
   color: var(--immersive-lyric-active);
-  transform: translateX(0.1rem);
+  transform: translateX(-0.52em);
 }
 
 .immersive-lyric-original,
@@ -9657,12 +9668,11 @@ body.action-sheet-open .content {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  color: var(--immersive-lyric-active);
+  color: var(--immersive-lyric-word-active);
   content: attr(data-word-text);
+  clip-path: inset(0 calc(100% - var(--word-progress, 0%)) 0 0);
   pointer-events: none;
-  transform: scaleX(var(--word-progress-ratio, 0));
-  transform-origin: left center;
-  will-change: transform;
+  will-change: clip-path;
 }
 
 .immersive-lyric-list .lyric-line.active .immersive-lyric-translated,
@@ -12326,7 +12336,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     height: min(34vh, 15rem);
     min-height: 8rem;
     padding: 0 0.4rem;
-    transform: translateY(-0.65rem);
+    transform: translateY(-0.95rem);
   }
 
   .immersive-lyric-list {

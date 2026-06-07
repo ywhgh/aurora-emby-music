@@ -70,6 +70,9 @@ function checkVersions() {
   assert(browserSmoke.includes("OLD_PROFILE_CLEANUP_LIMIT"), "Browser smoke should limit old profile cleanup work per run");
   assert(browserSmoke.includes("BROWSER_SMOKE_OLD_PROFILE_CLEANUP_LIMIT || 0"), "Browser smoke should skip old profile cleanup by default on Windows");
   assert(browserSmoke.includes("if (OLD_PROFILE_CLEANUP_LIMIT <= 0)"), "Browser smoke should make old profile cleanup opt-in");
+  assert(browserSmoke.includes('"--remote-debugging-port=0"'), "Browser smoke should let Chrome choose an unused debugging port");
+  assert(browserSmoke.includes("DevToolsActivePort"), "Browser smoke should read the selected debugging port from the Chrome profile");
+  assert(!browserSmoke.includes("async function findDebugPort"), "Browser smoke should not scan fixed debugging ports");
   assert(browserSmoke.includes('withTimeout(Promise.resolve(cdp?.send("Browser.close"))'), "Browser smoke should bound Browser.close during cleanup");
   assert(browserSmoke.includes("function runDetachedCleanup"), "Browser smoke process cleanup should run in detached helpers");
   assert(!browserSmoke.includes("spawnSync"), "Browser smoke should not use synchronous process cleanup on Windows");
@@ -275,10 +278,12 @@ function checkLyrics() {
   assert(!app.includes("word.dataset.wordProgress = String(normalizedPercent)"), "Lyric word progress should not write data attributes on every frame");
   assert(app.includes("Number(word._lyricProgress || 0)"), "Browser smoke should read lyric progress from the in-memory cache");
   assert(app.includes("word.dataset.wordText = part.value"), "Lyric word highlight overlays should mirror the rendered word text");
+  assert(app.includes('word.style.setProperty("--word-progress", `${normalizedPercent}%`)'), "Lyric word progress should drive the visible text clip fill");
   assert(app.includes('word.style.setProperty("--word-progress-ratio", String(normalizedPercent / 100))'), "Lyric word progress should update a transform ratio for smoother compositor-friendly highlights");
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
-  assert(/\.immersive-lyric-list \.word::after \{[\s\S]*?content: attr\(data-word-text\);[\s\S]*?transform: scaleX\(var\(--word-progress-ratio, 0\)\);[\s\S]*?will-change: transform;/.test(css), "Immersive lyric word highlights should use transform-driven overlays");
-  assert(!/will-change: background;/.test(css), "Immersive lyric word highlights should not animate background gradients");
+  assert(/\.immersive-lyric-list \.word::after \{[\s\S]*?content: attr\(data-word-text\);[\s\S]*?clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?will-change: clip-path;/.test(css), "Immersive lyric word highlights should use clipped text overlays");
+  assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");
+  assert(!/\.immersive-lyric-list \.word \{[\s\S]*?background:\s*[\s\S]*?background-clip: text;/.test(css), "Immersive lyric word highlights should not return to background-gradient text fills");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
   assert(app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 1000) / 10"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
@@ -342,6 +347,9 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
+  assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
+  assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
+  assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
   assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");
   assert(browserSmoke.includes("documentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the document");
