@@ -13878,6 +13878,10 @@ async function playTrack(track, queue, options = {}) {
   const requestId = ++state.playRequestId;
   const mode = resolvePlaybackMode(options.mode);
   const nextQueue = queue?.length ? [...queue] : [track];
+  const playbackOptions = {
+    ...options,
+    forceExternalResolve: shouldForceResolveExternalTrack(track, options, nextQueue),
+  };
   const previousTrack = state.currentTrack;
   const unlockPromise = ensureAudioUnlocked();
 
@@ -13899,7 +13903,7 @@ async function playTrack(track, queue, options = {}) {
   state.currentMediaSourceId = getMediaSourceId(track);
   state.currentPlaySessionId = "";
   state.hasReportedPlaybackStart = false;
-  if (!options.forceExternalResolve) {
+  if (!playbackOptions.forceExternalResolve) {
     state.externalResolveRetryTrackId = "";
   }
   state.fallbackAttempted = mode !== "direct";
@@ -13916,7 +13920,7 @@ async function playTrack(track, queue, options = {}) {
     ? `正在加载${getTranscodeMethodLabel()}（${getAudioQualityButtonLabel()}）...`
     : "正在加载歌曲...");
 
-  const playbackSession = takePreloadedPlaybackSession(track, mode) || await preparePlaybackSession(track, mode, requestId, options);
+  const playbackSession = takePreloadedPlaybackSession(track, mode) || await preparePlaybackSession(track, mode, requestId, playbackOptions);
 
   if (requestId !== state.playRequestId || !playbackSession) {
     return;
@@ -13935,8 +13939,8 @@ async function playTrack(track, queue, options = {}) {
 
   loadAudioSource(source, getPlaybackLoadProfile(track, playbackSession));
 
-  saveQueueState(options.positionSeconds);
-  applyStartPosition(options.positionSeconds, requestId);
+  saveQueueState(playbackOptions.positionSeconds);
+  applyStartPosition(playbackOptions.positionSeconds, requestId);
 
   audioPlayer.play()
     .then(() => {
@@ -14068,6 +14072,35 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
   }];
 }
 
+function markRestoredQueueTrackForFreshResolve(track) {
+  if (isExternalSourceTrack(track)) {
+    track._restoredQueueNeedsFreshResolve = true;
+  }
+}
+
+function clearRestoredQueueFreshResolveMarker(track) {
+  if (!track) {
+    return;
+  }
+
+  delete track._restoredQueueNeedsFreshResolve;
+}
+
+function shouldForceResolveExternalTrack(track, options = {}, queue = []) {
+  const restoredQueueTrack = Array.isArray(queue)
+    ? queue.find((item) => item?.Id && item.Id === track?.Id)
+    : null;
+
+  return Boolean(
+    isExternalSourceTrack(track)
+      && (
+        options.forceExternalResolve
+        || track._restoredQueueNeedsFreshResolve
+        || restoredQueueTrack?._restoredQueueNeedsFreshResolve
+      )
+  );
+}
+
 async function preparePlaybackSession(track, mode, requestId, options = {}) {
   if (isExternalSourceTrack(track)) {
     try {
@@ -14082,6 +14115,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
       }
 
       applyExternalMediaMetadata(track, media);
+      clearRestoredQueueFreshResolveMarker(track);
       syncExternalTrackReference(track);
       updateMediaElementPresentation(track);
       state.lastPlaybackInfoError = "";
@@ -18503,7 +18537,17 @@ function clearLibraryViewId() {
 }
 
 function loadQueueState(session) {
-  return storage.loadQueueState(session);
+  const queueState = storage.loadQueueState(session);
+
+  if (Array.isArray(queueState.queue)) {
+    queueState.queue.forEach(markRestoredQueueTrackForFreshResolve);
+  }
+
+  if (queueState.currentTrack) {
+    markRestoredQueueTrackForFreshResolve(queueState.currentTrack);
+  }
+
+  return queueState;
 }
 
 function loadPlayMode() {

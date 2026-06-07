@@ -710,12 +710,15 @@ function checkAppFunctionReferences() {
   assert(app.includes("externalResolveRetryTrackId"), "External source playback should track one-shot fresh resolve retries");
   assert(app.includes("state.externalResolveRetryTrackId = \"\";\n        clearPlaybackErrorState();"), "Successful playback should clear the external fresh resolve retry marker");
   assert(app.includes("forceExternalResolve: isExternalSourceTrack(state.currentTrack)"), "Restored external queue playback should force a fresh bridge resolve");
+  assert(app.includes("function markRestoredQueueTrackForFreshResolve"), "Restored queue tracks should be marked for a fresh external media resolve");
+  assert(/function loadQueueState\(session\) \{[\s\S]*?queueState\.queue\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?markRestoredQueueTrackForFreshResolve\(queueState\.currentTrack\);/.test(app), "Loaded external queue tracks should be marked as restored cache entries");
+  assert(/function shouldForceResolveExternalTrack\(track, options = \{\}, queue = \[\]\) \{[\s\S]*?restoredQueueTrack\?\._restoredQueueNeedsFreshResolve[\s\S]*?\}/.test(app), "Any restored external queue item should bypass stale inline URLs when played");
+  assert(/applyExternalMediaMetadata\(track, media\);\s*clearRestoredQueueFreshResolveMarker\(track\);\s*syncExternalTrackReference\(track\);/.test(app), "Fresh external media resolution should clear the restored queue fresh-resolve marker");
   assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");
   assert(/function resumeBlockedPlayback\(track, requestId = state\.playRequestId\) \{[\s\S]*?!track \|\| !audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(track \|\| state\.currentTrack\)/.test(app), "Autoplay resume reloads should refresh external source media URLs");
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
-  assert(/applyExternalMediaMetadata\(track, media\);\s*syncExternalTrackReference\(track\);\s*updateMediaElementPresentation\(track\);/.test(app), "Fresh external media resolution should sync updated URLs back to queue and library references");
   assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
   assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");
