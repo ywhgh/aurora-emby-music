@@ -18626,7 +18626,9 @@ function loadSession() {
 }
 
 function loadRecentTracks(session) {
-  return storage.loadRecentTracks(session);
+  const tracks = storage.loadRecentTracks(session);
+  tracks.forEach(markRestoredQueueTrackForFreshResolve);
+  return tracks;
 }
 
 function loadFilterState(session) {
