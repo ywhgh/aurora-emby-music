@@ -1649,6 +1649,9 @@ function collectBrowserSmokeLyricState() {
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
   const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
+  const wordHighlightClipPath = words[1]
+    ? window.getComputedStyle(words[1], "::after").clipPath
+    : "";
 
   return {
     activeIndex: state.activeLyricIndex,
@@ -1662,6 +1665,7 @@ function collectBrowserSmokeLyricState() {
     wordCount: words.length,
     wordProgress,
     cssWordProgress,
+    wordHighlightClipPath,
     offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
     scrollAllowedForced: shouldScrollLyricLine(true),
   };
@@ -14197,6 +14201,11 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
   const qualityState = options.qualityState === "resolved" && qualityVerified
     ? "resolved"
     : (options.qualityState === "resolved" ? "unknown" : (track.ExternalSource?.qualityState || ""));
+  const mediaRaw = media.raw && typeof media.raw === "object" ? media.raw : null;
+  const mediaRestore = media.restore && typeof media.restore === "object" ? media.restore : null;
+  const mediaPluginMeta = mediaRaw?.pluginKey
+    ? mediaRaw
+    : (mediaRaw?.raw && typeof mediaRaw.raw === "object" && mediaRaw.raw.pluginKey ? mediaRaw.raw : {});
   const nextStream = {
     ...(currentStream || {}),
     Type: mediaKind === "video" ? "Video" : "Audio",
@@ -14207,6 +14216,10 @@ function applyExternalMediaMetadata(track, media = {}, options = {}) {
   track.ExternalSource = {
     ...(track.ExternalSource || {}),
     mediaUrl: media.streamUrl || track.ExternalSource?.mediaUrl || "",
+    pluginKey: mediaRestore?.pluginKey || mediaPluginMeta.pluginKey || track.ExternalSource?.pluginKey,
+    pluginName: mediaRestore?.pluginName || mediaPluginMeta.pluginName || track.ExternalSource?.pluginName,
+    pluginUrl: mediaRestore?.pluginUrl || mediaPluginMeta.pluginUrl || track.ExternalSource?.pluginUrl,
+    pluginPlatform: mediaRestore?.pluginPlatform || mediaPluginMeta.pluginPlatform || track.ExternalSource?.pluginPlatform,
     mediaKind,
     isVideo: mediaKind === "video",
     codec,
@@ -17836,7 +17849,7 @@ function loadExternalSourceApiUrl() {
 }
 
 function getInitialExternalSourceApiUrl(session) {
-  const sessionApiUrl = session?.externalSourceApiUrl || "";
+  const sessionApiUrl = getExternalSourceApiUrlFromSession(session);
 
   if (looksLikeSourceBridgeManifestUrl(sessionApiUrl)) {
     saveSourceBridgeManifestUrl(sessionApiUrl);
@@ -17887,12 +17900,20 @@ function saveSourceBridgeMusicDir(value) {
 }
 
 function getSessionExternalSourceApiUrl(session = state.session) {
-  const value = session?.externalSourceApiUrl || "";
+  const value = getExternalSourceApiUrlFromSession(session);
   if (isUnconfiguredSourceBridgeUrl(value) || looksLikeSourceBridgeManifestUrl(value)) {
     return "";
   }
 
   return normalizeExternalSourceApiUrl(value);
+}
+
+function getExternalSourceApiUrlFromSession(session) {
+  if (!session || !isExternalSourceSession(session)) {
+    return "";
+  }
+
+  return session.externalSourceApiUrl || session.serverUrl || "";
 }
 
 function isUnconfiguredSourceBridgeUrl(value) {
@@ -18882,6 +18903,10 @@ function sanitizeExternalSourceForPersistence(external) {
     apiUrl: external.apiUrl,
     id: external.id,
     platform: external.platform,
+    pluginKey: external.pluginKey,
+    pluginName: external.pluginName,
+    pluginUrl: external.pluginUrl,
+    pluginPlatform: external.pluginPlatform,
     mediaKind: external.mediaKind,
     isVideo: external.isVideo,
     codec: external.codec,
@@ -18920,6 +18945,8 @@ function sanitizeExternalRestoreSnapshot(restore) {
     id: restore.id || restore.sourceId || "",
     pluginKey: restore.pluginKey || "",
     pluginName: restore.pluginName || "",
+    pluginUrl: restore.pluginUrl || "",
+    pluginPlatform: restore.pluginPlatform || "",
     sourceId: restore.sourceId || restore.id || "",
     mediaKind: restore.mediaKind || "",
     sourceQuality: restore.sourceQuality || "",
@@ -18935,6 +18962,8 @@ function getExternalSourceRawForPersistence(raw, restore) {
     return {
       pluginKey: restore.pluginKey,
       pluginName: restore.pluginName,
+      pluginUrl: restore.pluginUrl,
+      pluginPlatform: restore.pluginPlatform,
       sourceId: restore.sourceId,
       mediaKind: restore.mediaKind,
       sourceQuality: restore.sourceQuality,

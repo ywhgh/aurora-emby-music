@@ -327,6 +327,8 @@ function toApiTrack(request, track) {
     raw: isPluginTrack ? {
       pluginKey: track.pluginKey,
       pluginName: track.pluginName,
+      pluginUrl: track.pluginUrl,
+      pluginPlatform: track.pluginPlatform,
       sourceId: track.sourceId,
       mediaKind: track.mediaKind || "audio",
       sourceQuality: track.sourceQuality || "",
@@ -338,6 +340,8 @@ function toApiTrack(request, track) {
     restore: isPluginTrack ? {
       pluginKey: track.pluginKey,
       pluginName: track.pluginName,
+      pluginUrl: track.pluginUrl,
+      pluginPlatform: track.pluginPlatform,
       sourceId: track.sourceId,
       mediaKind: track.mediaKind || "audio",
       sourceQuality: track.sourceQuality || "",
@@ -577,6 +581,8 @@ function createPluginTrack(plugin, item, index) {
     source: "plugin",
     pluginKey: plugin.key,
     pluginName: plugin.name || plugin.platform || "音源",
+    pluginUrl: plugin.url || "",
+    pluginPlatform: plugin.platform || plugin.name || "",
     platform: plugin.name || plugin.platform || "音源",
     title,
     artist,
@@ -833,6 +839,8 @@ function buildPluginMediaResponse(track, options = {}) {
     raw: {
       pluginKey: track.pluginKey,
       pluginName: track.pluginName,
+      pluginUrl: track.pluginUrl,
+      pluginPlatform: track.pluginPlatform,
       sourceId: track.sourceId,
       mediaKind: track.mediaKind,
       sourceQuality: track.sourceQuality || "",
@@ -2440,7 +2448,7 @@ function restorePluginTrackFromSnapshot(url, id) {
     return null;
   }
 
-  const plugin = getPluginByKeySafe(snapshot.pluginKey);
+  const plugin = getPluginForSnapshot(snapshot);
 
   if (!plugin) {
     return null;
@@ -2453,6 +2461,8 @@ function restorePluginTrackFromSnapshot(url, id) {
   restored.id = requestedId || restored.id;
   restored.sourceId = sourceId || restored.sourceId;
   restored.pluginName = snapshot.pluginName || restored.pluginName;
+  restored.pluginUrl = snapshot.pluginUrl || restored.pluginUrl;
+  restored.pluginPlatform = snapshot.pluginPlatform || snapshot.platform || restored.pluginPlatform;
   restored.mediaKind = snapshot.mediaKind || restored.mediaKind;
   restored.sourceQuality = snapshot.sourceQuality || restored.sourceQuality;
   restored.qualityLabel = snapshot.qualityLabel || restored.qualityLabel;
@@ -2467,6 +2477,57 @@ function restorePluginTrackFromSnapshot(url, id) {
   }
 
   return restored;
+}
+
+function getPluginForSnapshot(snapshot) {
+  return getPluginByKeySafe(snapshot.pluginKey)
+    || getPluginByUrlSafe(snapshot.pluginUrl || snapshot.url)
+    || getPluginByNameSafe(snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform)
+    || null;
+}
+
+function getPluginByUrlSafe(value) {
+  const normalized = normalizeComparableUrl(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  return state.plugins.find((plugin) => normalizeComparableUrl(plugin.url) === normalized) || null;
+}
+
+function getPluginByNameSafe(value) {
+  const normalized = normalizeComparableText(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  return state.plugins.find((plugin) => (
+    normalizeComparableText(plugin.name) === normalized
+      || normalizeComparableText(plugin.platform) === normalized
+      || normalizeComparableText(plugin.key) === normalized
+  )) || null;
+}
+
+function normalizeComparableUrl(value) {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    return parsed.toString().replace(/\/+$/, "").toLowerCase();
+  } catch {
+    return raw.replace(/\/+$/, "").toLowerCase();
+  }
+}
+
+function normalizeComparableText(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function parsePluginTrackSnapshot(value) {

@@ -336,14 +336,15 @@ function checkLyrics() {
   const wordAfterMatch = css.match(/\.immersive-lyric-list \.word::after \{[^}]*\}/);
   const wordAfterRule = wordAfterMatch?.[0] || "";
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
-  assert(/width: var\(--word-progress, 0%\);[\s\S]*?content: attr\(data-word-text\);[\s\S]*?will-change: width;/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded width-clipped text overlay");
-  assert(wordAfterRule && !wordAfterRule.includes("clip-path: inset"), "Immersive lyric word highlights should not use clip-path on the hot path");
+  assert(/clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?content: attr\(data-word-text\);[\s\S]*?will-change: clip-path;/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded clip-path text overlay");
+  assert(wordAfterRule && !wordAfterRule.includes("width: var(--word-progress"), "Immersive lyric word highlights should avoid width layout writes on the hot path");
   assert(css.includes("--immersive-lyric-word-active"), "Immersive lyric word highlights should have a dedicated active word color");
   assert(!/\.immersive-lyric-list \.word \{[\s\S]*?background:\s*[\s\S]*?background-clip: text;/.test(css), "Immersive lyric word highlights should not return to background-gradient text fills");
   assert(app.includes("const LYRIC_PROGRESS_EPSILON = 0.04"), "Lyric word progress should use a sub-percent diff threshold");
   assert(app.includes("function normalizeLyricWordProgressPercent"), "Lyric word progress should normalize percentages before hot-path DOM writes");
   assert(app.includes("function formatLyricWordProgressPercent"), "Lyric word progress should format percentages consistently before CSS writes");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
+  assert(app.includes("wordHighlightClipPath"), "Browser smoke lyric state should expose the rendered word highlight clipping mode");
   assert(app.includes("normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
   assert(!app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should not be quantized to whole-percent steps");
   assert(app.includes("lyricProgressFullWordCount"), "Lyric word progress should cache the previous fully-lit word count");
@@ -401,6 +402,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("createLyricProgressSmokeScript"), "Browser smoke should include a real lyric progress scenario");
   assert(browserSmoke.includes("runLyricProgressScenario"), "Browser smoke should call the guarded lyric progress hook");
   assert(browserSmoke.includes("wordProgress?.[1] > 0"), "Browser smoke should verify partial word progress");
+  assert(browserSmoke.includes("wordHighlightClipPath"), "Browser smoke should verify clipped word highlight rendering");
   assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
@@ -479,9 +481,11 @@ async function checkExternalSourceLyrics() {
           title: "持久歌源",
           artist: "测试艺人",
           platform: "网易",
+          pluginUrl: "https://plugins.example.test/wy.js",
           raw: {
             pluginKey: "wy-key",
             pluginName: "网易",
+            pluginUrl: "https://plugins.example.test/wy.js",
             sourceId: "persisted-song",
           },
         }],
@@ -494,6 +498,7 @@ async function checkExternalSourceLyrics() {
   const normalizedTracks = await trackContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchTracks("http://localhost:5174");
   const normalizedTrack = normalizedTracks.Items?.[0] || {};
   assert(normalizedTrack.ExternalSource?.restore?.pluginKey === "wy-key", `External tracks should persist restore pluginKey, got ${normalizedTrack.ExternalSource?.restore?.pluginKey || "-"}`);
+  assert(normalizedTrack.ExternalSource?.restore?.pluginUrl === "https://plugins.example.test/wy.js", `External tracks should persist restore pluginUrl, got ${normalizedTrack.ExternalSource?.restore?.pluginUrl || "-"}`);
   assert(normalizedTrack.ExternalSource?.restore?.raw?.id === "plugin:wy-key:persisted-song", `External tracks should persist restore raw payload, got ${JSON.stringify(normalizedTrack.ExternalSource?.restore?.raw)}`);
 
   const lyric = await api.fetchLyric("http://localhost:5174", {
@@ -536,6 +541,7 @@ async function checkExternalSourceLyrics() {
       raw: {
         pluginKey: "wy-key",
         pluginName: "网易",
+        pluginUrl: "https://plugins.example.test/wy.js",
         sourceId: "wy-test-song",
         raw: { id: "wy-test-song", name: "可恢复歌曲", artist: "测试艺人" },
       },
@@ -545,6 +551,7 @@ async function checkExternalSourceLyrics() {
   const snapshot = JSON.parse(snapshotUrl.searchParams.get("track") || "{}");
   assert(snapshotUrl.pathname === "/media", `External media request should call /media, got ${snapshotUrl.pathname}`);
   assert(snapshot.pluginKey === "wy-key", `External media request should include pluginKey snapshot, got ${snapshot.pluginKey || "-"}`);
+  assert(snapshot.pluginUrl === "https://plugins.example.test/wy.js", `External media request should include pluginUrl snapshot, got ${snapshot.pluginUrl || "-"}`);
   assert(snapshot.raw?.id === "wy-test-song", `External media request should include raw track snapshot, got ${JSON.stringify(snapshot.raw)}`);
   await snapshotContext.window.EmbyMusicExternalSource.createExternalSourceApi().fetchMediaSource("http://localhost:5174", {
     Id: "external:plugin:wy-test-song-2",
@@ -724,8 +731,12 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("line?.StartPositionTicks"), "Source bridge should support Emby-style lyric tick fields");
   assert(bridge.includes("function formatLrcTimestamp"), "Source bridge should format converted lyric line timestamps");
   assert(bridge.includes("function restorePluginTrackFromSnapshot"), "Source bridge should restore plugin tracks from persisted snapshots");
+  assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should recover persisted plugin tracks when the plugin key changes");
+  assert(bridge.includes("function getPluginByUrlSafe"), "Source bridge should match restored plugin tracks by plugin URL");
+  assert(bridge.includes("function getPluginByNameSafe"), "Source bridge should match restored plugin tracks by plugin name");
   assert(bridge.includes("url.searchParams.get(\"track\")"), "Source bridge should read persisted track snapshots from media requests");
   assert(bridge.includes("raw: track.raw"), "Source bridge API tracks should preserve plugin raw payloads for later playback");
+  assert(bridge.includes("pluginUrl: track.pluginUrl"), "Source bridge API tracks should preserve plugin URL for resilient restored playback");
   assert(/function buildPluginMediaResponse\(track, options = \{\}\) \{[\s\S]*?pluginKey: track\.pluginKey[\s\S]*?media: payload/.test(bridge), "Source bridge media responses should preserve original plugin snapshots after playback resolution");
   assert(bridge.includes("function getPluginDirectMediaUrl"), "Source bridge should reuse direct plugin media URLs before plugin retries");
   assert(/async function resolvePluginMedia\(track, quality\) \{[\s\S]*?runtime\.module\.getMediaSource[\s\S]*?if \(directUrl\)/.test(bridge), "Source bridge should prefer live plugin media resolution before direct URL fallback");
@@ -804,11 +815,15 @@ function checkAppFunctionReferences() {
   assert(/function loadQueueState\(session\) \{[\s\S]*?queueState\.queue\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?markRestoredQueueTrackForFreshResolve\(queueState\.currentTrack\);/.test(app), "Loaded external queue tracks should be marked as restored cache entries");
   assert(/function shouldForceResolveExternalTrack\(track, options = \{\}, queue = \[\]\) \{[\s\S]*?restoredQueueTrack\?\._restoredQueueNeedsFreshResolve[\s\S]*?\}/.test(app), "Any restored external queue item should bypass stale inline URLs when played");
   assert(/applyExternalMediaMetadata\(track, media\);\s*clearRestoredQueueFreshResolveMarker\(track\);\s*syncExternalTrackReference\(track\);/.test(app), "Fresh external media resolution should clear the restored queue fresh-resolve marker");
+  assert(/function applyExternalMediaMetadata\(track, media = \{\}, options = \{\}\) \{[\s\S]*?pluginUrl: mediaRestore\?\.pluginUrl \|\| mediaPluginMeta\.pluginUrl \|\| track\.ExternalSource\?\.pluginUrl/.test(app), "Fresh external media metadata should promote plugin restore fields for the next app restart");
+  assert(/function getExternalSourceApiUrlFromSession\(session\) \{[\s\S]*?return session\.externalSourceApiUrl \|\| session\.serverUrl \|\| "";/.test(app), "External source sessions should recover the bridge URL from legacy serverUrl-only sessions");
+  assert(/function getSessionExternalSourceApiUrl\(session = state\.session\) \{[\s\S]*?getExternalSourceApiUrlFromSession\(session\)/.test(app), "External source API URL lookup should use the legacy-compatible session helper");
   assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?ExternalSource: sanitizeExternalSourceForPersistence\(track\.ExternalSource\)/.test(app), "Persisted queue tracks should compact external source restore metadata");
   assert(app.includes("function sanitizeExternalSourceForPersistence"), "External source queue persistence should have an explicit sanitizer");
   assert(app.includes("function isRestorableExternalSourcePlugin"), "External source persistence should detect plugin-backed tracks");
   assert(/mediaUrl:\s*isRestorablePlugin \? "" : external\.mediaUrl/.test(app), "Persisted plugin source tracks should not keep stale media URLs");
   assert(/function getExternalSourceRawForPersistence\(raw, restore\) \{[\s\S]*?pluginKey: restore\.pluginKey[\s\S]*?raw: restore\.raw/.test(app), "External source persistence should keep a restorable raw plugin snapshot");
+  assert(/function sanitizeExternalSourceForPersistence\(external\) \{[\s\S]*?pluginUrl: external\.pluginUrl/.test(app), "Persisted external source state should keep plugin URL restore metadata");
   assert(/takePreloadedPlaybackSession\(track, mode, playbackOptions\) \|\| await preparePlaybackSession\(track, mode, requestId, playbackOptions\)/.test(app), "Forced external media refresh should not be bypassed by a stale preloaded session");
   assert(/function takePreloadedPlaybackSession\(track, mode, options = \{\}\) \{[\s\S]*?if \(options\.forceExternalResolve\) \{[\s\S]*?clearPreload\(\);[\s\S]*?return null;/.test(app), "Preloaded sessions should be cleared and ignored during forced external media refreshes");
   assert(/function togglePlayback\(\) \{[\s\S]*?!audioPlayer\.src[\s\S]*?forceExternalResolve: isExternalSourceTrack\(state\.currentTrack\)/.test(app), "Player resume without an audio src should refresh external source media URLs");
