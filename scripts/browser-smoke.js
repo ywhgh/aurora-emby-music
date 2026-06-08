@@ -731,6 +731,8 @@ function checkPageState(check, page) {
   assert(topLyricShard.timingCount === 7, `${label} top lyric shard should map character timings: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.bilingualGroupStates?.length === 2, `${label} top lyric should render bilingual character groups: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.bilingualGroupStates?.[0]?.role === "original" && topLyricShard.bilingualGroupStates?.[0]?.timingCount === 10, `${label} top lyric original should synthesize character timing from translated timing: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[5] === null, `${label} top lyric original should leave the space character untimed: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[6] > topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[4], `${label} top lyric original should continue timing after the space instead of resetting: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.bilingualGroupStates?.[1]?.role === "translated" && topLyricShard.bilingualGroupStates?.[1]?.timingCount === 2, `${label} top lyric translated should keep own character timing: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.firstSpanClass?.includes("is-sharded"), `${label} top lyric shard trigger should hide the activated character: ${JSON.stringify(topLyricShard)}`);
   if (check.name !== "mobile") {

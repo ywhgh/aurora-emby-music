@@ -1796,6 +1796,9 @@ function collectBrowserSmokeTopLyricShardState() {
     role: group.role,
     charCount: group.spans.length,
     timingCount: group.timings.filter(Number.isFinite).length,
+    timingSamples: group.timings.slice(0, 12).map((time) => (
+      Number.isFinite(time) ? Number(time.toFixed(2)) : null
+    )),
     shard: Boolean(group.shard),
   }));
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
@@ -8104,6 +8107,10 @@ function mapTopLyricWordTimelineToCharacters(characters, wordTimeline, fallbackS
 
   wordTimeline.forEach((word, wordIndex) => {
     const value = String(word?.value || "");
+    if (!value.trim()) {
+      return;
+    }
+
     const wordCharacters = Array.from(value.trim() || value);
     const start = Number(word?.time);
     const nextStart = Number(wordTimeline[wordIndex + 1]?.time);
