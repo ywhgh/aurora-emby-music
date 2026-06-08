@@ -17144,6 +17144,7 @@ function shouldReloadExternalPlaybackBeforeResume(track) {
 
   return Boolean(
     track._restoredQueueNeedsFreshResolve
+      || (isAnySourceBridgePlaybackUrl(source) && !isSourceBridgeStreamUrl(source))
       || (isRestorablePlugin && !isSourceBridgeStreamUrl(source))
   );
 }
@@ -18633,7 +18634,7 @@ function isExternalSourceTrack(track) {
 function isSourceBridgeStreamUrl(value) {
   try {
     const parsed = new URL(String(value || ""), location.href);
-    if (!["/plugin-stream", "/remote-stream"].includes(parsed.pathname)) {
+    if (!isAnySourceBridgePlaybackUrl(parsed)) {
       return false;
     }
 
@@ -18644,6 +18645,15 @@ function isSourceBridgeStreamUrl(value) {
 
     const bridgeOrigin = new URL(bridgeUrl, location.href).origin;
     return parsed.origin === bridgeOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function isAnySourceBridgePlaybackUrl(value) {
+  try {
+    const parsed = value instanceof URL ? value : new URL(String(value || ""), location.href);
+    return ["/plugin-stream", "/remote-stream"].includes(parsed.pathname);
   } catch {
     return false;
   }
