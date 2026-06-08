@@ -1786,9 +1786,13 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   let progressWriteCountBeforeTimeUpdate = 0;
   let progressWriteCountAfterRafTimeUpdate = 0;
   let progressWriteCountAfterRegularTimeUpdate = 0;
+  let nowPlayingProgressWriteCountBeforeTimeUpdate = 0;
+  let nowPlayingProgressWriteCountAfterRafTimeUpdate = 0;
   let hotPathFrameCount = 0;
+  let nowPlayingHotPathFrameCount = 0;
   let fullHighlightFrameCount = 0;
   let finalState = null;
+  let nowPlayingState = null;
 
   state.lyricOffsetSeconds = 0;
   state.currentTrack = track;
@@ -1842,6 +1846,24 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     progressWriteCountAfterRegularTimeUpdate = progressWriteCount;
     lyricProgressFrame = existingLyricProgressFrame;
     lyricClockIsRunning = existingLyricClockRunning;
+    switchView("nowPlaying", { updateHash: false, resetScroll: true });
+    progressWriteValues.clear();
+    for (let index = 0; index < 45; index += 1) {
+      const seconds = 2.4 + (index * 0.05);
+      if (updateActiveLyricWordProgressFrame(seconds)) {
+        nowPlayingHotPathFrameCount += 1;
+      } else {
+        updateLyricsHighlight(seconds);
+      }
+    }
+    nowPlayingState = collectBrowserSmokeLyricState();
+    nowPlayingProgressWriteCountBeforeTimeUpdate = progressWriteCount;
+    lyricProgressFrame = lyricProgressFrame || 1;
+    lyricClockIsRunning = true;
+    updateProgress();
+    nowPlayingProgressWriteCountAfterRafTimeUpdate = progressWriteCount;
+    lyricProgressFrame = existingLyricProgressFrame;
+    lyricClockIsRunning = existingLyricClockRunning;
   } finally {
     CSSStyleDeclaration.prototype.setProperty = originalSetProperty;
   }
@@ -1859,9 +1881,13 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     progressFormattedWriteCount: denseProgressFormattedWriteCount,
     rafTimeUpdateProgressWriteCount: progressWriteCountAfterRafTimeUpdate - progressWriteCountBeforeTimeUpdate,
     regularTimeUpdateProgressWriteCount: progressWriteCountAfterRegularTimeUpdate - progressWriteCountAfterRafTimeUpdate,
+    nowPlayingRafTimeUpdateProgressWriteCount: nowPlayingProgressWriteCountAfterRafTimeUpdate - nowPlayingProgressWriteCountBeforeTimeUpdate,
     hotPathFrameCount,
+    nowPlayingHotPathFrameCount,
     fullHighlightFrameCount,
     activeIndex: finalState.activeIndex,
+    nowPlayingActiveIndex: nowPlayingState?.activeIndex,
+    nowPlayingCurrentText: nowPlayingState?.currentText || "",
     maxWordProgress: Math.max(...finalState.wordProgress),
     partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
     maxRatio: Math.max(...progressRatios),
@@ -8787,11 +8813,22 @@ function isImmersiveLyricsVisible() {
     && document.visibilityState !== "hidden";
 }
 
+function isNowPlayingLyricsVisible() {
+  return getActiveView() === "nowPlaying"
+    && nowPlayingPanel?.classList.contains("active")
+    && document.visibilityState !== "hidden";
+}
+
+function areSmoothLyricSurfacesVisible() {
+  return isImmersiveLyricsVisible()
+    || isNowPlayingLyricsVisible();
+}
+
 function shouldRunLyricProgressLoop() {
   return state.isLyricSynced
     && state.lyricLines.length > 0
     && state.activeLyricIndex >= 0
-    && isImmersiveLyricsVisible()
+    && areSmoothLyricSurfacesVisible()
     && state.currentTrack
     && audioPlayer.src
     && !audioPlayer.paused
@@ -8839,9 +8876,25 @@ function updateLyricProgressFrame() {
   }
 
   const currentSeconds = getLyricPlaybackTimeSeconds();
-  if (!updateActiveImmersiveLyricWordProgressFrame(currentSeconds)) {
+  if (!updateActiveLyricWordProgressFrame(currentSeconds)) {
     updateLyricsHighlight(currentSeconds);
   }
+}
+
+function updateActiveLyricWordProgressFrame(currentSeconds) {
+  const activeIndex = state.activeLyricIndex;
+
+  if (activeIndex < 0 || !isCurrentLyricLineActiveAtTime(activeIndex, currentSeconds)) {
+    return false;
+  }
+
+  updateInlineLyricProgress(activeIndex, currentSeconds);
+  if (isImmersiveLyricsVisible()) {
+    return updateActiveImmersiveLyricWordProgressFrame(currentSeconds);
+  }
+
+  syncLyricProgressLoop();
+  return true;
 }
 
 function updateActiveImmersiveLyricWordProgressFrame(currentSeconds) {
@@ -15475,7 +15528,7 @@ function getLyricPlaybackTimeSeconds() {
 }
 
 function getVisibleLyricSyncTimeSeconds(fallbackSeconds = getAudioCurrentTimeSeconds()) {
-  return isImmersiveLyricsVisible() && shouldEstimateLyricPlaybackClock()
+  return areSmoothLyricSurfacesVisible() && shouldEstimateLyricPlaybackClock()
     ? getLyricPlaybackTimeSeconds()
     : fallbackSeconds;
 }
@@ -17861,7 +17914,7 @@ function updateProgress(options = {}) {
 
 function shouldSyncLyricsFromProgressUpdate() {
   return !(
-    isImmersiveLyricsVisible()
+    areSmoothLyricSurfacesVisible()
     && lyricClockIsRunning
     && (lyricProgressFrame || lyricProgressResumeTimer)
   );
@@ -18140,6 +18193,9 @@ function switchView(view, options = {}) {
 
   if (nextView === "immersivePlayer" && state.isLyricSynced) {
     updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
+  }
+  if (nextView === "nowPlaying" && state.isLyricSynced) {
+    updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   }
   syncLyricProgressLoop();
   restoreViewScrollPosition(nextView, options);

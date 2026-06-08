@@ -693,7 +693,11 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.progressUniqueWriteCount <= denseWordPerformance.progressWriteCount, `${label} dense lyric progress unique write count should be bounded by total writes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.rafTimeUpdateProgressWriteCount === 0, `${label} active RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.regularTimeUpdateProgressWriteCount >= 0, `${label} regular timeupdate lyric sync should remain measurable after RAF handoff is disabled: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.nowPlayingRafTimeUpdateProgressWriteCount === 0, `${label} now-playing RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.hotPathFrameCount > denseWordPerformance.fullHighlightFrameCount, `${label} dense lyric progress should use the direct RAF hot path for most frames: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.nowPlayingHotPathFrameCount >= 40, `${label} now-playing lyrics should use the smooth RAF hot path: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.nowPlayingActiveIndex === 0, `${label} now-playing lyric hot path should stay on the active dense line: ${JSON.stringify(denseWordPerformance)}`);
+  assert(/字/.test(denseWordPerformance.nowPlayingCurrentText || ""), `${label} now-playing lyric focus should render dense lyric text: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.fullHighlightFrameCount <= 2, `${label} dense lyric progress should only fall back to full highlight on line changes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.averageUpdateMs < 4, `${label} dense lyric progress average update is too slow: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.partialWordCount <= 1, `${label} dense lyric progress should keep at most one partial word: ${JSON.stringify(denseWordPerformance)}`);
