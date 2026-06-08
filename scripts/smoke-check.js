@@ -789,6 +789,17 @@ async function checkExternalSourceLyrics() {
   });
   assert(cachedInlineMedia.streamUrl === "https://expired.example.test/cached-token.mp3", `External media should keep direct inline URL by default, got ${cachedInlineMedia.streamUrl}`);
   assert(forceResolveRequests.length === 0, `Direct inline media should not hit /media by default, got ${forceResolveRequests.join(", ") || "-"}`);
+  await forceResolveApi.fetchMediaSource("http://localhost:5174", {
+    Id: "external:direct:old-bridge-song",
+    ExternalSource: {
+      id: "old-bridge-song",
+      platform: "direct",
+      mediaUrl: "http://127.0.0.1:5175/plugin-stream?id=old-bridge-song&quality=standard",
+    },
+  });
+  const oldBridgeUrl = new URL(forceResolveRequests[0]);
+  assert(oldBridgeUrl.origin === "http://localhost:5174", `Old bridge inline URL should re-resolve through the current bridge origin, got ${oldBridgeUrl.href}`);
+  assert(oldBridgeUrl.pathname === "/media", `Old bridge inline URL should bypass stale /plugin-stream and call /media, got ${oldBridgeUrl.href}`);
   const freshMedia = await forceResolveApi.fetchMediaSource("http://localhost:5174", {
     Id: "external:direct:cached-song",
     ExternalSource: {
@@ -797,7 +808,7 @@ async function checkExternalSourceLyrics() {
       mediaUrl: "https://expired.example.test/cached-token.mp3",
     },
   }, { forceResolve: true });
-  const freshMediaUrl = new URL(forceResolveRequests[0]);
+  const freshMediaUrl = new URL(forceResolveRequests[1]);
   assert(freshMediaUrl.pathname === "/media", `Force-resolved external media should bypass stale inline URL and call /media, got ${freshMediaUrl.href}`);
   assert(freshMedia.streamUrl === "https://fresh.example.test/new-token.mp3", `Force-resolved external media should use the fresh bridge URL, got ${freshMedia.streamUrl}`);
 

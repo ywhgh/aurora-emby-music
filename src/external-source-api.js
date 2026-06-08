@@ -200,6 +200,10 @@ function createExternalSourceApi() {
   }
 
   function shouldResolveInlineUrlThroughBridge(url, track) {
+    if (isSourceBridgePlaybackUrl(url)) {
+      return true;
+    }
+
     if (isRestorableExternalPluginTrack(track) || hasRestorableExternalPluginSnapshot(track)) {
       return true;
     }
@@ -209,6 +213,15 @@ function createExternalSourceApi() {
     }
 
     return /bilibili/i.test(`${track?.ExternalSource?.platform || ""} ${track?.ExternalSource?.id || ""}`);
+  }
+
+  function isSourceBridgePlaybackUrl(value) {
+    try {
+      const parsed = new URL(String(value || ""), location.href);
+      return ["/plugin-stream", "/remote-stream"].includes(parsed.pathname);
+    } catch {
+      return false;
+    }
   }
 
   async function fetchLyric(apiUrl, track) {
