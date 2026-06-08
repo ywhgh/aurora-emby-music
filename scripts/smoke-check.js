@@ -420,11 +420,17 @@ function checkLyrics() {
   assert(app.includes("function normalizeLyricWordProgressPercent"), "Lyric word progress should normalize percentages before hot-path DOM writes");
   assert(app.includes("function formatLyricWordProgressPercent"), "Lyric word progress should format percentages consistently before CSS writes");
   assert(app.includes("function updateLyricWordProgressWindow"), "Lyric word progress should update only the changed word window");
+  assert(app.includes("function updateLyricWordProgressWindowCached"), "Lyric word progress should share the changed-word window between single and bilingual groups");
+  assert(app.includes("function updateLyricWordProgressWindowForGroup"), "Bilingual lyric word groups should use independent cached progress windows");
+  assert(app.includes("function resetLyricProgressGroupWindow"), "Bilingual lyric word group progress windows should reset with inactive lines");
   assert(app.includes("wordHighlightClipPath"), "Browser smoke lyric state should expose the rendered word highlight clipping mode");
   assert(app.includes("normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should keep 0.1% precision for smoother highlighting");
   assert(!app.includes("Math.round(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)"), "Lyric word progress should not be quantized to whole-percent steps");
   assert(app.includes("lyricProgressFullWordCount"), "Lyric word progress should cache the previous fully-lit word count");
   assert(app.includes("lyricProgressPartialWordIndex"), "Lyric word progress should cache the previous partial word index");
+  assert(app.includes("progressFullWordCount: -1"), "Lyric word groups should initialize their own fully-lit word cache");
+  assert(app.includes("progressPartialWordIndex: -1"), "Lyric word groups should initialize their own partial word cache");
+  assert(!/function updateLyricWordProgressByGroup\(words, litWords, group = null\) \{[\s\S]*?updateLyricWordProgressWindowUncached\(words, litWords\);/.test(app), "Bilingual timed lyric groups should not fall back to full uncached word traversal");
   assert(!/words\.forEach\(\(word,\s*index\)\s*=>\s*\{\s*const wordRatio = clamp\(litWords - index, 0, 1\)/.test(app), "Lyric word progress should not recalculate every word on each animation frame");
   assert(app.includes("lyricTimeline"), "Synced lyric highlighting should use a precomputed timeline");
   assert(app.includes("lyricTimelineIndexByLineIndex"), "Lyric word progress should map line indexes to timeline indexes");
@@ -487,6 +493,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
   assert(browserSmoke.includes("relativeEnhancedProgress"), "Browser smoke should verify line-relative enhanced LRC timed word progress");
   assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
+  assert(browserSmoke.includes("bilingualSurfaceProgress"), "Browser smoke should verify original and translated word groups across lyric surfaces");
+  assert(browserSmoke.includes("bilingualDenseWordPerformance"), "Browser smoke should verify dense bilingual word lyric performance");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");

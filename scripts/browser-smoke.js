@@ -590,6 +590,7 @@ function checkPageState(check, page) {
   const bilingualSyntheticSpacedTranslationProgress = lyricProgress.bilingualSyntheticSpacedTranslationProgress || {};
   const bilingualSyntheticOriginalProgress = lyricProgress.bilingualSyntheticOriginalProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
+  const bilingualDenseWordPerformance = lyricProgress.bilingualDenseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
   const searchAbort = page.searchAbort || {};
@@ -689,6 +690,15 @@ function checkPageState(check, page) {
   assert(bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] < 100, `${label} bilingual original second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
   assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} bilingual translated first word should complete: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
   assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] < 100, `${label} bilingual translated second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(lyricProgress.bilingualSurfaceProgress?.list?.groups?.length === 2, `${label} lyric list should render bilingual word groups: ${JSON.stringify(lyricProgress.bilingualSurfaceProgress)}`);
+  assert(lyricProgress.bilingualSurfaceProgress?.focus?.groups?.length === 2, `${label} current lyric focus should render bilingual word groups: ${JSON.stringify(lyricProgress.bilingualSurfaceProgress)}`);
+  assert(lyricProgress.bilingualSurfaceProgress?.immersive?.groups?.length === 2, `${label} immersive lyric should render bilingual word groups: ${JSON.stringify(lyricProgress.bilingualSurfaceProgress)}`);
+  ["list", "focus", "immersive"].forEach((surfaceName) => {
+    const surface = lyricProgress.bilingualSurfaceProgress?.[surfaceName] || {};
+    assert(surface.groups?.[0]?.role === "original" && surface.groups?.[1]?.role === "translated", `${label} ${surfaceName} should keep original/translated group roles: ${JSON.stringify(surface)}`);
+    assert(surface.groups?.[0]?.wordCount === 2 && surface.groups?.[1]?.wordCount === 2, `${label} ${surfaceName} should split original and translated words: ${JSON.stringify(surface)}`);
+    assert(surface.groups?.[0]?.progressFullWordCount >= 1 && surface.groups?.[1]?.progressFullWordCount >= 1, `${label} ${surfaceName} should keep independent bilingual progress windows: ${JSON.stringify(surface)}`);
+  });
   assert(bilingualSyntheticTranslationProgress.wordGroups?.length === 2, `${label} synthetic translated timing should still render two bilingual word groups: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
   assert(bilingualSyntheticTranslationProgress.wordGroups?.[0]?.timed === true && bilingualSyntheticTranslationProgress.wordGroups?.[1]?.timed === true, `${label} translated line without own timing should synthesize timed words from original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
   assert(bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} synthetic translated first word should complete with original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
@@ -717,6 +727,15 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.averageUpdateMs < 4, `${label} dense lyric progress average update is too slow: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.partialWordCount <= 1, `${label} dense lyric progress should keep at most one partial word: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.maxRatio === 1, `${label} dense lyric in-memory progress should reach fully lit words: ${JSON.stringify(denseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.groupCount === 2, `${label} bilingual dense lyric should render two progress groups: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.groupWordCounts?.every((count) => count === 48), `${label} bilingual dense lyric should split both original and translated words: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.groupRoles?.[0] === "original" && bilingualDenseWordPerformance.groupRoles?.[1] === "translated", `${label} bilingual dense lyric groups should preserve roles: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.groupProgressFullWordCounts?.every((count) => count > 0), `${label} bilingual dense lyric should advance independent cached windows: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.groupPartialWordCounts?.every((count) => count <= 1), `${label} bilingual dense lyric should keep at most one partial word per group: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.progressWriteCount > 80 && bilingualDenseWordPerformance.progressWriteCount < 420, `${label} bilingual dense lyric should only write changed bilingual word progress values: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.progressFormattedWriteCount === bilingualDenseWordPerformance.progressWriteCount, `${label} bilingual dense lyric should write normalized CSS progress values: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.hotPathFrameCount > bilingualDenseWordPerformance.fullHighlightFrameCount, `${label} bilingual dense lyric should use the direct RAF hot path: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(bilingualDenseWordPerformance.averageUpdateMs < 5, `${label} bilingual dense lyric progress average update is too slow: ${JSON.stringify(bilingualDenseWordPerformance)}`);
   assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
   assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
   assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);

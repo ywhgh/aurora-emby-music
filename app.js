@@ -1625,6 +1625,10 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.75, true);
   const bilingualEnhancedProgress = collectBrowserSmokeLyricState();
+  switchView("nowPlaying", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualSurfaceProgress = collectBrowserSmokeLyricSurfaceState();
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   const bilingualSyntheticTranslationTrack = createBrowserSmokeTrack({
     id: "browser-smoke-bilingual-synthetic-translation-lyric-track",
     name: "Browser Smoke Bilingual Synthetic Translation Lyric Track",
@@ -1686,6 +1690,7 @@ function runLyricProgressScenario() {
   updateLyricsHighlight(0.75, true);
   const bilingualSyntheticOriginalProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
+  const bilingualDenseWordPerformance = runBrowserSmokeBilingualDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
     id: "browser-smoke-end-scroll-lyric-track",
@@ -1729,10 +1734,12 @@ function runLyricProgressScenario() {
     enhancedTailWordProgress,
     relativeEnhancedProgress,
     bilingualEnhancedProgress,
+    bilingualSurfaceProgress,
     bilingualSyntheticTranslationProgress,
     bilingualSyntheticSpacedTranslationProgress,
     bilingualSyntheticOriginalProgress,
     denseWordPerformance,
+    bilingualDenseWordPerformance,
     endScrollLayout,
     topLyricShard,
     activeView: getActiveView(),
@@ -1819,13 +1826,7 @@ function collectBrowserSmokeTopLyricShardState() {
 function collectBrowserSmokeLyricState() {
   const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
-  const wordGroups = (immersiveLyricWordGroups[state.activeLyricIndex] || []).map((group) => ({
-    role: group.role,
-    wordCount: group.words.length,
-    wordProgress: group.words.map((word) => Number(word._lyricProgress || 0)),
-    cssWordProgress: group.words.map((word) => word.style.getPropertyValue("--word-progress")),
-    timed: Boolean(group.hasUsableTimedWords),
-  }));
+  const wordGroups = collectBrowserSmokeLyricWordGroups(immersiveLyricWordGroups[state.activeLyricIndex] || []);
   const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
   const wordHighlightClipPath = words[1]
@@ -1848,6 +1849,40 @@ function collectBrowserSmokeLyricState() {
     wordHighlightClipPath,
     offsetLabel: formatLyricOffsetLabel(state.lyricOffsetSeconds),
     scrollAllowedForced: shouldScrollLyricLine(true),
+  };
+}
+
+function collectBrowserSmokeLyricWordGroups(groups) {
+  return (groups || []).map((group) => ({
+    role: group.role,
+    wordCount: group.words.length,
+    wordText: group.words.map((word) => word.textContent || ""),
+    wordProgress: group.words.map((word) => Number(word._lyricProgress || 0)),
+    cssWordProgress: group.words.map((word) => word.style.getPropertyValue("--word-progress")),
+    progressFullWordCount: Number.isFinite(group.progressFullWordCount) ? group.progressFullWordCount : -1,
+    progressPartialWordIndex: Number.isFinite(group.progressPartialWordIndex) ? group.progressPartialWordIndex : -1,
+    timed: Boolean(group.hasUsableTimedWords),
+  }));
+}
+
+function collectBrowserSmokeLyricSurfaceState(activeIndex = state.activeLyricIndex) {
+  const listLine = lyricLineElements[activeIndex] || null;
+  const immersiveLine = immersiveLyricLineElements[activeIndex] || null;
+
+  return {
+    activeIndex,
+    list: {
+      text: listLine?.textContent?.trim() || "",
+      groups: collectBrowserSmokeLyricWordGroups(lyricLineWordGroups[activeIndex] || []),
+    },
+    focus: {
+      text: nowLyricCurrent?.textContent?.trim() || "",
+      groups: collectBrowserSmokeLyricWordGroups(nowLyricWordGroups || []),
+    },
+    immersive: {
+      text: immersiveLine?.textContent?.trim() || "",
+      groups: collectBrowserSmokeLyricWordGroups(immersiveLyricWordGroups[activeIndex] || []),
+    },
   };
 }
 
@@ -1983,6 +2018,101 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     maxWordProgress: Math.max(...finalState.wordProgress),
     partialWordCount: finalState.wordProgress.filter((progress) => progress > 0 && progress < 100).length,
     maxRatio: Math.max(...progressRatios),
+  };
+}
+
+function runBrowserSmokeBilingualDenseLyricPerformanceScenario() {
+  const wordCount = 48;
+  const sampleCount = 120;
+  const wordStepSeconds = 0.16;
+  const originalWords = Array.from({ length: wordCount }, (_, index) => {
+    const seconds = (index * wordStepSeconds).toFixed(2);
+    return `<${seconds}>原${index + 1}`;
+  }).join(" ");
+  const translatedWords = Array.from({ length: wordCount }, (_, index) => {
+    const seconds = (index * wordStepSeconds).toFixed(2);
+    return `<${seconds}>译${index + 1}`;
+  }).join(" ");
+  const track = createBrowserSmokeTrack({
+    id: "browser-smoke-bilingual-dense-lyric-track",
+    name: "Browser Smoke Bilingual Dense Lyric Track",
+    durationSeconds: 16,
+    lyricsText: [
+      `[00:00.00]${originalWords}`,
+      `[00:00.00]${translatedWords}`,
+      "[00:12.00]Next bilingual dense lyric line",
+    ].join("\n"),
+  });
+  const originalSetProperty = CSSStyleDeclaration.prototype.setProperty;
+  let progressWriteCount = 0;
+  const progressWriteValues = new Set();
+  let progressFormattedWriteCount = 0;
+  let hotPathFrameCount = 0;
+  let fullHighlightFrameCount = 0;
+  let finalState = null;
+
+  state.lyricOffsetSeconds = 0;
+  state.currentTrack = track;
+  state.queue = [track];
+  state.tracks = [track];
+  state.filteredTracks = [track];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(track);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0, true);
+
+  CSSStyleDeclaration.prototype.setProperty = function setBrowserSmokeStyleProperty(propertyName, ...args) {
+    if (propertyName === "--word-progress") {
+      const value = String(args[0] || "");
+      progressWriteCount += 1;
+      progressWriteValues.add(value);
+      if (/^(?:0|100|\d{1,2}\.\d)%$/.test(value)) {
+        progressFormattedWriteCount += 1;
+      }
+    }
+
+    return originalSetProperty.call(this, propertyName, ...args);
+  };
+
+  const startedAt = getMonotonicNowMs();
+  try {
+    for (let index = 0; index < sampleCount; index += 1) {
+      const seconds = index * 0.055;
+      if (updateActiveImmersiveLyricWordProgressFrame(seconds)) {
+        hotPathFrameCount += 1;
+      } else {
+        fullHighlightFrameCount += 1;
+        updateLyricsHighlight(seconds);
+      }
+    }
+    finalState = collectBrowserSmokeLyricState();
+  } finally {
+    CSSStyleDeclaration.prototype.setProperty = originalSetProperty;
+  }
+
+  const durationMs = Math.round((getMonotonicNowMs() - startedAt) * 100) / 100;
+  finalState = finalState || collectBrowserSmokeLyricState();
+  const groupPartialWordCounts = finalState.wordGroups.map((group) => (
+    group.wordProgress.filter((progress) => progress > 0 && progress < 100).length
+  ));
+
+  return {
+    wordCount,
+    groupCount: finalState.wordGroups.length,
+    groupWordCounts: finalState.wordGroups.map((group) => group.wordCount),
+    groupRoles: finalState.wordGroups.map((group) => group.role),
+    groupProgressFullWordCounts: finalState.wordGroups.map((group) => group.progressFullWordCount),
+    groupProgressPartialWordIndexes: finalState.wordGroups.map((group) => group.progressPartialWordIndex),
+    groupPartialWordCounts,
+    sampleCount,
+    durationMs,
+    averageUpdateMs: Math.round((durationMs / sampleCount) * 1000) / 1000,
+    progressWriteCount,
+    progressUniqueWriteCount: progressWriteValues.size,
+    progressFormattedWriteCount,
+    hotPathFrameCount,
+    fullHighlightFrameCount,
   };
 }
 
@@ -7143,6 +7273,8 @@ function createLyricWordGroup(line, text, options = {}) {
     words: [],
     timings: [],
     endTimings: [],
+    progressFullWordCount: -1,
+    progressPartialWordIndex: -1,
     hasUsableTimedWords: false,
   };
 }
@@ -7740,12 +7872,12 @@ function updateInlineLyricProgress(activeIndex, currentSeconds, options = {}) {
   const lyricSeconds = getAdjustedLyricSeconds(currentSeconds);
 
   if (!Number.isFinite(start)) {
-    groups.forEach((group) => updateLyricWordProgressWindowUncached(group.words || [], group.words?.length || 0));
+    groups.forEach((group) => updateLyricWordProgressWindowForGroup(group, group?.words?.length || 0));
     return;
   }
 
   groups.forEach((group) => {
-    updateLyricProgressGroupUncached(group, {
+    updateLyricProgressGroup(group, {
       start,
       lyricSeconds,
       nextEntry,
@@ -7753,7 +7885,7 @@ function updateInlineLyricProgress(activeIndex, currentSeconds, options = {}) {
   });
 }
 
-function updateLyricProgressGroupUncached(group, options) {
+function updateLyricProgressGroup(group, options) {
   const words = group?.words || [];
   if (!words.length) {
     return;
@@ -7768,11 +7900,12 @@ function updateLyricProgressGroupUncached(group, options) {
   const lineRatio = end > options.start
     ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
     : 1;
-  updateLyricWordProgressWindowUncached(words, lineRatio * words.length);
+  updateLyricWordProgressWindowForGroup(group, lineRatio * words.length);
 }
 
 function resetLyricWordGroups(groups) {
   (groups || []).forEach((group) => {
+    resetLyricProgressGroupWindow(group);
     (group?.words || []).forEach((word) => setLyricWordProgress(word, 0));
   });
 }
@@ -9193,7 +9326,7 @@ function updateLyricProgressGroups(activeIndex, groups, options) {
     const lineRatio = end > options.start
       ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
       : 1;
-    updateLyricWordProgressWindowUncached(words, lineRatio * words.length);
+    updateLyricWordProgressWindowForGroup(group, lineRatio * words.length);
     return mergeLyricProgressGroupState(stateSummary, {
       ratio: lineRatio,
       complete: lineRatio >= 1,
@@ -9218,7 +9351,7 @@ function updateLyricProgressGroupsByLineRatio(groups, litWords, options = {}) {
     if (options.useCachedWindow && groups.length <= 1) {
       updateLyricWordProgressWindow(words, litWords);
     } else {
-      updateLyricWordProgressWindowUncached(words, words.length);
+      updateLyricWordProgressWindowForGroup(group, words.length);
     }
   });
 }
@@ -9275,7 +9408,7 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
 
 function updateLyricWordProgressByGroup(words, litWords, group = null) {
   if (group) {
-    updateLyricWordProgressWindowUncached(words, litWords);
+    updateLyricWordProgressWindowForGroup(group, litWords);
     return;
   }
 
@@ -9458,13 +9591,46 @@ function resumeLyricProgressAfterIdle() {
 }
 
 function updateLyricWordProgressWindow(words, litWords) {
+  const cache = {
+    progressFullWordCount: lyricProgressFullWordCount,
+    progressPartialWordIndex: lyricProgressPartialWordIndex,
+  };
+  updateLyricWordProgressWindowCached(words, litWords, cache);
+  lyricProgressFullWordCount = cache.progressFullWordCount;
+  lyricProgressPartialWordIndex = cache.progressPartialWordIndex;
+}
+
+function updateLyricWordProgressWindowForGroup(group, litWords) {
+  const words = group?.words || [];
+  if (!words.length) {
+    resetLyricProgressGroupWindow(group);
+    return;
+  }
+
+  updateLyricWordProgressWindowCached(words, litWords, group);
+}
+
+function resetLyricProgressGroupWindow(group) {
+  if (!group) {
+    return;
+  }
+
+  group.progressFullWordCount = -1;
+  group.progressPartialWordIndex = -1;
+}
+
+function updateLyricWordProgressWindowCached(words, litWords, cache) {
   const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
   const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
   const nextPartialProgress = nextPartialWordIndex >= 0
     ? normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)
     : 0;
-  const previousFullWordCount = lyricProgressFullWordCount;
-  const previousPartialWordIndex = lyricProgressPartialWordIndex;
+  const previousFullWordCount = Number.isFinite(cache?.progressFullWordCount)
+    ? cache.progressFullWordCount
+    : -1;
+  const previousPartialWordIndex = Number.isFinite(cache?.progressPartialWordIndex)
+    ? cache.progressPartialWordIndex
+    : -1;
 
   if (previousFullWordCount < 0) {
     words.forEach((word, index) => {
@@ -9473,8 +9639,8 @@ function updateLyricWordProgressWindow(words, litWords) {
         : (index === nextPartialWordIndex ? nextPartialProgress : 0);
       setLyricWordProgress(word, progress);
     });
-    lyricProgressFullWordCount = nextFullWordCount;
-    lyricProgressPartialWordIndex = nextPartialWordIndex;
+    cache.progressFullWordCount = nextFullWordCount;
+    cache.progressPartialWordIndex = nextPartialWordIndex;
     return;
   }
 
@@ -9499,8 +9665,8 @@ function updateLyricWordProgressWindow(words, litWords) {
     setLyricWordProgress(words[nextPartialWordIndex], nextPartialProgress);
   }
 
-  lyricProgressFullWordCount = nextFullWordCount;
-  lyricProgressPartialWordIndex = nextPartialWordIndex;
+  cache.progressFullWordCount = nextFullWordCount;
+  cache.progressPartialWordIndex = nextPartialWordIndex;
 }
 
 function updateLyricWordProgressWindowUncached(words, litWords) {
@@ -9539,9 +9705,13 @@ function resetInactiveImmersiveWords(activeIndex) {
   lyricProgressActiveIndex = activeIndex;
   lyricProgressFullWordCount = -1;
   lyricProgressPartialWordIndex = -1;
-  (immersiveLyricWordElements[previousActiveIndex] || []).forEach((word) => {
-    setLyricWordProgress(word, 0);
-  });
+  if (Array.isArray(immersiveLyricWordGroups[previousActiveIndex])) {
+    resetLyricWordGroups(immersiveLyricWordGroups[previousActiveIndex]);
+  } else {
+    (immersiveLyricWordElements[previousActiveIndex] || []).forEach((word) => {
+      setLyricWordProgress(word, 0);
+    });
+  }
 }
 
 function setLyricWordProgress(word, percent) {
