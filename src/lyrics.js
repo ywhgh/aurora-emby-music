@@ -99,9 +99,7 @@ function parseLyrics(text) {
       const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
       const baseTime = hours * 3600 + minutes * 60 + seconds + fraction;
       const words = normalizeInlineLyricWordTimeline(wordTimeline.words, baseTime);
-      const lyricPayload = words.length
-        ? { ...lyricText, wordTimeline: words }
-        : lyricText;
+      const lyricPayload = buildLyricPayloadWithWordTimeline(lyricText, words);
       timedLines.push({
         time: applySourceLyricOffsetSeconds(baseTime, offsetSeconds),
         ...applyLyricPayloadSourceOffset(lyricPayload, offsetSeconds),
@@ -147,10 +145,12 @@ function parseYrcLyrics(rawLines) {
       return;
     }
 
+    const lyricText = parseLyricTextPart(parsedLine.text);
+    const lyricPayload = buildLyricPayloadWithWordTimeline(lyricText, parsedLine.wordTimeline);
+
     lines.push({
       time: lineStartMs / 1000,
-      text: parsedLine.text,
-      wordTimeline: parsedLine.wordTimeline,
+      ...lyricPayload,
       ...(Number.isFinite(lineDurationMs) && lineDurationMs > 0 ? { endTime: (lineStartMs + lineDurationMs) / 1000 } : {}),
     });
   });
@@ -290,10 +290,11 @@ function parseTtmlParagraph(body, lineStart, lineEnd) {
       ...(Number.isFinite(span.endTime) ? { endTime: span.endTime } : {}),
     }));
 
+  const lyricText = parseLyricTextPart(text);
+
   return {
     time,
-    text,
-    ...(wordTimeline.length ? { wordTimeline } : {}),
+    ...buildLyricPayloadWithWordTimeline(lyricText, wordTimeline),
     ...(Number.isFinite(lineEnd) ? { endTime: lineEnd } : {}),
   };
 }
@@ -401,6 +402,146 @@ function shiftLyricWordTimelineBySourceOffset(timeline, offsetSeconds) {
     time: applySourceLyricOffsetSeconds(word.time, offsetSeconds),
     ...(Number.isFinite(word.endTime) ? { endTime: applySourceLyricOffsetSeconds(word.endTime, offsetSeconds) } : {}),
   }));
+}
+
+function buildLyricPayloadWithWordTimeline(lyricText, words) {
+  const payload = { ...lyricText };
+  const timedWords = Array.isArray(words)
+    ? words.filter((word) => Number.isFinite(word?.time))
+    : [];
+
+  if (!timedWords.length) {
+    return payload;
+  }
+
+  if (payload.originalText) {
+    const splitTimeline = splitBilingualWordTimeline(payload, timedWords);
+
+    if (splitTimeline) {
+      return {
+        ...payload,
+        ...(splitTimeline.original?.length ? { wordTimeline: splitTimeline.original } : {}),
+        ...(splitTimeline.translated?.length ? { translatedWordTimeline: splitTimeline.translated } : {}),
+      };
+    }
+
+    return payload;
+  }
+
+  return {
+    ...payload,
+    wordTimeline: timedWords,
+  };
+}
+
+function splitBilingualWordTimeline(lyricText, words) {
+  const attempts = [
+    {
+      firstText: lyricText.originalText,
+      secondText: lyricText.text,
+      map(first, second) {
+        return { original: first, translated: second };
+      },
+    },
+    {
+      firstText: lyricText.text,
+      secondText: lyricText.originalText,
+      map(first, second) {
+        return { original: second, translated: first };
+      },
+    },
+  ];
+
+  for (const attempt of attempts) {
+    const result = assignBilingualWordTimeline(words, attempt.firstText, attempt.secondText);
+
+    if (result) {
+      return attempt.map(result.first, result.second);
+    }
+  }
+
+  return null;
+}
+
+function assignBilingualWordTimeline(words, firstText, secondText) {
+  const firstTarget = normalizeLyricTextForTimeline(firstText);
+  const secondTarget = normalizeLyricTextForTimeline(secondText);
+
+  if (!firstTarget || !secondTarget) {
+    return null;
+  }
+
+  const first = [];
+  const second = [];
+  let firstValue = "";
+  let secondValue = "";
+  let phase = "first";
+
+  for (const word of expandBilingualTimelineWords(words)) {
+    const value = trimBilingualTimelineSeparator(word.value);
+    const normalizedValue = normalizeLyricTextForTimeline(value);
+
+    if (!normalizedValue) {
+      continue;
+    }
+
+    if (phase === "first") {
+      const nextFirstValue = firstValue + normalizedValue;
+
+      if (!firstTarget.startsWith(nextFirstValue)) {
+        return null;
+      }
+
+      first.push({ ...word, value });
+      firstValue = nextFirstValue;
+
+      if (firstValue === firstTarget) {
+        phase = "second";
+      }
+      continue;
+    }
+
+    const nextSecondValue = secondValue + normalizedValue;
+
+    if (!secondTarget.startsWith(nextSecondValue)) {
+      return null;
+    }
+
+    second.push({ ...word, value });
+    secondValue = nextSecondValue;
+  }
+
+  return firstValue === firstTarget && secondValue === secondTarget && first.length && second.length
+    ? { first, second }
+    : null;
+}
+
+function expandBilingualTimelineWords(words) {
+  return words.flatMap((word) => {
+    const value = String(word?.value || "");
+    const parts = value.split(/(\s*\/\/\s*|\s*[|｜]\s*|\s+\/\s+)/).filter(Boolean);
+
+    if (parts.length <= 1) {
+      return [word];
+    }
+
+    return parts
+      .filter((part) => !isBilingualTimelineSeparator(part))
+      .map((part) => ({
+        ...word,
+        value: part,
+      }));
+  });
+}
+
+function isBilingualTimelineSeparator(value) {
+  return /^\s*(?:\/\/|[|｜]|\/)\s*$/.test(String(value || ""));
+}
+
+function trimBilingualTimelineSeparator(value) {
+  return String(value || "")
+    .replace(/\s*(?:\/\/|[|｜]|\s+\/)\s*$/g, "")
+    .replace(/^\s*(?:(?:\/\/|[|｜]|\/)\s*)/g, "");
 }
 
 function parseInlineLyricWordTimeline(text, inlineTimePattern) {

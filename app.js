@@ -1799,6 +1799,7 @@ function collectBrowserSmokeTopLyricShardState() {
   setPlayerEnabled(true);
   switchView("home", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.75, true);
+  alignTopLyricShardStateToTime(0.75);
   const bilingualGroupStates = topLyricCharacterGroups.map((group) => ({
     role: group.role,
     charCount: group.spans.length,
@@ -1807,6 +1808,8 @@ function collectBrowserSmokeTopLyricShardState() {
       Number.isFinite(time) ? Number(time.toFixed(2)) : null
     )),
     shard: Boolean(group.shard),
+    triggeredIndex: group.triggeredIndex,
+    shardedCount: group.spans.filter((span) => span.classList.contains("is-sharded")).length,
   }));
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
 
@@ -8155,13 +8158,14 @@ function renderTopLyricCharacters(line) {
     topLyricOriginal.replaceChildren(buildTopLyricCharacterFragment(originalText, line, {
       role: "original",
       timeline: line?.wordTimeline,
-      shard: false,
+      shard: true,
     }));
   }
   topLyricCurrent.replaceChildren(buildTopLyricCharacterFragment(text, line, {
     role: line?.originalText ? "translated" : "single",
     timeline: line?.originalText ? line?.translatedWordTimeline : line?.wordTimeline,
     shard: true,
+    primary: true,
   }));
 }
 
@@ -8177,6 +8181,7 @@ function buildTopLyricCharacterFragment(text, line, options = {}) {
     spans: [],
     timings: buildTopLyricCharacterTimings(text, line, options),
     shard: options.shard !== false,
+    primary: Boolean(options.primary),
     triggeredIndex: -1,
   };
 
@@ -8188,13 +8193,11 @@ function buildTopLyricCharacterFragment(text, line, options = {}) {
     span.setAttribute("aria-hidden", "true");
     wrapper.append(span);
     group.spans[index] = span;
-    if (group.shard) {
-      topLyricCharacterSpans[index] = span;
-    }
   });
 
   topLyricCharacterGroups.push(group);
-  if (group.shard) {
+  if (group.primary) {
+    topLyricCharacterSpans = group.spans;
     topLyricCharacterTimings = group.timings;
   }
   return wrapper;
@@ -8332,25 +8335,29 @@ function updateTopLyricShardFrame() {
   }
 
   const lyricSeconds = getAdjustedLyricSeconds(getLyricPlaybackTimeSeconds());
-  const shardGroup = getTopLyricShardGroup();
-  const nextIndex = findTopLyricShardIndex(lyricSeconds, shardGroup);
+  getTopLyricShardGroups().forEach((group) => {
+    const nextIndex = findTopLyricShardIndex(lyricSeconds, group);
 
-  if (nextIndex >= 0) {
-    if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, shardGroup)) {
-      alignTopLyricShardStateToIndex(nextIndex, lyricSeconds);
-      syncTopLyricShardLoop();
+    if (nextIndex < 0) {
+      return;
+    }
+
+    if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, group)) {
+      alignTopLyricGroupStateToIndex(group, nextIndex);
       return;
     }
 
     const triggerEndIndex = Math.min(
       nextIndex,
-      topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS
+      group.triggeredIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS
     );
-    for (let index = topLyricTriggeredWordIndex + 1; index <= triggerEndIndex; index += 1) {
-      triggerNextWord(index);
+    for (let index = group.triggeredIndex + 1; index <= triggerEndIndex; index += 1) {
+      triggerTopLyricGroupCharacter(group, index, { shard: true });
     }
-    topLyricTriggeredWordIndex = Math.max(topLyricTriggeredWordIndex, triggerEndIndex);
-  }
+    group.triggeredIndex = Math.max(group.triggeredIndex, triggerEndIndex);
+  });
+
+  syncTopLyricLegacyProgressState();
 
   syncTopLyricProgressGroups(lyricSeconds);
 
@@ -8358,11 +8365,11 @@ function updateTopLyricShardFrame() {
 }
 
 function shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, group = getTopLyricShardGroup()) {
-  if (nextIndex <= topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS) {
+  if (nextIndex <= (group?.triggeredIndex ?? -1) + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS) {
     return false;
   }
 
-  const firstPendingIndex = topLyricTriggeredWordIndex + 1;
+  const firstPendingIndex = (group?.triggeredIndex ?? -1) + 1;
   const firstPendingTime = group?.timings?.[firstPendingIndex];
   if (!Number.isFinite(firstPendingTime)) {
     return true;
@@ -8377,7 +8384,7 @@ function findTopLyricShardIndex(lyricSeconds, group = getTopLyricShardGroup()) {
   }
 
   const timings = group?.timings || [];
-  let result = group?.shard ? topLyricTriggeredWordIndex : group?.triggeredIndex ?? -1;
+  let result = group?.triggeredIndex ?? -1;
   for (let index = result + 1; index < timings.length; index += 1) {
     const time = timings[index];
 
@@ -8396,12 +8403,24 @@ function findTopLyricShardIndex(lyricSeconds, group = getTopLyricShardGroup()) {
 }
 
 function getTopLyricShardGroup() {
-  return topLyricCharacterGroups.find((group) => group.shard) || topLyricCharacterGroups[0] || null;
+  return topLyricCharacterGroups.find((group) => group.primary && group.shard)
+    || topLyricCharacterGroups.find((group) => group.shard)
+    || topLyricCharacterGroups[0]
+    || null;
+}
+
+function getTopLyricShardGroups() {
+  return topLyricCharacterGroups.filter((group) => group?.shard && group.spans.length && group.timings.length);
 }
 
 // Timeline Controller：外部传入字符索引时，隐藏该字符并在原位置触发 Canvas 碎裂。
 function triggerNextWord(index) {
-  triggerTopLyricGroupCharacter(getTopLyricShardGroup(), index, { shard: true });
+  const group = getTopLyricShardGroup();
+  triggerTopLyricGroupCharacter(group, index, { shard: true });
+  if (group) {
+    group.triggeredIndex = Math.max(group.triggeredIndex, index);
+  }
+  syncTopLyricLegacyProgressState();
 }
 
 function triggerTopLyricGroupCharacter(group, index, options = {}) {
@@ -8417,22 +8436,34 @@ function triggerTopLyricGroupCharacter(group, index, options = {}) {
 }
 
 function alignTopLyricShardStateToTime(lyricSeconds) {
-  const currentIndex = findTopLyricShardIndex(lyricSeconds, getTopLyricShardGroup());
-  alignTopLyricShardStateToIndex(currentIndex, lyricSeconds);
+  topLyricCharacterGroups.forEach((group) => {
+    alignTopLyricGroupStateToIndex(group, findTopLyricShardIndex(lyricSeconds, group));
+  });
+  syncTopLyricLegacyProgressState();
 }
 
 function alignTopLyricShardStateToIndex(currentIndex, lyricSeconds = NaN) {
   const shardGroup = getTopLyricShardGroup();
-  shardGroup?.spans.forEach((span, index) => {
-    span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(shardGroup.timings[index]));
-  });
-  topLyricTriggeredWordIndex = currentIndex;
-  if (shardGroup) {
-    shardGroup.triggeredIndex = currentIndex;
-  }
+  alignTopLyricGroupStateToIndex(shardGroup, currentIndex);
+  syncTopLyricLegacyProgressState();
   syncTopLyricProgressGroupsToTime(
     Number.isFinite(lyricSeconds) ? lyricSeconds : shardGroup?.timings?.[currentIndex]
   );
+}
+
+function alignTopLyricGroupStateToIndex(group, currentIndex) {
+  if (!group) {
+    return;
+  }
+
+  group.spans.forEach((span, index) => {
+    span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(group.timings[index]));
+  });
+  group.triggeredIndex = currentIndex;
+}
+
+function syncTopLyricLegacyProgressState() {
+  topLyricTriggeredWordIndex = getTopLyricShardGroup()?.triggeredIndex ?? -1;
 }
 
 function syncTopLyricProgressGroups(lyricSeconds) {
@@ -8446,10 +8477,7 @@ function syncTopLyricProgressGroups(lyricSeconds) {
       return;
     }
 
-    group.spans.forEach((span, index) => {
-      span?.classList.toggle("is-sharded", index <= nextIndex && Number.isFinite(group.timings[index]));
-    });
-    group.triggeredIndex = nextIndex;
+    alignTopLyricGroupStateToIndex(group, nextIndex);
   });
 }
 
@@ -8460,10 +8488,7 @@ function syncTopLyricProgressGroupsToTime(lyricSeconds) {
     }
 
     const currentIndex = findTopLyricShardIndex(lyricSeconds, group);
-    group.spans.forEach((span, index) => {
-      span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(group.timings[index]));
-    });
-    group.triggeredIndex = currentIndex;
+    alignTopLyricGroupStateToIndex(group, currentIndex);
   });
 }
 

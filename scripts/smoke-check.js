@@ -244,6 +244,13 @@ function checkLyrics() {
   assert(bilingualEnhancedLine.translatedWordTimeline?.length === 2, `Bilingual enhanced translation should expose 2 timed words, got ${bilingualEnhancedLine.translatedWordTimeline?.length || 0}`);
   assert(bilingualEnhancedLine.wordTimeline?.[1]?.time === 0.6, `Bilingual enhanced original second word time expected 0.6, got ${bilingualEnhancedLine.wordTimeline?.[1]?.time}`);
   assert(bilingualEnhancedLine.translatedWordTimeline?.[1]?.time === 0.6, `Bilingual enhanced translated second word time expected 0.6, got ${bilingualEnhancedLine.translatedWordTimeline?.[1]?.time}`);
+  const inlineBilingualEnhancedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world <1.20>/ <1.40>你<2.00>好").lines[0];
+  assert(inlineBilingualEnhancedLine?.originalText === "Hello world", `Inline bilingual enhanced originalText expected Hello world, got ${inlineBilingualEnhancedLine?.originalText}`);
+  assert(inlineBilingualEnhancedLine?.text === "你好", `Inline bilingual enhanced translated text expected 你好, got ${inlineBilingualEnhancedLine?.text}`);
+  assert(inlineBilingualEnhancedLine.wordTimeline?.length === 2, `Inline bilingual enhanced original should expose 2 timed words, got ${inlineBilingualEnhancedLine.wordTimeline?.length || 0}`);
+  assert(inlineBilingualEnhancedLine.translatedWordTimeline?.length === 2, `Inline bilingual enhanced translation should expose 2 timed words, got ${inlineBilingualEnhancedLine.translatedWordTimeline?.length || 0}`);
+  assert(inlineBilingualEnhancedLine.wordTimeline?.[1]?.time === 0.6, `Inline bilingual enhanced original second word time expected 0.6, got ${inlineBilingualEnhancedLine.wordTimeline?.[1]?.time}`);
+  assert(inlineBilingualEnhancedLine.translatedWordTimeline?.[1]?.time === 2, `Inline bilingual enhanced translated second word time expected 2, got ${inlineBilingualEnhancedLine.translatedWordTimeline?.[1]?.time}`);
   const bilingualOriginalOnlyTimedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world\n[00:00.00]你好").lines[0];
   assert(bilingualOriginalOnlyTimedLine.wordTimeline?.length === 2, `Bilingual original-only enhanced line should keep 2 original timed words, got ${bilingualOriginalOnlyTimedLine.wordTimeline?.length || 0}`);
   assert(!bilingualOriginalOnlyTimedLine.translatedWordTimeline, "Parser should not persist synthetic translatedWordTimeline when translation has no own word timing");
@@ -265,6 +272,9 @@ function checkLyrics() {
   assert(app.includes("function synthesizeTranslatedLyricWordTimeline"), "Translated lyrics without timed words should synthesize a display-only word timeline from the original timing");
   assert(app.includes("function synthesizeLyricWordTimelineFromSource"), "Original or translated lyrics without timed words should share the same display-only synthesis helper");
   assert(/options\.role === "original"[\s\S]*?line\?\.translatedWordTimeline[\s\S]*?synthesizeLyricWordTimelineFromSource\(fallbackText, line\.translatedWordTimeline\)/.test(app), "Original lyrics without timed words should synthesize display-only timing from translated timing");
+  assert(lyricsCode.includes("function buildLyricPayloadWithWordTimeline"), "Parser should attach word timelines through the bilingual-aware payload helper");
+  assert(lyricsCode.includes("function splitBilingualWordTimeline"), "Parser should split same-line bilingual enhanced word timelines");
+  assert(lyricsCode.includes("translatedWordTimeline: splitTimeline.translated"), "Parser should persist translatedWordTimeline from same-line bilingual enhanced lyrics");
   assert(/function synthesizeTranslatedLyricWordTimeline\(text, sourceTimeline\) \{[\s\S]*?const parts = segmentLyricWords\(text\);[\s\S]*?if \(part\.type === "space"\) \{[\s\S]*?return \{ value: part\.value \};/.test(app), "Synthetic translated word timing should preserve spaces in translated text");
   assert(app.includes("if (/^\\s+$/.test(value))"), "Lyric word parts should preserve synthetic space entries as a single space node");
   assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
@@ -883,7 +893,10 @@ async function checkExternalSourceLyrics() {
   const bridge = read("scripts/source-bridge.js");
   assert(bridge.includes("DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS"), "Source bridge should include built-in default manifests");
   assert(bridge.includes("https://13413.kstore.vip/yuanli/yuanli.json"), "Source bridge should include the default yuanli manifest");
-  assert(bridge.includes("...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS"), "Source bridge should load the built-in manifest by default");
+  assert(bridge.includes("function getDefaultSourceBridgeManifestUrls"), "Source bridge should expose a default manifest helper");
+  assert(bridge.includes("return shouldLoadDefaultManifestUrls ? DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS : []"), "Source bridge should load the built-in manifest by default unless disabled");
+  assert(bridge.includes("SOURCE_BRIDGE_NO_DEFAULT_MANIFESTS"), "Source bridge should allow tests to disable built-in manifests");
+  assert(bridge.includes("...getDefaultSourceBridgeManifestUrls()"), "Source bridge should resolve default manifests through the helper");
   assert(bridge.includes("function extractPluginLyricText"), "Source bridge should normalize plugin lyric payloads");
   assert(bridge.includes("formatPluginLyricLineArray"), "Source bridge should convert plugin lyric line arrays to LRC");
   assert(bridge.includes("payload.result?.sentences"), "Source bridge should inspect nested lyric sentence arrays");
@@ -894,6 +907,10 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("function rememberPluginTrack"), "Source bridge should remember plugin search results for later playback");
   assert(bridge.includes("function loadPluginTrackCache"), "Source bridge should load plugin tracks from persistent cache");
   assert(bridge.includes("function restorePluginTrackFromCache"), "Source bridge should restore plugin tracks from cache without requiring a new search");
+  assert(bridge.includes("function flushPluginTrackCacheForShutdown"), "Source bridge should flush plugin track cache during shutdown");
+  assert(bridge.includes("process.once(\"SIGTERM\""), "Source bridge should install SIGTERM shutdown cache flush handling");
+  const packageJson = JSON.parse(read("package.json"));
+  assert(packageJson.scripts?.["smoke:bridge"] === "node ./scripts/source-bridge-smoke.js", "Package scripts should expose source bridge integration smoke");
   assert(bridge.includes("function restorePluginTrackFromId"), "Source bridge should rebuild plugin tracks from plugin ids when no cache snapshot exists");
   assert(/function getTrackFromUrl\(url\) \{[\s\S]*?restorePluginTrackFromSnapshot\(url, id\)[\s\S]*?restorePluginTrackFromCache\(id\)[\s\S]*?restorePluginTrackFromId\(id\)/.test(bridge), "Source bridge media lookup should restore plugin tracks before returning 404");
   assert(bridge.includes('url.pathname === "/plugin-stream"'), "Source bridge should expose a stable local plugin stream endpoint");

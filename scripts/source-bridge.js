@@ -36,6 +36,13 @@ const COVER_NAMES = [
 const options = parseArgs(process.argv.slice(2));
 const host = options.host || process.env.SOURCE_BRIDGE_HOST || "127.0.0.1";
 const port = Number(options.port || process.env.SOURCE_BRIDGE_PORT || process.env.PORT || 5174);
+const shouldLoadDefaultManifestUrls = !/^(1|true|yes)$/i.test(String(
+  options.noDefaultManifest
+    || options.noDefaultManifests
+    || process.env.SOURCE_BRIDGE_NO_DEFAULT_MANIFESTS
+    || process.env.SOURCE_BRIDGE_DISABLE_DEFAULT_MANIFESTS
+    || ""
+));
 const pluginTrackCachePath = options.pluginCache
   || process.env.SOURCE_BRIDGE_PLUGIN_CACHE
   || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir(), "emby-music-source-bridge", "plugin-tracks.json");
@@ -52,7 +59,7 @@ let manifestUrls = uniqueStrings([
   ...splitList(options.manifestUrl),
   ...splitList(process.env.SOURCE_MANIFEST_URL),
   ...splitList(process.env.SOURCE_BRIDGE_MANIFEST_URL),
-  ...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS,
+  ...getDefaultSourceBridgeManifestUrls(),
 ]);
 
 const state = {
@@ -72,6 +79,8 @@ main().catch((error) => {
   console.error(`[source-bridge] failed: ${error.message}`);
   process.exitCode = 1;
 });
+
+installShutdownHandlers();
 
 async function main() {
   await refreshState();
@@ -132,7 +141,7 @@ async function handleRequest(request, response) {
     const nextManifestUrls = uniqueStrings([
       ...splitList(payload.manifestUrl),
       ...splitList(payload.manifestUrls),
-      ...DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS,
+      ...getDefaultSourceBridgeManifestUrls(),
     ]);
 
     musicDirs = nextMusicDirs;
@@ -774,6 +783,7 @@ function schedulePluginTrackCacheFlush() {
   }
 
   state.pluginTrackCacheFlushTimer = setTimeout(flushPluginTrackCache, PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS);
+  state.pluginTrackCacheFlushTimer.unref?.();
 }
 
 function flushPluginTrackCache() {
@@ -798,6 +808,33 @@ function flushPluginTrackCache() {
   } catch (error) {
     console.warn(`[source-bridge] failed to write plugin cache: ${error.message}`);
   }
+}
+
+function flushPluginTrackCacheForShutdown() {
+  if (state.pluginTrackCacheFlushTimer) {
+    clearTimeout(state.pluginTrackCacheFlushTimer);
+    state.pluginTrackCacheFlushTimer = null;
+  }
+
+  flushPluginTrackCache();
+}
+
+function installShutdownHandlers() {
+  let isShuttingDown = false;
+  const shutdown = (signal) => {
+    if (isShuttingDown) {
+      return;
+    }
+
+    isShuttingDown = true;
+    flushPluginTrackCacheForShutdown();
+    process.exit(signal === "SIGINT" ? 130 : 143);
+  };
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("beforeExit", flushPluginTrackCacheForShutdown);
+  process.once("exit", flushPluginTrackCacheForShutdown);
 }
 
 async function resolvePluginMedia(track, quality) {
@@ -3384,6 +3421,10 @@ function parseArgs(args) {
   }
 
   return result;
+}
+
+function getDefaultSourceBridgeManifestUrls() {
+  return shouldLoadDefaultManifestUrls ? DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS : [];
 }
 
 function splitList(value) {
