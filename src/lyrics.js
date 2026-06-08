@@ -712,11 +712,13 @@ function mergeBilingualTimedLines(lines) {
     });
 
     const timedWordLine = group.find((line) => Array.isArray(line.wordTimeline) && line.wordTimeline.length);
+    const lineEndTime = findMergedLineEndTime(group);
 
     if (texts.length <= 1) {
       return {
         time: group[0].time,
         text: texts[0] || "",
+        ...(Number.isFinite(lineEndTime) ? { endTime: lineEndTime } : {}),
         ...(timedWordLine ? { wordTimeline: timedWordLine.wordTimeline } : {}),
         ...(timedWordLine?.translatedWordTimeline ? { translatedWordTimeline: timedWordLine.translatedWordTimeline } : {}),
       };
@@ -736,10 +738,19 @@ function mergeBilingualTimedLines(lines) {
       time: group[0].time,
       text: translatedText,
       originalText,
+      ...(Number.isFinite(lineEndTime) ? { endTime: lineEndTime } : {}),
       ...(originalTimeline?.length ? { wordTimeline: originalTimeline } : {}),
       ...(translatedTimeline?.length ? { translatedWordTimeline: translatedTimeline } : {}),
     };
   }).filter((line) => line.text);
+}
+
+function findMergedLineEndTime(lines) {
+  const endTimes = lines
+    .map((line) => Number(line?.endTime))
+    .filter(Number.isFinite);
+
+  return endTimes.length ? Math.max(...endTimes) : NaN;
 }
 
 function findTimedWordTimelineForText(lines, text, timelineKey = "wordTimeline") {

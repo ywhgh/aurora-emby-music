@@ -673,13 +673,13 @@ function checkPageState(check, page) {
   assert(lyricProgressAfterResumeRefresh.activeIndex === 1, `${label} lyric resume refresh should restore the active lyric immediately, got ${lyricProgressAfterResumeRefresh.activeIndex}`);
   assert(lyricProgressAfterResumeRefresh.wordProgress?.[1] > 0, `${label} lyric resume refresh should immediately light the partial word: ${JSON.stringify(lyricProgressAfterResumeRefresh.wordProgress)}`);
   assert(lyricLongGapProgress.activeIndex === 0, `${label} long-gap lyric should still focus the first line, got ${lyricLongGapProgress.activeIndex}`);
-  assert(lyricLongGapProgress.wordProgress?.every((progress) => progress === 100), `${label} long-gap lyric words should finish within the capped line duration: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
+  assert(lyricLongGapProgress.wordProgress?.some((progress) => progress > 0 && progress < 100), `${label} long-gap lyric words should keep following the active line instead of finishing early: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
   assert(lyricProgress.longGapIdleResumeDelayMs > 10000, `${label} long-gap lyric should idle the RAF until near the next line, got ${lyricProgress.longGapIdleResumeDelayMs || 0}ms`);
   assert(enhancedMidWordProgress.wordProgress?.[0] === 100, `${label} enhanced lyric first word should complete at the second word timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[2] > 0 && enhancedLateWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric third word should be partially highlighted from inline timing: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
-  assert(enhancedTailWordProgress.wordProgress?.[2] === 100, `${label} enhanced lyric tail word should finish before the next lyric line gap: ${JSON.stringify(enhancedTailWordProgress.wordProgress)}`);
+  assert(enhancedTailWordProgress.wordProgress?.[2] > 0 && enhancedTailWordProgress.wordProgress?.[2] < 100, `${label} enhanced lyric tail word should keep following the sung line instead of finishing early: ${JSON.stringify(enhancedTailWordProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.activeIndex === 0, `${label} relative enhanced lyric should focus the late line, got ${relativeEnhancedProgress.activeIndex}`);
   assert(relativeEnhancedProgress.wordProgress?.[0] === 100, `${label} relative enhanced lyric first word should complete at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.wordProgress?.[1] > 0 && relativeEnhancedProgress.wordProgress?.[1] < 100, `${label} relative enhanced lyric second word should be partially highlighted at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
@@ -745,24 +745,13 @@ function checkPageState(check, page) {
   assert(endScrollLayout.shellPinned === true, `${label} immersive player should remain pinned to the viewport: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.shellBottomGapPx <= 1, `${label} immersive player should not reveal a bottom gap: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.activeLineInsideList === true, `${label} active ending lyric should remain inside the lyric list viewport: ${JSON.stringify(endScrollLayout)}`);
-  assert(topLyricShard.text === "满世界嘻嘻哈哈", `${label} top lyric shard text mismatch: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.charCount === 7, `${label} top lyric shard should split 7 characters: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.timingCount === 7, `${label} top lyric shard should map character timings: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.length === 2, `${label} top lyric should render bilingual character groups: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.[0]?.role === "original" && topLyricShard.bilingualGroupStates?.[0]?.timingCount === 10, `${label} top lyric original should synthesize character timing from translated timing: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[5] === null, `${label} top lyric original should leave the space character untimed: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[6] > topLyricShard.bilingualGroupStates?.[0]?.timingSamples?.[4], `${label} top lyric original should continue timing after the space instead of resetting: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.[1]?.role === "translated" && topLyricShard.bilingualGroupStates?.[1]?.timingCount === 2, `${label} top lyric translated should keep own character timing: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.every((group) => group.shard === true), `${label} top lyric original and translated groups should both enable word shard progress: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.every((group) => group.triggeredIndex >= 1), `${label} top lyric original and translated groups should both advance with lyric time: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bilingualGroupStates?.every((group) => group.shardedCount >= 2), `${label} top lyric original and translated groups should both mark played characters: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.firstSpanClass?.includes("is-sharded"), `${label} top lyric shard trigger should hide the activated character: ${JSON.stringify(topLyricShard)}`);
-  if (check.name !== "mobile") {
-    assert(topLyricShard.canvasCountAfterTrigger >= 1, `${label} top lyric shard trigger should create a canvas: ${JSON.stringify(topLyricShard)}`);
-    assert(topLyricShard.animationFrameAfterTrigger > 0, `${label} top lyric shard should start the shared animation scheduler: ${JSON.stringify(topLyricShard)}`);
-  }
-  assert(topLyricShard.canvasCountAfterCleanup === 0, `${label} top lyric shard cleanup should remove canvases: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.animationFrameAfterCleanup === 0, `${label} top lyric shard cleanup should cancel the shared animation scheduler: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.enabled === false, `${label} topbar lyric display should be disabled by default: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.displayHidden === true, `${label} topbar lyric display should stay hidden while playing: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bodyClassActive === false, `${label} topbar lyric display should not hide the menu tabs while disabled: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.text === "" && topLyricShard.originalText === "", `${label} topbar lyric text should not render while disabled: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.charCount === 0, `${label} topbar lyric characters should not render while disabled: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.canvasCount === 0, `${label} topbar lyric shards should not create canvases while disabled: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.animationFrame === 0, `${label} topbar lyric shard scheduler should stay stopped while disabled: ${JSON.stringify(topLyricShard)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

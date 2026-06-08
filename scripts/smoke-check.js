@@ -172,8 +172,8 @@ function checkCss() {
   assert(/border-radius:\s*0;/.test(immersiveLyricBaseRule), "Immersive lyric rows should not use rounded rectangle backgrounds");
   assert(/width:\s*100%;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should span the full row width");
   assert(/box-shadow:\s*none;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should not add a framed shadow");
-  assert(css.includes("body.topbar-lyric-active .top-tabs .tab"), "Playing topbar should be able to hide menu tabs behind lyrics");
-  assert(css.includes("body.topbar-lyric-active .top-tabs:hover .tab"), "Hovering the topbar lyrics should restore the menu tabs");
+  assert(css.includes("body.topbar-lyric-active .top-tabs .tab"), "Topbar lyric mode styles should remain available behind the display flag");
+  assert(css.includes("body.topbar-lyric-active .top-tabs:hover .tab"), "Topbar lyric hover restore styles should remain available behind the display flag");
   assert(css.includes(".top-lyric-current"), "Topbar lyric text should have a dedicated translated/current line style");
   assert(css.includes(".top-lyric-focus[hidden]"), "Hidden topbar lyrics should not leave an invisible overlay");
   assert(css.includes(".top-lyric-char"), "Topbar lyric shard effect should split lyric text into character spans");
@@ -230,6 +230,9 @@ function checkLyrics() {
   assert(ttmlLine.wordTimeline?.length === 2, `TTML should expose 2 timed words, got ${ttmlLine.wordTimeline?.length || 0}`);
   assert(ttmlLine.wordTimeline?.[1]?.time === 1.5, `TTML second word time expected 1.5, got ${ttmlLine.wordTimeline?.[1]?.time}`);
   assert(ttmlLine.wordTimeline?.[1]?.endTime === 2, `TTML second word endTime expected 2, got ${ttmlLine.wordTimeline?.[1]?.endTime}`);
+  assert(ttmlLine.endTime === 3, `TTML line endTime expected 3, got ${ttmlLine.endTime}`);
+  const bilingualTtmlLine = parseLyrics('<tt><body><div><p begin="00:00:01.000" end="00:00:05.000"><span begin="00:00:01.000" end="00:00:02.000">Hello </span><span begin="00:00:02.000" end="00:00:04.000">world</span></p><p begin="00:00:01.000" end="00:00:05.000"><span begin="00:00:01.000" end="00:00:02.000">你</span><span begin="00:00:02.000" end="00:00:04.000">好</span></p></div></body></tt>').lines[0];
+  assert(bilingualTtmlLine?.endTime === 5, `Bilingual TTML should preserve merged line endTime 5, got ${bilingualTtmlLine?.endTime}`);
   const offsetLine = parseLyrics("[offset:500]\n[00:01.00]Offset lyric").lines[0];
   assert(offsetLine?.time === 0.5, `LRC positive offset should shift line time earlier to 0.5, got ${offsetLine?.time}`);
   const lateOffsetLine = parseLyrics("[00:01.00]Offset lyric\n[offset:+500]").lines[0];
@@ -299,13 +302,17 @@ function checkLyrics() {
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
   assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap long line durations");
-  assert(app.includes("LYRIC_TIMED_WORD_MAX_DURATION_SECONDS"), "Timed lyric words should cap fallback word duration so the last word does not drag until the next line");
+  assert(app.includes("LYRIC_TIMED_WORD_MAX_DURATION_SECONDS"), "Timed lyric words should cap fallback word duration when no line end is available");
+  assert(app.includes("LYRIC_WORD_ESTIMATED_DURATION_SECONDS"), "Untimed lyric words should estimate line duration from word count");
+  assert(app.includes("LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS"), "Lyric line timing should account for long sung text");
   assert(app.includes("LYRIC_PROGRESS_RESUME_LEAD_MS"), "Lyric word progress should resume shortly before the next line after idling");
   assert(app.includes("lyricProgressResumeTimer"), "Lyric word progress should have a low-frequency idle timer");
   assert(app.includes("function getLyricWordProgressEndSeconds"), "Lyric word progress should centralize line end timing");
+  assert(app.includes("function getLyricLineProgressEndSeconds"), "Lyric word progress should centralize sung line end timing");
+  assert(app.includes("function getTimedLyricTailWordEndSeconds"), "Timed lyric tail words should follow the active sung line end");
   assert(app.includes("function getTimedLyricWordPreferredDurationSeconds"), "Timed lyric fallback word duration should be centralized");
   assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
-  assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use capped line end timing");
+  assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length, \{[\s\S]*?line: currentLine,[\s\S]*?text: currentLine\?\.originalText \|\| currentLine\?\.text,[\s\S]*?\}\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use sung line end timing");
   assert(/scheduleLyricProgressResumeIfIdle\(lineRatio, lyricSeconds, nextEntry\);/.test(app), "Lyric word progress should idle after a line is fully highlighted");
   assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?const currentSeconds = getLyricPlaybackTimeSeconds\(\);[\s\S]*?updateActiveLyricWordProgressFrame\(currentSeconds\)[\s\S]*?updateLyricsHighlight\(currentSeconds\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock with an active lyric hot path");
   assert(app.includes("function updateActiveLyricWordProgressFrame"), "Visible lyric surfaces should share a direct RAF hot path");
@@ -461,7 +468,7 @@ function checkLyrics() {
   assert(/if \(!state\.isLyricSynced \|\| !state\.lyricTimeline\.length\) \{\s*stopLyricProgressLoop\(\);\s*renderStaticLyricFocusIfNeeded\(\);\s*return;/m.test(app), "Unsynced lyric updates should not rebuild lyric DOM on every tick");
   assert(app.includes("function getNextLyricTimelineEntry"), "Lyric word progress should reuse the lyric timeline for next-line timing");
   assert(!/state\.lyricLines\s*\.\s*slice\(activeIndex \+ 1\)\s*\.\s*find/.test(app), "Lyric word progress should not allocate slices on every frame");
-  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricProgressGroupsByLineRatio\(groups, words\.length,[\s\S]*?return;[\s\S]*?const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
+  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricProgressGroupsByLineRatio\(groups, words\.length,[\s\S]*?return;[\s\S]*?const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length, \{/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
   assert(app.includes("lyricLineElements"), "Now-playing lyric lines should be cached for active updates");
   assert(app.includes("function syncLyricListActiveClass"), "Now-playing lyric active class should be updated without scanning the list");
   assert(!app.includes('lyricsList.querySelectorAll(".lyric-line")'), "Now-playing lyric active updates should not query every lyric line");
@@ -497,7 +504,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("wordHighlightClipPath"), "Browser smoke should verify clipped word highlight rendering");
   assert(browserSmoke.includes("wordProgress?.[1] > lyricProgressBeforeOffset.wordProgress?.[1]"), "Browser smoke should verify lyric offset changes word progress");
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
-  assert(browserSmoke.includes("enhancedTailWordProgress.wordProgress?.[2] === 100"), "Browser smoke should verify enhanced lyric tail words finish before a long next-line gap");
+  assert(browserSmoke.includes("enhancedTailWordProgress.wordProgress?.[2] > 0 && enhancedTailWordProgress.wordProgress?.[2] < 100"), "Browser smoke should verify enhanced lyric tail words do not finish before the sung line");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
@@ -1026,9 +1033,11 @@ function checkAppFunctionReferences() {
   assert(app.includes("const AUTO_DISMISS_NOTICE_MS = 1800"), "Actionless notices should auto-hide within 1-2 seconds");
   assert(app.includes("const AUTO_DISMISS_STATUS_MS = 1800"), "Transient status messages should auto-hide within 1-2 seconds");
   assert(app.includes("window.addEventListener(\"emby-music-hls-ready\", handleHlsReady)"), "hls.js loading should refresh playback capability without blocking init");
-  assert(app.includes("function renderTopLyricFocus"), "Topbar lyrics should reuse the current lyric render state");
-  assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state");
-  assert(app.includes("document.body.classList.toggle(\"topbar-lyric-active\", shouldShowLyric)"), "Playing lyrics should toggle the topbar lyric state class");
+  assert(app.includes("const TOPBAR_LYRIC_DISPLAY_ENABLED = false"), "Topbar lyric display should stay disabled by default");
+  assert(app.includes("function renderTopLyricFocus"), "Topbar lyrics should reuse the current lyric render state behind the display flag");
+  assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state behind the display flag");
+  assert(app.includes("if (!TOPBAR_LYRIC_DISPLAY_ENABLED)"), "Topbar lyrics should not render into the top navigation while disabled");
+  assert(app.includes("document.body.classList.toggle(\"topbar-lyric-active\", shouldShowLyric)"), "Topbar lyric state class should remain wired for the display flag");
   assert(/function updatePlaybackState\(\) \{[\s\S]*?updateTopbarLyricState\(\);[\s\S]*?updatePlayButtonLabels\(\);/.test(app), "Playback state updates should refresh the topbar lyric/menu mode");
   assert(app.includes("function buildTopLyricCharacterFragment"), "Topbar lyric shard effect should split lyrics into character spans");
   assert(app.includes("function triggerNextWord(index)"), "Topbar lyric shard effect should expose a triggerNextWord controller");
@@ -1148,8 +1157,8 @@ function checkAppFunctionReferences() {
 
   const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
-  assert(index.includes("id=\"topLyricFocus\""), "Topbar should include a lyric display layer");
-  assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should include the translated/current lyric line");
+  assert(index.includes("id=\"topLyricFocus\""), "Topbar should keep the lyric display layer hidden behind the feature flag");
+  assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should keep the translated/current lyric line hidden behind the feature flag");
   assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
   assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");

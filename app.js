@@ -119,9 +119,11 @@ const LYRIC_PROGRESS_EPSILON = 0.04;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
 const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
-const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 4.8;
+const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 14;
+const LYRIC_WORD_ESTIMATED_DURATION_SECONDS = 0.48;
+const LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS = 0.2;
 const LYRIC_TIMED_WORD_MIN_DURATION_SECONDS = 0.16;
-const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 0.72;
+const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 3.2;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
 const TOP_LYRIC_SHARD_MIN_COUNT = 16;
@@ -138,6 +140,7 @@ const TOP_LYRIC_SHARD_FLASH_FADE = 0.68;
 const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
 const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 126, 96, 0.88)";
 const TOP_LYRIC_SHARD_GLOW_COLOR = "rgba(236, 65, 65, 0.55)";
+const TOPBAR_LYRIC_DISPLAY_ENABLED = false;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -1750,8 +1753,8 @@ function runLyricProgressScenario() {
 
 function collectBrowserSmokeTopLyricShardState() {
   const track = createBrowserSmokeTrack({
-    id: "browser-smoke-top-lyric-shard-track",
-    name: "Browser Smoke Top Lyric Shard Track",
+    id: "browser-smoke-topbar-lyric-hidden-track",
+    name: "Browser Smoke Topbar Lyric Hidden Track",
     durationSeconds: 12,
     lyricsText: [
       "[00:00.00]<0.00>满<0.30>世<0.60>界<0.90>嘻<1.20>嘻<1.50>哈<1.80>哈",
@@ -1770,59 +1773,25 @@ function collectBrowserSmokeTopLyricShardState() {
   switchView("home", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.95, true);
 
+  const displayHidden = Boolean(topLyricFocus?.hidden);
+  const bodyClassActive = document.body.classList.contains("topbar-lyric-active");
   const text = topLyricCurrent?.textContent?.trim() || "";
+  const originalText = topLyricOriginal?.textContent?.trim() || "";
   const charCount = topLyricCharacterSpans.length;
-  const timingCount = topLyricCharacterTimings.filter(Number.isFinite).length;
-  triggerNextWord(0);
-  const firstSpanClass = topLyricCharacterSpans[0]?.className || "";
-  const canvasCountAfterTrigger = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
-  const animationFrameAfterTrigger = topLyricShardAnimationFrame;
+  const canvasCount = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  const animationFrame = topLyricShardAnimationFrame;
   cancelTopLyricShardEffects();
-  const canvasCountAfterCleanup = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
-  const animationFrameAfterCleanup = topLyricShardAnimationFrame;
-  const bilingualFallbackTrack = createBrowserSmokeTrack({
-    id: "browser-smoke-top-lyric-bilingual-fallback-track",
-    name: "Browser Smoke Top Lyric Bilingual Fallback Track",
-    durationSeconds: 12,
-    lyricsText: [
-      "[00:00.00]Hello world",
-      "[00:00.00]<0.00>你<0.60>好",
-      "[00:04.00]下一句",
-    ].join("\n"),
-  });
-  state.currentTrack = bilingualFallbackTrack;
-  state.queue = [bilingualFallbackTrack];
-  state.tracks = [bilingualFallbackTrack];
-  state.filteredTracks = [bilingualFallbackTrack];
-  state.currentTrackIndex = 0;
-  updatePlayerMeta(bilingualFallbackTrack);
-  setPlayerEnabled(true);
-  switchView("home", { updateHash: false, resetScroll: true });
-  updateLyricsHighlight(0.75, true);
-  alignTopLyricShardStateToTime(0.75);
-  const bilingualGroupStates = topLyricCharacterGroups.map((group) => ({
-    role: group.role,
-    charCount: group.spans.length,
-    timingCount: group.timings.filter(Number.isFinite).length,
-    timingSamples: group.timings.slice(0, 12).map((time) => (
-      Number.isFinite(time) ? Number(time.toFixed(2)) : null
-    )),
-    shard: Boolean(group.shard),
-    triggeredIndex: group.triggeredIndex,
-    shardedCount: group.spans.filter((span) => span.classList.contains("is-sharded")).length,
-  }));
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
 
   return {
+    enabled: TOPBAR_LYRIC_DISPLAY_ENABLED,
+    displayHidden,
+    bodyClassActive,
     text,
+    originalText,
     charCount,
-    timingCount,
-    firstSpanClass,
-    canvasCountAfterTrigger,
-    animationFrameAfterTrigger,
-    canvasCountAfterCleanup,
-    animationFrameAfterCleanup,
-    bilingualGroupStates,
+    canvasCount,
+    animationFrame,
   };
 }
 
@@ -7322,9 +7291,10 @@ function synthesizeLyricWordTimelineFromSource(text, sourceTimeline) {
   const sourceEnd = Number.isFinite(explicitEnd) && explicitEnd > start
     ? explicitEnd
     : Number.isFinite(Number(sourceWords[sourceWords.length - 1]?.time)) && sourceWords.length > 1
-    ? Number(sourceWords[sourceWords.length - 1].time) + getSynthesizedLyricTailDurationSeconds(lastSourceWord)
-    : start + Math.max(0.8, wordParts.length * 0.16);
+    ? Number(sourceWords[sourceWords.length - 1].time) + getEstimatedLyricWordDurationSeconds(lastSourceWord)
+    : start + getEstimatedLyricLineDurationSeconds(wordParts.length, text);
   const duration = Math.max(0.18, sourceEnd - start);
+  const canMapSourceWordsByIndex = sourceWords.length === wordParts.length;
   let wordIndex = 0;
 
   return parts.map((part) => {
@@ -7332,8 +7302,19 @@ function synthesizeLyricWordTimelineFromSource(text, sourceTimeline) {
       return { value: part.value };
     }
 
-    const wordStart = start + ((duration * wordIndex) / Math.max(1, wordParts.length));
-    const wordEnd = start + ((duration * (wordIndex + 1)) / Math.max(1, wordParts.length));
+    const sourceWord = canMapSourceWordsByIndex ? sourceWords[wordIndex] : null;
+    const nextSourceWord = canMapSourceWordsByIndex ? sourceWords[wordIndex + 1] : null;
+    const mappedStart = Number(sourceWord?.time);
+    const mappedEnd = Number(sourceWord?.endTime);
+    const mappedNextStart = Number(nextSourceWord?.time);
+    const wordStart = Number.isFinite(mappedStart)
+      ? mappedStart
+      : start + ((duration * wordIndex) / Math.max(1, wordParts.length));
+    const wordEnd = Number.isFinite(mappedEnd) && mappedEnd > wordStart
+      ? mappedEnd
+      : Number.isFinite(mappedNextStart) && mappedNextStart > wordStart
+      ? mappedNextStart
+      : start + ((duration * (wordIndex + 1)) / Math.max(1, wordParts.length));
     wordIndex += 1;
     return {
       value: part.value,
@@ -7344,12 +7325,7 @@ function synthesizeLyricWordTimelineFromSource(text, sourceTimeline) {
 }
 
 function getSynthesizedLyricTailDurationSeconds(word) {
-  const textLength = Array.from(String(word?.value || "")).filter((char) => char.trim()).length || 1;
-  return clamp(
-    Math.max(LYRIC_TIMED_WORD_MIN_DURATION_SECONDS, textLength * 0.12),
-    LYRIC_TIMED_WORD_MIN_DURATION_SECONDS,
-    LYRIC_TIMED_WORD_MAX_DURATION_SECONDS
-  );
+  return getEstimatedLyricWordDurationSeconds(word);
 }
 
 function formatLyricLineLabel(line) {
@@ -7881,6 +7857,7 @@ function updateInlineLyricProgress(activeIndex, currentSeconds, options = {}) {
 
   groups.forEach((group) => {
     updateLyricProgressGroup(group, {
+      line: currentLine,
       start,
       lyricSeconds,
       nextEntry,
@@ -7899,7 +7876,10 @@ function updateLyricProgressGroup(group, options) {
     return;
   }
 
-  const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length);
+  const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length, {
+    line: group.line || options.line,
+    text: group.text,
+  });
   const lineRatio = end > options.start
     ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
     : 1;
@@ -8091,6 +8071,15 @@ function renderNowLyricFocusLine(line) {
 
 function renderTopLyricFocus(line) {
   if (!topLyricFocus || !topLyricOriginal || !topLyricCurrent) {
+    return;
+  }
+
+  if (!TOPBAR_LYRIC_DISPLAY_ENABLED) {
+    topLyricFocus.hidden = true;
+    topLyricOriginal.textContent = "";
+    topLyricCurrent.textContent = "";
+    resetTopLyricShardState();
+    updateTopbarLyricState();
     return;
   }
 
@@ -9298,6 +9287,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
 
   if (groups.length > 1) {
     const progressState = updateLyricProgressGroups(activeIndex, groups, {
+      line: currentLine,
       start,
       lyricSeconds,
       nextEntry,
@@ -9311,7 +9301,10 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     return;
   }
 
-  const end = getLyricWordProgressEndSeconds(start, nextEntry, words.length);
+  const end = getLyricWordProgressEndSeconds(start, nextEntry, words.length, {
+    line: currentLine,
+    text: currentLine?.originalText || currentLine?.text,
+  });
   const lineRatio = end > start
     ? clamp((lyricSeconds - start) / (end - start), 0, 1)
     : 1;
@@ -9347,7 +9340,10 @@ function updateLyricProgressGroups(activeIndex, groups, options) {
       return mergeLyricProgressGroupState(stateSummary, timedState);
     }
 
-    const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length);
+    const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length, {
+      line: group.line || options.line,
+      text: group.text,
+    });
     const lineRatio = end > options.start
       ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
       : 1;
@@ -9411,11 +9407,15 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
   const explicitEnd = endTimings[activeWordIndex];
   const end = getTimedLyricWordEndSeconds({
     word: words[activeWordIndex],
+    words,
+    timings,
     start,
     explicitEnd,
     nextWordStart,
     nextEntry,
     isTailWord: activeWordIndex >= words.length - 1,
+    line: group?.line || state.lyricLines[activeIndex],
+    activeWordIndex,
   });
   const activeWordProgress = getTimedLyricWordProgress(lyricSeconds, start, end);
   const litWords = activeWordIndex + (activeWordProgress / 100);
@@ -9497,7 +9497,18 @@ function findTimedLyricWordIndex(timings, lyricSeconds) {
   return result;
 }
 
-function getTimedLyricWordEndSeconds({ word, start, explicitEnd, nextWordStart, nextEntry, isTailWord = false }) {
+function getTimedLyricWordEndSeconds({
+  word,
+  words = [],
+  timings = [],
+  start,
+  explicitEnd,
+  nextWordStart,
+  nextEntry,
+  isTailWord = false,
+  line = null,
+  activeWordIndex = -1,
+}) {
   if (!Number.isFinite(start)) {
     return start;
   }
@@ -9510,11 +9521,19 @@ function getTimedLyricWordEndSeconds({ word, start, explicitEnd, nextWordStart, 
     return nextWordStart;
   }
 
-  const preferredEnd = start + getTimedLyricWordPreferredDurationSeconds(word);
-
   if (isTailWord) {
-    return preferredEnd;
+    return getTimedLyricTailWordEndSeconds({
+      word,
+      words,
+      timings,
+      start,
+      nextEntry,
+      line,
+      activeWordIndex,
+    });
   }
+
+  const preferredEnd = start + getTimedLyricWordPreferredDurationSeconds(word);
 
   if (Number.isFinite(nextEntry?.time) && nextEntry.time > start) {
     return Math.min(nextEntry.time, preferredEnd);
@@ -9524,9 +9543,50 @@ function getTimedLyricWordEndSeconds({ word, start, explicitEnd, nextWordStart, 
 }
 
 function getTimedLyricWordPreferredDurationSeconds(word) {
-  const textLength = Array.from(String(word?.textContent || "")).filter((char) => char.trim()).length || 1;
+  return getEstimatedLyricWordDurationSeconds(word);
+}
+
+function getTimedLyricTailWordEndSeconds({
+  word,
+  words = [],
+  timings = [],
+  start,
+  nextEntry,
+  line = null,
+  activeWordIndex = -1,
+}) {
+  const lineStart = Number(line?.time);
+  const lineEnd = getLyricLineProgressEndSeconds({
+    line,
+    start: Number.isFinite(lineStart) ? lineStart : start,
+    nextEntry,
+    wordCount: words.length,
+    text: getLyricWordsText(words) || word?.textContent,
+  });
+  const previousStart = activeWordIndex > 0 ? Number(timings[activeWordIndex - 1]) : NaN;
+  const recentStep = Number.isFinite(previousStart) && previousStart < start ? start - previousStart : NaN;
+  const preferredDuration = Math.max(
+    getEstimatedLyricWordDurationSeconds(word),
+    Number.isFinite(recentStep) ? recentStep * 1.1 : 0
+  );
+  const preferredEnd = start + preferredDuration;
+
+  if (Number.isFinite(lineEnd) && lineEnd > start) {
+    return Math.min(lineEnd, Math.max(preferredEnd, lineEnd));
+  }
+
+  return preferredEnd;
+}
+
+function getLyricWordsText(words) {
+  return (words || []).map((word) => word?.textContent || "").join("");
+}
+
+function getEstimatedLyricWordDurationSeconds(word) {
+  const value = word?.textContent ?? word?.value ?? "";
+  const textLength = Array.from(String(value || "")).filter((char) => char.trim()).length || 1;
   return clamp(
-    Math.max(LYRIC_TIMED_WORD_MIN_DURATION_SECONDS, textLength * 0.12),
+    Math.max(LYRIC_TIMED_WORD_MIN_DURATION_SECONDS, textLength * LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS),
     LYRIC_TIMED_WORD_MIN_DURATION_SECONDS,
     LYRIC_TIMED_WORD_MAX_DURATION_SECONDS
   );
@@ -9556,16 +9616,47 @@ function scheduleTimedLyricProgressResumeIfIdle(isComplete, lyricSeconds, nextEn
   scheduleLyricProgressResumeIfIdle(1, lyricSeconds, nextEntry);
 }
 
-function getLyricWordProgressEndSeconds(start, nextEntry, wordCount) {
-  const fallbackDuration = Math.max(2.4, wordCount * 0.22);
-  const actualDuration = Number.isFinite(nextEntry?.time) ? nextEntry.time - start : fallbackDuration;
-  const duration = clamp(
-    Number.isFinite(actualDuration) && actualDuration > 0 ? actualDuration : fallbackDuration,
+function getLyricWordProgressEndSeconds(start, nextEntry, wordCount, options = {}) {
+  return getLyricLineProgressEndSeconds({
+    line: options.line,
+    start,
+    nextEntry,
+    wordCount,
+    text: options.text,
+  });
+}
+
+function getLyricLineProgressEndSeconds({ line = null, start, nextEntry = null, wordCount = 0, text = "" } = {}) {
+  if (!Number.isFinite(start)) {
+    return start;
+  }
+
+  const explicitEnd = Number(line?.endTime);
+  if (Number.isFinite(explicitEnd) && explicitEnd > start) {
+    return explicitEnd;
+  }
+
+  const nextLineStart = Number(nextEntry?.time);
+  if (Number.isFinite(nextLineStart) && nextLineStart > start) {
+    return start + Math.min(nextLineStart - start, LYRIC_WORD_MAX_LINE_DURATION_SECONDS);
+  }
+
+  return start + getEstimatedLyricLineDurationSeconds(wordCount, text || line?.originalText || line?.text);
+}
+
+function getEstimatedLyricLineDurationSeconds(wordCount, text = "") {
+  const cleanText = String(text || "").replace(/\s+/g, "");
+  const characterCount = Array.from(cleanText).filter((char) => char.trim()).length;
+  const count = Math.max(1, Number(wordCount) || characterCount || 1);
+  return clamp(
+    Math.max(
+      LYRIC_WORD_MIN_LINE_DURATION_SECONDS,
+      count * LYRIC_WORD_ESTIMATED_DURATION_SECONDS,
+      characterCount * LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS
+    ),
     LYRIC_WORD_MIN_LINE_DURATION_SECONDS,
     LYRIC_WORD_MAX_LINE_DURATION_SECONDS
   );
-
-  return start + duration;
 }
 
 function scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry) {
