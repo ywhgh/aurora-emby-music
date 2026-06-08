@@ -581,6 +581,7 @@ function checkPageState(check, page) {
   const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
   const lyricProgressAfterResumeRefresh = lyricProgress.afterResumeRefresh || {};
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
+  const lyricLongGapLateProgress = lyricProgress.longGapLateProgress || {};
   const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
   const enhancedTailWordProgress = lyricProgress.enhancedTailWordProgress || {};
@@ -674,6 +675,8 @@ function checkPageState(check, page) {
   assert(lyricProgressAfterResumeRefresh.wordProgress?.[1] > 0, `${label} lyric resume refresh should immediately light the partial word: ${JSON.stringify(lyricProgressAfterResumeRefresh.wordProgress)}`);
   assert(lyricLongGapProgress.activeIndex === 0, `${label} long-gap lyric should still focus the first line, got ${lyricLongGapProgress.activeIndex}`);
   assert(lyricLongGapProgress.wordProgress?.some((progress) => progress > 0 && progress < 100), `${label} long-gap lyric words should keep following the active line instead of finishing early: ${JSON.stringify(lyricLongGapProgress.wordProgress)}`);
+  assert(lyricLongGapLateProgress.activeIndex === 0, `${label} long-gap late lyric should stay on the first sung line, got ${lyricLongGapLateProgress.activeIndex}`);
+  assert(lyricLongGapLateProgress.wordProgress?.some((progress) => progress > 0 && progress < 100), `${label} long-gap late lyric should still be in progress before the next line: ${JSON.stringify(lyricLongGapLateProgress.wordProgress)}`);
   assert(lyricProgress.longGapIdleResumeDelayMs > 10000, `${label} long-gap lyric should idle the RAF until near the next line, got ${lyricProgress.longGapIdleResumeDelayMs || 0}ms`);
   assert(enhancedMidWordProgress.wordProgress?.[0] === 100, `${label} enhanced lyric first word should complete at the second word timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
@@ -745,13 +748,16 @@ function checkPageState(check, page) {
   assert(endScrollLayout.shellPinned === true, `${label} immersive player should remain pinned to the viewport: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.shellBottomGapPx <= 1, `${label} immersive player should not reveal a bottom gap: ${JSON.stringify(endScrollLayout)}`);
   assert(endScrollLayout.activeLineInsideList === true, `${label} active ending lyric should remain inside the lyric list viewport: ${JSON.stringify(endScrollLayout)}`);
-  assert(topLyricShard.enabled === false, `${label} topbar lyric display should be disabled by default: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.displayHidden === true, `${label} topbar lyric display should stay hidden while playing: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.bodyClassActive === false, `${label} topbar lyric display should not hide the menu tabs while disabled: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.text === "" && topLyricShard.originalText === "", `${label} topbar lyric text should not render while disabled: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.charCount === 0, `${label} topbar lyric characters should not render while disabled: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.canvasCount === 0, `${label} topbar lyric shards should not create canvases while disabled: ${JSON.stringify(topLyricShard)}`);
-  assert(topLyricShard.animationFrame === 0, `${label} topbar lyric shard scheduler should stay stopped while disabled: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.enabled === true, `${label} topbar lyric display should stay enabled outside immersive player: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.homeDisplayHidden === false, `${label} topbar lyric should show on the main/home surface: ${JSON.stringify(topLyricShard)}`);
+  assert(/满世界/.test(topLyricShard.homeText || ""), `${label} topbar lyric should render the current lyric on home: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.homeCharCount > 0, `${label} topbar lyric should split characters on home: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveDisplayHidden === true, `${label} topbar lyric should be hidden in immersive player: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveBodyClassActive === false, `${label} immersive player should not activate topbar lyric menu mode: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveText === "" && topLyricShard.immersiveOriginalText === "", `${label} immersive player should clear topbar lyric text: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveCharCount === 0, `${label} immersive player should clear topbar lyric characters: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveCanvasCount === 0, `${label} immersive player should not keep topbar lyric shard canvases: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.immersiveAnimationFrame === 0, `${label} immersive player should stop topbar lyric shard scheduler: ${JSON.stringify(topLyricShard)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

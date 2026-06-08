@@ -284,6 +284,13 @@ async function handleRequest(request, response) {
     const lyric = findLyric(track.filePath);
 
     if (!lyric) {
+      const matchedLyric = await resolveMatchedPluginLyric(track);
+
+      if (matchedLyric) {
+        sendJson(request, response, 200, { lrc: matchedLyric, matched: true });
+        return;
+      }
+
       sendJson(request, response, 404, { error: "lyric not found" });
       return;
     }
@@ -1512,6 +1519,78 @@ async function resolvePluginLyric(track) {
 
   track.lyric = lyric;
   return lyric;
+}
+
+async function resolveMatchedPluginLyric(track) {
+  const query = buildLyricMatchQuery(track);
+  if (!query || !state.plugins.length) {
+    return "";
+  }
+
+  const candidates = await searchPluginTracksForLyric(query);
+  const matchedTrack = findBestLyricMatch(track, candidates);
+
+  if (!matchedTrack) {
+    return "";
+  }
+
+  return resolvePluginLyric(matchedTrack);
+}
+
+function buildLyricMatchQuery(track) {
+  return [track?.title, track?.artist].filter(Boolean).join(" ").trim();
+}
+
+async function searchPluginTracksForLyric(query) {
+  const candidates = state.plugins
+    .filter((plugin) => plugin.url && plugin.supported !== false)
+    .slice(0, 8);
+  const results = await Promise.allSettled(candidates.map(async (plugin) => {
+    const runtime = await loadPluginRuntime(plugin);
+
+    if (typeof runtime.module.search !== "function") {
+      throw new Error("missing search()");
+    }
+
+    const payload = await callWithTimeout(runtime.module.search(query, 1, "music"), 18000, `${plugin.name || plugin.key} lyric search timeout`);
+    return extractPluginItems(payload)
+      .slice(0, 5)
+      .map((item, index) => createPluginTrack(plugin, item, index));
+  }));
+
+  return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+}
+
+function findBestLyricMatch(sourceTrack, candidates) {
+  const sourceTitle = normalizeLyricMatchText(sourceTrack?.title);
+  const sourceArtists = getLyricMatchArtistTokens(sourceTrack?.artist);
+
+  return (candidates || []).find((candidate) => {
+    const candidateTitle = normalizeLyricMatchText(candidate?.title);
+    if (!sourceTitle || !candidateTitle || sourceTitle !== candidateTitle) {
+      return false;
+    }
+
+    const candidateArtists = getLyricMatchArtistTokens(candidate?.artist);
+    return !sourceArtists.length
+      || !candidateArtists.length
+      || sourceArtists.some((artist) => candidateArtists.includes(artist));
+  }) || null;
+}
+
+function getLyricMatchArtistTokens(value) {
+  return String(value || "")
+    .split(/\s*(?:\/|、|,|，|&)\s*/)
+    .map(normalizeLyricMatchText)
+    .filter(Boolean);
+}
+
+function normalizeLyricMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[《》<>()[\]【】{}"'“”‘’·.,，。:：;；!！?？_-]/g, "")
+    .trim();
 }
 
 function scanMusicDirs(dirs) {

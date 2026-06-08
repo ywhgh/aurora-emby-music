@@ -57,6 +57,13 @@ async function main() {
     assert(restoredStream.status === 200, `restored plugin stream HEAD returned HTTP ${restoredStream.status}`);
     assert(restoredStream.headers.get("content-type") === "audio/mpeg", `restored plugin stream content-type mismatch: ${restoredStream.headers.get("content-type") || "-"}`);
 
+    const localPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/tracks?limit=10`);
+    const localTrack = localPayload.items?.find((item) => item.source === "local");
+    assert(localTrack, "source bridge fixture should expose a local track for lyric matching");
+    const matchedLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric?id=${encodeURIComponent(localTrack.id)}`);
+    assert(matchedLyric.matched === true, "local track without sidecar lyrics should use plugin lyric matching");
+    assert(String(matchedLyric.lrc || "").includes("[00:01.00]Bridge lyric line"), `matched lyric text mismatch: ${matchedLyric.lrc || "-"}`);
+
     const cachePayload = JSON.parse(fs.readFileSync(pluginCachePath, "utf8"));
     assert(cachePayload.tracks?.some((item) => item.sourceId === "resume-song"), "plugin track cache did not persist the searched track");
 
@@ -110,6 +117,11 @@ module.exports = {
       contentType: "audio/mpeg",
       raw: track
     };
+  },
+  async getLyric() {
+    return {
+      lrc: "[00:01.00]Bridge lyric line\\n[00:02.00]Smoke lyric line"
+    };
   }
 };
 `;
@@ -148,6 +160,7 @@ module.exports = {
 }
 
 async function startBridge(options) {
+  const musicDir = options.musicDir || createLocalMusicFixture(options.pluginCachePath);
   const args = [
     BRIDGE_SCRIPT,
     "--host",
@@ -156,6 +169,8 @@ async function startBridge(options) {
     String(options.port),
     "--plugin-cache",
     options.pluginCachePath,
+    "--music-dir",
+    musicDir,
   ];
 
   if (options.manifestUrl) {
@@ -183,6 +198,13 @@ async function startBridge(options) {
     await stopBridge(child);
     throw new Error(`${error.message}\n${output.join("").trim()}`);
   }
+}
+
+function createLocalMusicFixture(pluginCachePath) {
+  const dir = path.join(path.dirname(pluginCachePath), "music");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "Smoke Artist - Bridge Resume Smoke.mp3"), FIXTURE_MEDIA);
+  return dir;
 }
 
 async function waitForHealth(url) {

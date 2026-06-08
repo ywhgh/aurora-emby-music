@@ -140,7 +140,7 @@ const TOP_LYRIC_SHARD_FLASH_FADE = 0.68;
 const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)";
 const TOP_LYRIC_SHARD_ACCENT_COLOR = "rgba(255, 126, 96, 0.88)";
 const TOP_LYRIC_SHARD_GLOW_COLOR = "rgba(236, 65, 65, 0.55)";
-const TOPBAR_LYRIC_DISPLAY_ENABLED = false;
+const TOPBAR_LYRIC_DISPLAY_ENABLED = true;
 const SHUFFLE_HISTORY_LIMIT = 80;
 const LIBRARY_ALPHABET_HOVER_DELAY_MS = 2000;
 const LIBRARY_ALPHABET_HIDE_DELAY_MS = 220;
@@ -1391,15 +1391,7 @@ function init() {
   window.addEventListener("offline", handleBrowserOffline);
   window.addEventListener("emby-music-hls-ready", handleHlsReady);
   window.addEventListener("pageshow", () => requestAnimationFrame(ensureVisibleMainPanel));
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      requestAnimationFrame(ensureVisibleMainPanel);
-      syncLyricProgressLoop();
-    } else {
-      persistPlaybackPosition({ force: true });
-      stopLyricProgressLoop();
-    }
-  });
+  document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
   window.addEventListener("pagehide", () => {
     persistPlaybackPosition({ force: true });
   });
@@ -1432,6 +1424,19 @@ function installBrowserSmokeHooks() {
 function isBrowserSmokeRun() {
   const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
   return isLocalHost && new URLSearchParams(window.location.search).has("browser-smoke");
+}
+
+function handleDocumentVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    requestAnimationFrame(ensureVisibleMainPanel);
+    syncLyricPlaybackClock();
+    refreshLyricsForPlaybackResume();
+    return;
+  }
+
+  persistPlaybackPosition({ force: true });
+  pauseLyricPlaybackClock();
+  stopLyricProgressLoop();
 }
 
 function createBrowserSmokeTrack(options = {}) {
@@ -1564,6 +1569,8 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(4.8, true);
   const longGapProgress = collectBrowserSmokeLyricState();
+  updateLyricsHighlight(15.2, true);
+  const longGapLateProgress = collectBrowserSmokeLyricState();
   const longGapIdleResumeDelayMs = getLyricProgressIdleResumeDelayMs(1, getAdjustedLyricSeconds(4.8), { time: 20 });
   state.lyricOffsetSeconds = 0;
   const enhancedTrack = createBrowserSmokeTrack({
@@ -1731,6 +1738,7 @@ function runLyricProgressScenario() {
     afterOffset,
     afterResumeRefresh,
     longGapProgress,
+    longGapLateProgress,
     longGapIdleResumeDelayMs,
     enhancedMidWordProgress,
     enhancedLateWordProgress,
@@ -1773,25 +1781,34 @@ function collectBrowserSmokeTopLyricShardState() {
   switchView("home", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.95, true);
 
-  const displayHidden = Boolean(topLyricFocus?.hidden);
-  const bodyClassActive = document.body.classList.contains("topbar-lyric-active");
-  const text = topLyricCurrent?.textContent?.trim() || "";
-  const originalText = topLyricOriginal?.textContent?.trim() || "";
-  const charCount = topLyricCharacterSpans.length;
-  const canvasCount = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
-  const animationFrame = topLyricShardAnimationFrame;
-  cancelTopLyricShardEffects();
+  const homeDisplayHidden = Boolean(topLyricFocus?.hidden);
+  const homeText = topLyricCurrent?.textContent?.trim() || "";
+  const homeOriginalText = topLyricOriginal?.textContent?.trim() || "";
+  const homeCharCount = topLyricCharacterSpans.length;
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.95, true);
+  const immersiveDisplayHidden = Boolean(topLyricFocus?.hidden);
+  const immersiveBodyClassActive = document.body.classList.contains("topbar-lyric-active");
+  const immersiveText = topLyricCurrent?.textContent?.trim() || "";
+  const immersiveOriginalText = topLyricOriginal?.textContent?.trim() || "";
+  const immersiveCharCount = topLyricCharacterSpans.length;
+  const immersiveCanvasCount = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
+  const immersiveAnimationFrame = topLyricShardAnimationFrame;
+  cancelTopLyricShardEffects();
 
   return {
     enabled: TOPBAR_LYRIC_DISPLAY_ENABLED,
-    displayHidden,
-    bodyClassActive,
-    text,
-    originalText,
-    charCount,
-    canvasCount,
-    animationFrame,
+    homeDisplayHidden,
+    homeText,
+    homeOriginalText,
+    homeCharCount,
+    immersiveDisplayHidden,
+    immersiveBodyClassActive,
+    immersiveText,
+    immersiveOriginalText,
+    immersiveCharCount,
+    immersiveCanvasCount,
+    immersiveAnimationFrame,
   };
 }
 
@@ -7369,9 +7386,7 @@ async function loadLyricsFromServer(track) {
     }
 
     if (!text.trim()) {
-      state.lyricsStatus = isExternalSourceTrack(track)
-        ? "外部音源暂未提供歌词。"
-        : "没有读取到歌词。";
+      state.lyricsStatus = getLyricsNotFoundStatus(track);
       invalidateLyricRenderState();
       renderLyricsEmptyState(state.lyricsStatus);
       renderNowLyricFocus();
@@ -7434,6 +7449,15 @@ async function fetchLyricsText(track) {
     return externalSourceApi.fetchLyric(apiUrl, track);
   }
 
+  const embyText = await fetchEmbyLyricsText(track);
+  if (embyText.trim()) {
+    return embyText;
+  }
+
+  return fetchMatchedLyricsFromSourceBridge(track);
+}
+
+async function fetchEmbyLyricsText(track) {
   const encodedId = encodeURIComponent(track.Id);
   const candidates = [
     `/Items/${encodedId}/Lyrics`,
@@ -7464,6 +7488,92 @@ async function fetchLyricsText(track) {
   }
 
   return "";
+}
+
+async function fetchMatchedLyricsFromSourceBridge(track) {
+  const apiUrl = getLyricsSourceBridgeApiUrl();
+  if (!apiUrl || !track?.Name) {
+    return "";
+  }
+
+  const query = buildLyricMatchQuery(track);
+  if (!query) {
+    return "";
+  }
+
+  let result;
+  try {
+    result = await externalSourceApi.fetchTracks(apiUrl, {
+      query,
+      limit: 8,
+      timeoutMs: 12000,
+    });
+  } catch {
+    return "";
+  }
+
+  const matchedTrack = findBestMatchedLyricTrack(track, result?.Items || []);
+  if (!matchedTrack) {
+    return "";
+  }
+
+  try {
+    return await externalSourceApi.fetchLyric(apiUrl, matchedTrack);
+  } catch {
+    return "";
+  }
+}
+
+function getLyricsSourceBridgeApiUrl() {
+  return getSessionExternalSourceApiUrl(state.session)
+    || normalizeExternalSourceApiUrl(state.externalSourceApiUrl || "")
+    || loadExternalSourceApiUrl()
+    || normalizeExternalSourceApiUrl(DEFAULT_EXTERNAL_SOURCE_API_URL || "");
+}
+
+function buildLyricMatchQuery(track) {
+  return [
+    track?.Name,
+    getPrimaryTrackArtist(track)?.Name || getArtists(track),
+  ].filter(Boolean).join(" ").trim();
+}
+
+function findBestMatchedLyricTrack(sourceTrack, candidates) {
+  const sourceTitle = normalizeLyricMatchText(sourceTrack?.Name);
+  const sourceArtists = getLyricMatchArtistTokens(sourceTrack);
+
+  return (candidates || []).find((candidate) => {
+    const candidateTitle = normalizeLyricMatchText(candidate?.Name);
+    if (!sourceTitle || !candidateTitle || sourceTitle !== candidateTitle) {
+      return false;
+    }
+
+    const candidateArtists = getLyricMatchArtistTokens(candidate);
+    return !sourceArtists.length
+      || !candidateArtists.length
+      || sourceArtists.some((artist) => candidateArtists.includes(artist));
+  }) || null;
+}
+
+function getLyricMatchArtistTokens(track) {
+  return getArtists(track)
+    .split(/\s*(?:\/|、|,|，|&)\s*/)
+    .map(normalizeLyricMatchText)
+    .filter(Boolean);
+}
+
+function normalizeLyricMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[《》<>()[\]【】{}"'“”‘’·.,，。:：;；!！?？_-]/g, "")
+    .trim();
+}
+
+function getLyricsNotFoundStatus(track) {
+  return isExternalSourceTrack(track)
+    ? "外部音源暂未提供歌词。"
+    : (getLyricsSourceBridgeApiUrl() ? "没有匹配到可用歌词。" : "没有读取到歌词。");
 }
 
 function extractLyricsTextFromResponse(response) {
@@ -8069,17 +8179,24 @@ function renderNowLyricFocusLine(line) {
   });
 }
 
+function getCurrentTopLyricLine() {
+  if (!state.currentTrack || !state.lyricLines.length) {
+    return null;
+  }
+
+  const activeIndex = state.isLyricSynced && state.activeLyricIndex >= 0
+    ? state.activeLyricIndex
+    : 0;
+  return state.lyricLines[activeIndex] || state.lyricLines[0] || null;
+}
+
 function renderTopLyricFocus(line) {
   if (!topLyricFocus || !topLyricOriginal || !topLyricCurrent) {
     return;
   }
 
-  if (!TOPBAR_LYRIC_DISPLAY_ENABLED) {
-    topLyricFocus.hidden = true;
-    topLyricOriginal.textContent = "";
-    topLyricCurrent.textContent = "";
-    resetTopLyricShardState();
-    updateTopbarLyricState();
+  if (!shouldRenderTopbarLyricFocus()) {
+    hideTopLyricFocus();
     return;
   }
 
@@ -8099,9 +8216,22 @@ function renderTopLyricFocus(line) {
   updateTopbarLyricState();
 }
 
+function shouldRenderTopbarLyricFocus() {
+  return TOPBAR_LYRIC_DISPLAY_ENABLED && getActiveView() !== "immersivePlayer";
+}
+
+function hideTopLyricFocus() {
+  topLyricFocus.hidden = true;
+  topLyricOriginal.textContent = "";
+  topLyricCurrent.textContent = "";
+  resetTopLyricShardState();
+  updateTopbarLyricState();
+}
+
 function updateTopbarLyricState() {
   const shouldShowLyric = Boolean(
     topLyricFocus
+      && shouldRenderTopbarLyricFocus()
       && !topLyricFocus.hidden
       && state.currentTrack
       && audioPlayer.src
@@ -9572,7 +9702,7 @@ function getTimedLyricTailWordEndSeconds({
   const preferredEnd = start + preferredDuration;
 
   if (Number.isFinite(lineEnd) && lineEnd > start) {
-    return Math.min(lineEnd, Math.max(preferredEnd, lineEnd));
+    return lineEnd;
   }
 
   return preferredEnd;
@@ -9638,7 +9768,7 @@ function getLyricLineProgressEndSeconds({ line = null, start, nextEntry = null, 
 
   const nextLineStart = Number(nextEntry?.time);
   if (Number.isFinite(nextLineStart) && nextLineStart > start) {
-    return start + Math.min(nextLineStart - start, LYRIC_WORD_MAX_LINE_DURATION_SECONDS);
+    return nextLineStart;
   }
 
   return start + getEstimatedLyricLineDurationSeconds(wordCount, text || line?.originalText || line?.text);
@@ -18662,6 +18792,7 @@ function switchView(view, options = {}) {
   if (nextView === "nowPlaying" && state.isLyricSynced) {
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   }
+  renderTopLyricFocus(getCurrentTopLyricLine());
   syncLyricProgressLoop();
   restoreViewScrollPosition(nextView, options);
 }

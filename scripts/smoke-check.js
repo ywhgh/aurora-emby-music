@@ -301,7 +301,7 @@ function checkLyrics() {
   assert(app.includes("function getLyricPlaybackTimeSeconds"), "Lyric word progress should read from a smooth playback clock");
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
-  assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap long line durations");
+  assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap fallback line durations when no next line is available");
   assert(app.includes("LYRIC_TIMED_WORD_MAX_DURATION_SECONDS"), "Timed lyric words should cap fallback word duration when no line end is available");
   assert(app.includes("LYRIC_WORD_ESTIMATED_DURATION_SECONDS"), "Untimed lyric words should estimate line duration from word count");
   assert(app.includes("LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS"), "Lyric line timing should account for long sung text");
@@ -309,6 +309,7 @@ function checkLyrics() {
   assert(app.includes("lyricProgressResumeTimer"), "Lyric word progress should have a low-frequency idle timer");
   assert(app.includes("function getLyricWordProgressEndSeconds"), "Lyric word progress should centralize line end timing");
   assert(app.includes("function getLyricLineProgressEndSeconds"), "Lyric word progress should centralize sung line end timing");
+  assert(/const nextLineStart = Number\(nextEntry\?\.time\);[\s\S]*?return nextLineStart;/.test(app), "Lyric line progress should follow the next lyric line instead of ending early on long sung lines");
   assert(app.includes("function getTimedLyricTailWordEndSeconds"), "Timed lyric tail words should follow the active sung line end");
   assert(app.includes("function getTimedLyricWordPreferredDurationSeconds"), "Timed lyric fallback word duration should be centralized");
   assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
@@ -400,7 +401,8 @@ function checkLyrics() {
   assert(app.includes("PLAYBACK_POSITION_SAVE_INTERVAL_MS"), "Playback position should have a local save throttle");
   assert(app.includes("function persistPlaybackPosition"), "Playback position should be persisted while audio is playing");
   assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?updateProgress\(\);[\s\S]*?persistPlaybackPosition\(\);/.test(app), "Playback time updates should persist local resume position independently of server progress reports");
-  assert(/document\.addEventListener\("visibilitychange"[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Backgrounding the page should force-save playback position");
+  assert(app.includes('document.addEventListener("visibilitychange", handleDocumentVisibilityChange);'), "Visibility changes should use the shared playback resume handler");
+  assert(/function handleDocumentVisibilityChange\(\) \{[\s\S]*?document\.visibilityState === "visible"[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?refreshLyricsForPlaybackResume\(\);[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Visibility changes should resync lyrics on return and force-save/freeze when backgrounded");
   assert(app.includes('window.addEventListener("pagehide", () => {\n    persistPlaybackPosition({ force: true });\n  });'), "Pagehide should force-save playback position on mobile browsers");
   assert(app.includes("serverSearchController: null"), "Server search should keep an abort controller for stale requests");
   assert(app.includes("function abortActiveServerSearch"), "Server search should abort stale in-flight requests");
@@ -506,6 +508,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricProgressAfterResumeRefresh"), "Browser smoke should verify immediate lyric refresh on playback resume");
   assert(browserSmoke.includes("enhancedTailWordProgress.wordProgress?.[2] > 0 && enhancedTailWordProgress.wordProgress?.[2] < 100"), "Browser smoke should verify enhanced lyric tail words do not finish before the sung line");
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
+  assert(browserSmoke.includes("lyricLongGapLateProgress.wordProgress?.some((progress) => progress > 0 && progress < 100)"), "Browser smoke should verify long-gap lyric progress still follows the sung line late in the line");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
   assert(browserSmoke.includes("relativeEnhancedProgress"), "Browser smoke should verify line-relative enhanced LRC timed word progress");
@@ -1033,10 +1036,12 @@ function checkAppFunctionReferences() {
   assert(app.includes("const AUTO_DISMISS_NOTICE_MS = 1800"), "Actionless notices should auto-hide within 1-2 seconds");
   assert(app.includes("const AUTO_DISMISS_STATUS_MS = 1800"), "Transient status messages should auto-hide within 1-2 seconds");
   assert(app.includes("window.addEventListener(\"emby-music-hls-ready\", handleHlsReady)"), "hls.js loading should refresh playback capability without blocking init");
-  assert(app.includes("const TOPBAR_LYRIC_DISPLAY_ENABLED = false"), "Topbar lyric display should stay disabled by default");
-  assert(app.includes("function renderTopLyricFocus"), "Topbar lyrics should reuse the current lyric render state behind the display flag");
-  assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state behind the display flag");
-  assert(app.includes("if (!TOPBAR_LYRIC_DISPLAY_ENABLED)"), "Topbar lyrics should not render into the top navigation while disabled");
+  assert(app.includes("const TOPBAR_LYRIC_DISPLAY_ENABLED = true"), "Topbar lyric display should stay available on non-immersive surfaces");
+  assert(app.includes("function renderTopLyricFocus"), "Topbar lyrics should reuse the current lyric render state");
+  assert(app.includes("function updateTopbarLyricState"), "Topbar lyrics should update from playback state");
+  assert(app.includes('function shouldRenderTopbarLyricFocus()'), "Topbar lyrics should have a view-aware display gate");
+  assert(app.includes('getActiveView() !== "immersivePlayer"'), "Topbar lyrics should be suppressed in immersive player only");
+  assert(app.includes("function hideTopLyricFocus"), "Topbar lyrics should clear text and shard state when hidden");
   assert(app.includes("document.body.classList.toggle(\"topbar-lyric-active\", shouldShowLyric)"), "Topbar lyric state class should remain wired for the display flag");
   assert(/function updatePlaybackState\(\) \{[\s\S]*?updateTopbarLyricState\(\);[\s\S]*?updatePlayButtonLabels\(\);/.test(app), "Playback state updates should refresh the topbar lyric/menu mode");
   assert(app.includes("function buildTopLyricCharacterFragment"), "Topbar lyric shard effect should split lyrics into character spans");
@@ -1046,6 +1051,11 @@ function checkAppFunctionReferences() {
   assert(app.includes("function sampleTopLyricGlyphPoints"), "Topbar lyric shard effect should sample glyph pixels before creating shards");
   assert(app.includes('const TOP_LYRIC_SHARD_DEFAULT_COLOR = "rgba(236, 65, 65, 0.96)"'), "Topbar shard particles should use the red brand color by default");
   assert(app.includes("TOP_LYRIC_SHARD_ACCENT_COLOR"), "Topbar shard particles should include a colored accent instead of fading to plain white");
+  assert(app.includes("function fetchMatchedLyricsFromSourceBridge"), "Missing Emby lyrics should fall back to source bridge lyric matching");
+  assert(app.includes("function findBestMatchedLyricTrack"), "Source bridge lyric matching should verify the matched song");
+  assert(app.includes("function getLyricsNotFoundStatus"), "Lyric not-found copy should distinguish source bridge matching");
+  assert(sourceBridge.includes("async function resolveMatchedPluginLyric"), "Source bridge should match plugin lyrics for local tracks without sidecar lyrics");
+  assert(sourceBridge.includes("function findBestLyricMatch"), "Source bridge lyric matching should verify title and artist");
   assert(app.includes("requestAnimationFrame(updateTopLyricShardFrame)"), "Topbar lyric shard timeline should be RAF-driven");
   assert(app.includes("topLyricShardAnimationFrame"), "Topbar shard canvas animation should use one shared RAF scheduler");
   assert(app.includes("requestAnimationFrame(updateTopLyricShardEffectsFrame)"), "Topbar shard canvas animation should be RAF-driven");
