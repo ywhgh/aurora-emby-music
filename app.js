@@ -7556,14 +7556,16 @@ function syncLyricListActiveClass(activeIndex) {
   activeLyricListIndex = activeIndex;
 }
 
-function updateInlineLyricProgress(activeIndex, currentSeconds) {
+function updateInlineLyricProgress(activeIndex, currentSeconds, options = {}) {
   if (!state.isLyricSynced || activeIndex < 0) {
     return;
   }
 
+  const shouldUpdateList = options.list ?? isNowPlayingLyricsVisible();
+  const shouldUpdateFocus = options.focus ?? isNowPlayingLyricsVisible();
   const groups = [
-    ...(lyricLineWordGroups[activeIndex] || []),
-    ...nowLyricWordGroups,
+    ...(shouldUpdateList ? lyricLineWordGroups[activeIndex] || [] : []),
+    ...(shouldUpdateFocus ? nowLyricWordGroups : []),
   ];
 
   if (!groups.length) {
@@ -8888,7 +8890,10 @@ function updateActiveLyricWordProgressFrame(currentSeconds) {
     return false;
   }
 
-  updateInlineLyricProgress(activeIndex, currentSeconds);
+  updateInlineLyricProgress(activeIndex, currentSeconds, {
+    list: isNowPlayingLyricsVisible(),
+    focus: isNowPlayingLyricsVisible(),
+  });
   if (isImmersiveLyricsVisible()) {
     return updateActiveImmersiveLyricWordProgressFrame(currentSeconds);
   }
