@@ -244,6 +244,9 @@ function checkLyrics() {
   assert(bilingualEnhancedLine.translatedWordTimeline?.length === 2, `Bilingual enhanced translation should expose 2 timed words, got ${bilingualEnhancedLine.translatedWordTimeline?.length || 0}`);
   assert(bilingualEnhancedLine.wordTimeline?.[1]?.time === 0.6, `Bilingual enhanced original second word time expected 0.6, got ${bilingualEnhancedLine.wordTimeline?.[1]?.time}`);
   assert(bilingualEnhancedLine.translatedWordTimeline?.[1]?.time === 0.6, `Bilingual enhanced translated second word time expected 0.6, got ${bilingualEnhancedLine.translatedWordTimeline?.[1]?.time}`);
+  const bilingualOriginalOnlyTimedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world\n[00:00.00]你好").lines[0];
+  assert(bilingualOriginalOnlyTimedLine.wordTimeline?.length === 2, `Bilingual original-only enhanced line should keep 2 original timed words, got ${bilingualOriginalOnlyTimedLine.wordTimeline?.length || 0}`);
+  assert(!bilingualOriginalOnlyTimedLine.translatedWordTimeline, "Parser should not persist synthetic translatedWordTimeline when translation has no own word timing");
   const bilingualOffsetLine = parseLyrics("[offset:-200]\n[00:01.00]<1.00>Hello <1.30>world\n[00:01.00]<1.00>你<1.30>好").lines[0];
   assert(bilingualOffsetLine.translatedWordTimeline?.[1]?.time === 1.5, `LRC offset should shift translated word time to 1.5, got ${bilingualOffsetLine.translatedWordTimeline?.[1]?.time}`);
 
@@ -259,6 +262,7 @@ function checkLyrics() {
   assert(app.includes("nowLyricWordGroups"), "Current lyric focus should cache word groups for active progress");
   assert(app.includes("function updateInlineLyricProgress"), "Inline lyric surfaces should update word progress");
   assert(app.includes("function updateLyricProgressGroups"), "Immersive lyrics should update original and translated word groups together");
+  assert(app.includes("function synthesizeTranslatedLyricWordTimeline"), "Translated lyrics without timed words should synthesize a display-only word timeline from the original timing");
   assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
   assert(index.includes('data-lyric-offset-adjust="later"'), "Lyrics panel should expose a button for lyrics that are too fast");
   assert(index.includes("data-lyric-offset-reset"), "Lyrics panel should expose a lyric offset reset button");

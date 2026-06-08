@@ -586,6 +586,7 @@ function checkPageState(check, page) {
   const enhancedTailWordProgress = lyricProgress.enhancedTailWordProgress || {};
   const relativeEnhancedProgress = lyricProgress.relativeEnhancedProgress || {};
   const bilingualEnhancedProgress = lyricProgress.bilingualEnhancedProgress || {};
+  const bilingualSyntheticTranslationProgress = lyricProgress.bilingualSyntheticTranslationProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
@@ -686,6 +687,10 @@ function checkPageState(check, page) {
   assert(bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] < 100, `${label} bilingual original second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
   assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} bilingual translated first word should complete: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
   assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] < 100, `${label} bilingual translated second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualSyntheticTranslationProgress.wordGroups?.length === 2, `${label} synthetic translated timing should still render two bilingual word groups: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
+  assert(bilingualSyntheticTranslationProgress.wordGroups?.[0]?.timed === true && bilingualSyntheticTranslationProgress.wordGroups?.[1]?.timed === true, `${label} translated line without own timing should synthesize timed words from original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
+  assert(bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} synthetic translated first word should complete with original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
+  assert(bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[1] > 0 && bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[1] < 100, `${label} synthetic translated second word should be partial with original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
   assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
   assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
   assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);

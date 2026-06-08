@@ -1625,6 +1625,26 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.75, true);
   const bilingualEnhancedProgress = collectBrowserSmokeLyricState();
+  const bilingualSyntheticTranslationTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-bilingual-synthetic-translation-lyric-track",
+    name: "Browser Smoke Bilingual Synthetic Translation Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]<0.00>Hello <0.60>world",
+      "[00:00.00]你好",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = bilingualSyntheticTranslationTrack;
+  state.queue = [bilingualSyntheticTranslationTrack];
+  state.tracks = [bilingualSyntheticTranslationTrack];
+  state.filteredTracks = [bilingualSyntheticTranslationTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(bilingualSyntheticTranslationTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualSyntheticTranslationProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
@@ -1669,6 +1689,7 @@ function runLyricProgressScenario() {
     enhancedTailWordProgress,
     relativeEnhancedProgress,
     bilingualEnhancedProgress,
+    bilingualSyntheticTranslationProgress,
     denseWordPerformance,
     endScrollLayout,
     topLyricShard,
@@ -7041,7 +7062,10 @@ function appendLyricWordParts(container, parts, group) {
 function createLyricWordGroup(line, text, options = {}) {
   const timeline = Array.isArray(options.timeline) ? options.timeline : [];
   const fallbackText = options.fallbackText || text || " ";
-  const parts = getLyricWordParts({ wordTimeline: timeline }, fallbackText);
+  const fallbackTimeline = timeline.length
+    ? timeline
+    : getFallbackLyricWordTimeline(line, fallbackText, options);
+  const parts = getLyricWordParts({ wordTimeline: fallbackTimeline }, fallbackText);
 
   return {
     role: options.role || "line",
@@ -7053,6 +7077,56 @@ function createLyricWordGroup(line, text, options = {}) {
     endTimings: [],
     hasUsableTimedWords: false,
   };
+}
+
+function getFallbackLyricWordTimeline(line, fallbackText, options = {}) {
+  if (options.role !== "translated" || !Array.isArray(line?.wordTimeline) || !line.wordTimeline.length) {
+    return [];
+  }
+
+  return synthesizeTranslatedLyricWordTimeline(fallbackText, line.wordTimeline);
+}
+
+function synthesizeTranslatedLyricWordTimeline(text, sourceTimeline) {
+  const wordParts = segmentLyricWords(text).filter((part) => part.type === "word");
+
+  if (!wordParts.length || !sourceTimeline?.length) {
+    return [];
+  }
+
+  const sourceWords = sourceTimeline.filter((word) => Number.isFinite(word?.time));
+  if (!sourceWords.length) {
+    return [];
+  }
+
+  const start = Number(sourceWords[0].time);
+  const lastSourceWord = sourceWords[sourceWords.length - 1];
+  const explicitEnd = Number(lastSourceWord.endTime);
+  const sourceEnd = Number.isFinite(explicitEnd) && explicitEnd > start
+    ? explicitEnd
+    : Number.isFinite(Number(sourceWords[sourceWords.length - 1]?.time)) && sourceWords.length > 1
+    ? Number(sourceWords[sourceWords.length - 1].time) + getSynthesizedLyricTailDurationSeconds(lastSourceWord)
+    : start + Math.max(0.8, wordParts.length * 0.16);
+  const duration = Math.max(0.18, sourceEnd - start);
+
+  return wordParts.map((part, index) => {
+    const wordStart = start + ((duration * index) / Math.max(1, wordParts.length));
+    const wordEnd = start + ((duration * (index + 1)) / Math.max(1, wordParts.length));
+    return {
+      value: part.value,
+      time: wordStart,
+      endTime: wordEnd,
+    };
+  });
+}
+
+function getSynthesizedLyricTailDurationSeconds(word) {
+  const textLength = Array.from(String(word?.value || "")).filter((char) => char.trim()).length || 1;
+  return clamp(
+    Math.max(LYRIC_TIMED_WORD_MIN_DURATION_SECONDS, textLength * 0.12),
+    LYRIC_TIMED_WORD_MIN_DURATION_SECONDS,
+    LYRIC_TIMED_WORD_MAX_DURATION_SECONDS
+  );
 }
 
 function formatLyricLineLabel(line) {
