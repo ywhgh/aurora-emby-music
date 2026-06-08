@@ -237,6 +237,15 @@ function checkLyrics() {
   const offsetEnhancedLine = parseLyrics("[offset:-200]\n[00:01.00]<1.00>你<1.30>好").lines[0];
   assert(offsetEnhancedLine?.time === 1.2, `LRC negative offset should shift line time later to 1.2, got ${offsetEnhancedLine?.time}`);
   assert(offsetEnhancedLine.wordTimeline?.[1]?.time === 1.5, `LRC offset should shift enhanced word time to 1.5, got ${offsetEnhancedLine.wordTimeline?.[1]?.time}`);
+  const bilingualEnhancedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world\n[00:00.00]<0.00>你<0.60>好").lines[0];
+  assert(bilingualEnhancedLine?.originalText === "Hello world", `Bilingual enhanced originalText expected Hello world, got ${bilingualEnhancedLine?.originalText}`);
+  assert(bilingualEnhancedLine?.text === "你好", `Bilingual enhanced translated text expected 你好, got ${bilingualEnhancedLine?.text}`);
+  assert(bilingualEnhancedLine.wordTimeline?.length === 2, `Bilingual enhanced original should expose 2 timed words, got ${bilingualEnhancedLine.wordTimeline?.length || 0}`);
+  assert(bilingualEnhancedLine.translatedWordTimeline?.length === 2, `Bilingual enhanced translation should expose 2 timed words, got ${bilingualEnhancedLine.translatedWordTimeline?.length || 0}`);
+  assert(bilingualEnhancedLine.wordTimeline?.[1]?.time === 0.6, `Bilingual enhanced original second word time expected 0.6, got ${bilingualEnhancedLine.wordTimeline?.[1]?.time}`);
+  assert(bilingualEnhancedLine.translatedWordTimeline?.[1]?.time === 0.6, `Bilingual enhanced translated second word time expected 0.6, got ${bilingualEnhancedLine.translatedWordTimeline?.[1]?.time}`);
+  const bilingualOffsetLine = parseLyrics("[offset:-200]\n[00:01.00]<1.00>Hello <1.30>world\n[00:01.00]<1.00>你<1.30>好").lines[0];
+  assert(bilingualOffsetLine.translatedWordTimeline?.[1]?.time === 1.5, `LRC offset should shift translated word time to 1.5, got ${bilingualOffsetLine.translatedWordTimeline?.[1]?.time}`);
 
   const app = read("app.js");
   assert(app.includes("function appendLyricLineContent"), "Missing shared lyric line renderer");
@@ -244,6 +253,12 @@ function checkLyrics() {
   assert(app.includes("renderImmersiveLyricFocus"), "Missing immersive lyric renderer");
   assert(app.includes("immersive-lyric-original"), "Immersive lyric renderer does not render original text");
   assert(app.includes("immersive-lyric-translated"), "Immersive lyric renderer does not render translated text");
+  assert(app.includes("translatedWordTimeline"), "App should render translated timed words when available");
+  assert(app.includes("immersiveLyricWordGroups"), "Immersive lyric progress should cache original/translated word groups");
+  assert(app.includes("lyricLineWordGroups"), "Now-playing lyric list should cache word groups for active progress");
+  assert(app.includes("nowLyricWordGroups"), "Current lyric focus should cache word groups for active progress");
+  assert(app.includes("function updateInlineLyricProgress"), "Inline lyric surfaces should update word progress");
+  assert(app.includes("function updateLyricProgressGroups"), "Immersive lyrics should update original and translated word groups together");
   assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
   assert(index.includes('data-lyric-offset-adjust="later"'), "Lyrics panel should expose a button for lyrics that are too fast");
   assert(index.includes("data-lyric-offset-reset"), "Lyrics panel should expose a lyric offset reset button");
@@ -297,9 +312,18 @@ function checkLyrics() {
   assert(app.includes("lastLyricAutoScrollAt"), "Lyric auto-scroll should track the previous automatic scroll time");
   assert(app.includes("function shouldScrollLyricLine"), "Lyric auto-scroll should use a shared throttle helper");
   assert(app.includes("function scrollElementIntoContainerView"), "Lyric auto-scroll should use a container-scoped scroll helper");
+  assert(app.includes("function scrollElementIntoNearestContainerView"), "List locate actions should have a nearest-container scroll helper");
+  assert(app.includes("function getNearestScrollableContainer"), "List locate actions should detect their intended scroll container");
   assert(/getActiveView\(\) === "nowPlaying"[\s\S]*?scrollElementIntoContainerView\(lyricsList, activeItem, \{[\s\S]*?behavior: forceScroll \? "auto" : "smooth"/.test(app), "Now-playing lyric auto-scroll should stay inside the lyrics list");
   assert(/scrollElementIntoContainerView\(immersiveLyricList, activeItem, \{[\s\S]*?behavior: instantScroll \? "auto" : "smooth"/.test(app), "Immersive lyric auto-scroll should stay inside the immersive lyric list");
   assert(!/activeItem\.scrollIntoView\(\{ block: "center", behavior: instantScroll \? "auto" : "smooth" \}\);/.test(app), "Immersive lyric auto-scroll should not scroll the whole page");
+  assert(/activateLibraryAlphabetEntry\(entry\) \{[\s\S]*?scrollElementIntoContainerView\(libraryTrackList, targetRow/.test(app), "Library alphabet scrubber should scroll only the library list");
+  assert(/function revealLocatedQuickQueueItem\(item\) \{[\s\S]*?scrollElementIntoContainerView\(quickQueueList, item/.test(app), "Quick queue locate should scroll only the quick queue list");
+  assert(/function revealLocatedTrackRow\(row[\s\S]*?scrollElementIntoNearestContainerView\(row/.test(app), "Track locate should scroll the nearest list container instead of the document");
+  assert(/function scrollActiveImmersiveQueueItem\(\) \{[\s\S]*?scrollElementIntoContainerView\(immersiveUpNextList, activeItem/.test(app), "Immersive queue auto-scroll should stay inside the queue list");
+  assert(/function locateCurrentImmersiveQueueTrack\(\) \{[\s\S]*?scrollElementIntoContainerView\(immersiveUpNextList, activeItem/.test(app), "Immersive queue locate should scroll only the immersive queue list");
+  assert(/function syncSearchSuggestActiveItem\(\) \{[\s\S]*?scrollElementIntoContainerView\(searchSuggestList, item\.closest\("\.search-suggest-item"\) \|\| item/.test(app), "Search suggestion keyboard navigation should scroll only the suggestion list");
+  assert(!/\.scrollIntoView\(/.test(app), "App scrolling should use container-scoped helpers instead of native scrollIntoView");
   assert(css.includes("body.immersive-player-open .content"), "Immersive playback should lock the background app scroller");
   assert(css.includes("overscroll-behavior: contain;"), "Immersive lyric list should contain scroll chaining");
   assert(app.includes("function installBrowserSmokeHooks"), "Browser smoke should expose guarded lyric progress hooks");
@@ -370,6 +394,8 @@ function checkLyrics() {
   const wordAfterRule = wordAfterMatch?.[0] || "";
   const activeWordAfterRule = getCssRule(css, ".immersive-lyric-list .lyric-line.active .word::after,");
   assert(/\.immersive-lyric-list \.word \{[\s\S]*?contain: paint;/.test(css), "Immersive lyric word highlights should use paint containment hints");
+  assert(/\.lyric-line \.word,[\s\S]*?\.now-lyric-focus \.word \{[\s\S]*?contain: paint;/.test(css), "Inline lyric word highlights should use paint containment hints");
+  assert(/\.lyric-line \.word::after,[\s\S]*?\.now-lyric-focus \.word::after \{[\s\S]*?clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?content: attr\(data-word-text\);/.test(css), "Inline lyric word highlights should use clipped text overlays");
   assert(/clip-path: inset\(0 calc\(100% - var\(--word-progress, 0%\)\) 0 0\);[\s\S]*?content: attr\(data-word-text\);/.test(wordAfterRule), "Immersive lyric word highlights should use a bounded clip-path text overlay");
   assert(activeWordAfterRule.includes("will-change: clip-path"), "Immersive lyric word highlights should limit clip-path compositing hints to active lines");
   assert(wordAfterRule && !wordAfterRule.includes("width: var(--word-progress"), "Immersive lyric word highlights should avoid width layout writes on the hot path");
@@ -404,7 +430,7 @@ function checkLyrics() {
   assert(/if \(!state\.isLyricSynced \|\| !state\.lyricTimeline\.length\) \{\s*stopLyricProgressLoop\(\);\s*renderStaticLyricFocusIfNeeded\(\);\s*return;/m.test(app), "Unsynced lyric updates should not rebuild lyric DOM on every tick");
   assert(app.includes("function getNextLyricTimelineEntry"), "Lyric word progress should reuse the lyric timeline for next-line timing");
   assert(!/state\.lyricLines\s*\.\s*slice\(activeIndex \+ 1\)\s*\.\s*find/.test(app), "Lyric word progress should not allocate slices on every frame");
-  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricWordProgressWindow\(words, words\.length\);[\s\S]*?return;[\s\S]*?const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
+  assert(/const start = Number\(currentLine\?\.time\);[\s\S]*?if \(!Number\.isFinite\(start\)\) \{[\s\S]*?updateLyricProgressGroupsByLineRatio\(groups, words\.length,[\s\S]*?return;[\s\S]*?const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length\);/.test(app), "Lyric word progress should explicitly handle synced lines without finite timing");
   assert(app.includes("lyricLineElements"), "Now-playing lyric lines should be cached for active updates");
   assert(app.includes("function syncLyricListActiveClass"), "Now-playing lyric active class should be updated without scanning the list");
   assert(!app.includes('lyricsList.querySelectorAll(".lyric-line")'), "Now-playing lyric active updates should not query every lyric line");
@@ -970,7 +996,7 @@ function checkAppFunctionReferences() {
   assert(app.includes("TOP_LYRIC_SHARD_MAX_ACTIVE_EFFECTS"), "Topbar shard canvases should have a bounded active effect count");
   assert(app.includes("flash: {"), "Topbar shard effect should include a single per-character flash layer");
   assert(app.includes("function renderTopLyricShardFlash"), "Topbar shard flash should be rendered separately from particles");
-  assert(/if \(span\.textContent\?\.trim\(\)\) \{\s*spawnTopLyricShardCanvas\(span\);/.test(app), "Topbar shard trigger should not spawn particles for whitespace");
+  assert(/if \(options\.shard && span\.textContent\?\.trim\(\)\) \{\s*spawnTopLyricShardCanvas\(span\);/.test(app), "Topbar shard trigger should not spawn particles for whitespace");
   assert(/vx:\s*0\.48 \+ \(burst \* 0\.94\)/.test(app), "Topbar shard physics should launch particles to the right with a controlled sweep");
   assert(/vy:\s*-\(\(0\.38 \+ \(Math\.random\(\) \* 0\.68\)\)/.test(app), "Topbar shard physics should drift upward without overshooting the topbar");
   assert(app.includes("shard.vx *= TOP_LYRIC_SHARD_DRAG"), "Topbar shard physics should apply air drag");

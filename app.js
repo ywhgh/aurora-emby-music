@@ -815,18 +815,22 @@ let lyricClockIsRunning = false;
 let lastLyricAutoScrollAt = 0;
 let activeLyricListIndex = -1;
 let lyricLineElements = [];
+let lyricLineWordGroups = [];
+let nowLyricWordGroups = [];
 let immersiveLyricActiveIndex = -1;
 let immersiveLyricLineElements = [];
 let immersiveLyricWordElements = [];
 let immersiveLyricWordTimings = [];
 let immersiveLyricWordEndTimings = [];
 let immersiveLyricTimedWordUsable = [];
+let immersiveLyricWordGroups = [];
 const lyricWordProgressCssCache = new Map();
 let lastStaticLyricRenderSignature = "";
 let lyricRenderRevision = 0;
 let topLyricRenderedSignature = "";
 let topLyricCharacterSpans = [];
 let topLyricCharacterTimings = [];
+let topLyricCharacterGroups = [];
 let topLyricTriggeredWordIndex = -1;
 let topLyricAlignPastOnNextLoop = false;
 let topLyricShardFrame = 0;
@@ -1601,6 +1605,26 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(80.75, true);
   const relativeEnhancedProgress = collectBrowserSmokeLyricState();
+  const bilingualEnhancedTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-bilingual-enhanced-lyric-track",
+    name: "Browser Smoke Bilingual Enhanced Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]<0.00>Hello <0.60>world",
+      "[00:00.00]<0.00>你<0.60>好",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = bilingualEnhancedTrack;
+  state.queue = [bilingualEnhancedTrack];
+  state.tracks = [bilingualEnhancedTrack];
+  state.filteredTracks = [bilingualEnhancedTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(bilingualEnhancedTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualEnhancedProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
@@ -1644,6 +1668,7 @@ function runLyricProgressScenario() {
     enhancedLateWordProgress,
     enhancedTailWordProgress,
     relativeEnhancedProgress,
+    bilingualEnhancedProgress,
     denseWordPerformance,
     endScrollLayout,
     topLyricShard,
@@ -1702,6 +1727,13 @@ function collectBrowserSmokeTopLyricShardState() {
 function collectBrowserSmokeLyricState() {
   const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
   const words = [...(immersiveLyricWordElements[state.activeLyricIndex] || [])];
+  const wordGroups = (immersiveLyricWordGroups[state.activeLyricIndex] || []).map((group) => ({
+    role: group.role,
+    wordCount: group.words.length,
+    wordProgress: group.words.map((word) => Number(word._lyricProgress || 0)),
+    cssWordProgress: group.words.map((word) => word.style.getPropertyValue("--word-progress")),
+    timed: Boolean(group.hasUsableTimedWords),
+  }));
   const wordProgress = words.map((word) => Number(word._lyricProgress || 0));
   const cssWordProgress = words.map((word) => word.style.getPropertyValue("--word-progress"));
   const wordHighlightClipPath = words[1]
@@ -1718,6 +1750,7 @@ function collectBrowserSmokeLyricState() {
     activeLineText: activeLine?.textContent?.trim() || "",
     activeLineClass: activeLine?.className || "",
     wordCount: words.length,
+    wordGroups,
     wordProgress,
     cssWordProgress,
     wordHighlightClipPath,
@@ -3619,7 +3652,7 @@ function activateLibraryAlphabetEntry(entry) {
     return;
   }
 
-  targetRow.scrollIntoView({ block: "center", behavior: "smooth" });
+  scrollElementIntoContainerView(libraryTrackList, targetRow, { block: "center", behavior: "smooth" });
   targetRow.classList.add("located");
   setTimeout(() => targetRow.classList.remove("located"), 700);
 }
@@ -3757,7 +3790,7 @@ function locateCurrentQueueTrack() {
 }
 
 function revealLocatedQuickQueueItem(item) {
-  item.scrollIntoView({ behavior: "smooth", block: "center" });
+  scrollElementIntoContainerView(quickQueueList, item, { behavior: "smooth", block: "center" });
   item.classList.add("located");
   window.setTimeout(() => item.classList.remove("located"), 1200);
   setLibraryStatus("已在快捷队列定位当前歌曲。");
@@ -3817,7 +3850,7 @@ function getCurrentTrackRow(container) {
 }
 
 function revealLocatedTrackRow(row, message = "已定位播放队列中的当前歌曲。") {
-  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  scrollElementIntoNearestContainerView(row, { behavior: "smooth", block: "center" });
   row.classList.add("located");
   window.setTimeout(() => row.classList.remove("located"), 1200);
   setLibraryStatus(message);
@@ -6879,7 +6912,7 @@ function renderLyrics(track) {
     item.className = "lyric-line";
     item.dataset.lyricIndex = String(index);
     lyricLineElements[index] = item;
-    appendLyricLineContent(item, line, {
+    lyricLineWordGroups[index] = appendLyricLineContent(item, line, {
       originalClassName: "lyric-original",
       translatedClassName: "lyric-translated",
       translatedTagName: "strong",
@@ -6910,21 +6943,90 @@ function renderLyrics(track) {
 function appendLyricLineContent(container, line, options = {}) {
   const text = line?.text || " ";
   const originalText = line?.originalText || "";
+  const groups = [];
 
   if (!originalText) {
-    container.textContent = text;
-    return;
+    container.replaceChildren();
+    groups.push(appendLyricWordSpans(container, line, text, {
+      timeline: line?.wordTimeline,
+      fallbackText: text,
+      role: "single",
+    }));
+    return groups;
   }
 
   const original = document.createElement(options.originalTagName || "span");
   original.className = options.originalClassName || "lyric-original";
-  original.textContent = originalText;
+  groups.push(appendLyricWordSpans(original, line, originalText, {
+    timeline: line?.wordTimeline,
+    fallbackText: originalText,
+    role: "original",
+  }));
 
   const translated = document.createElement(options.translatedTagName || "span");
   translated.className = options.translatedClassName || "lyric-translated";
-  translated.textContent = text;
+  groups.push(appendLyricWordSpans(translated, line, text, {
+    timeline: line?.translatedWordTimeline,
+    fallbackText: text,
+    role: "translated",
+  }));
 
   container.replaceChildren(original, translated);
+  return groups;
+}
+
+function appendLyricWordSpans(container, line, text, options = {}) {
+  const group = createLyricWordGroup(line, text, options);
+  appendLyricWordParts(container, group.parts, group);
+  return group;
+}
+
+function appendLyricWordParts(container, parts, group) {
+  parts.forEach((part) => {
+    if (part.type === "space") {
+      container.append(document.createTextNode(part.value));
+      return;
+    }
+
+    const word = document.createElement("span");
+    word.className = "word";
+    word.textContent = part.value;
+    word.dataset.wordText = part.value;
+    if (Number.isFinite(part.time)) {
+      word.dataset.wordTime = String(part.time);
+    }
+    if (Number.isFinite(part.endTime)) {
+      word.dataset.wordEndTime = String(part.endTime);
+    }
+    word._lyricProgress = 0;
+    word._lyricProgressCss = "0%";
+    word.style.setProperty("--word-progress", "0%");
+    container.append(word);
+    group.words.push(word);
+    group.timings.push(Number.isFinite(part.time) ? Number(part.time) : NaN);
+    group.endTimings.push(Number.isFinite(part.endTime) ? Number(part.endTime) : NaN);
+  });
+
+  group.hasUsableTimedWords = group.timings.length === group.words.length
+    && group.timings.length > 0
+    && areTimedLyricWordTimingsUsable(group.timings);
+}
+
+function createLyricWordGroup(line, text, options = {}) {
+  const timeline = Array.isArray(options.timeline) ? options.timeline : [];
+  const fallbackText = options.fallbackText || text || " ";
+  const parts = getLyricWordParts({ wordTimeline: timeline }, fallbackText);
+
+  return {
+    role: options.role || "line",
+    line,
+    text: fallbackText,
+    parts,
+    words: [],
+    timings: [],
+    endTimings: [],
+    hasUsableTimedWords: false,
+  };
 }
 
 function formatLyricLineLabel(line) {
@@ -7272,6 +7374,7 @@ function updateLyricsHighlight(currentSeconds, forceScroll = false) {
   const activeIndex = findActiveLyricIndex(currentSeconds);
 
   if (activeIndex === state.activeLyricIndex && !forceScroll) {
+    updateInlineLyricProgress(activeIndex, currentSeconds);
     if (isImmersiveLyricsVisible()) {
       updateImmersiveLyricProgress(currentSeconds);
     }
@@ -7281,6 +7384,7 @@ function updateLyricsHighlight(currentSeconds, forceScroll = false) {
 
   state.activeLyricIndex = activeIndex;
   renderNowLyricFocus();
+  updateInlineLyricProgress(activeIndex, currentSeconds);
   if (isImmersiveLyricsVisible()) {
     updateImmersiveLyricProgress(currentSeconds, forceScroll || getActiveView() === "immersivePlayer", forceScroll);
   }
@@ -7336,6 +7440,46 @@ function scrollElementIntoContainerView(container, element, options = {}) {
   return true;
 }
 
+function scrollElementIntoNearestContainerView(element, options = {}) {
+  const container = getNearestScrollableContainer(element, options.fallback || content);
+
+  if (!container) {
+    return false;
+  }
+
+  return scrollElementIntoContainerView(container, element, options);
+}
+
+function getNearestScrollableContainer(element, fallback = content) {
+  if (!element) {
+    return fallback || null;
+  }
+
+  let current = element.parentElement;
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    if (isScrollableContainer(current)) {
+      return current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return fallback || null;
+}
+
+function isScrollableContainer(element) {
+  if (!element) {
+    return false;
+  }
+
+  const style = window.getComputedStyle(element);
+  const overflowY = style.overflowY;
+  const canScrollY = /(auto|scroll|overlay)/.test(overflowY);
+
+  return canScrollY && element.scrollHeight > element.clientHeight + 1;
+}
+
 function getElementOffsetWithinContainer(container, element) {
   let offsetTop = 0;
   let current = element;
@@ -7372,6 +7516,7 @@ function shouldScrollLyricLine(isForced = false) {
 function resetLyricLineElementCache() {
   activeLyricListIndex = -1;
   lyricLineElements = [];
+  lyricLineWordGroups = [];
 }
 
 function syncLyricListActiveClass(activeIndex) {
@@ -7380,8 +7525,66 @@ function syncLyricListActiveClass(activeIndex) {
   }
 
   lyricLineElements[activeLyricListIndex]?.classList.remove("active");
+  resetLyricWordGroups(lyricLineWordGroups[activeLyricListIndex]);
   lyricLineElements[activeIndex]?.classList.add("active");
   activeLyricListIndex = activeIndex;
+}
+
+function updateInlineLyricProgress(activeIndex, currentSeconds) {
+  if (!state.isLyricSynced || activeIndex < 0) {
+    return;
+  }
+
+  const groups = [
+    ...(lyricLineWordGroups[activeIndex] || []),
+    ...nowLyricWordGroups,
+  ];
+
+  if (!groups.length) {
+    return;
+  }
+
+  const currentLine = state.lyricLines[activeIndex];
+  const start = Number(currentLine?.time);
+  const nextEntry = getNextLyricTimelineEntry(activeIndex);
+  const lyricSeconds = getAdjustedLyricSeconds(currentSeconds);
+
+  if (!Number.isFinite(start)) {
+    groups.forEach((group) => updateLyricWordProgressWindowUncached(group.words || [], group.words?.length || 0));
+    return;
+  }
+
+  groups.forEach((group) => {
+    updateLyricProgressGroupUncached(group, {
+      start,
+      lyricSeconds,
+      nextEntry,
+    });
+  });
+}
+
+function updateLyricProgressGroupUncached(group, options) {
+  const words = group?.words || [];
+  if (!words.length) {
+    return;
+  }
+
+  if (group.hasUsableTimedWords) {
+    updateTimedLyricWordProgress(-1, words, options.lyricSeconds, options.nextEntry, group);
+    return;
+  }
+
+  const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length);
+  const lineRatio = end > options.start
+    ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
+    : 1;
+  updateLyricWordProgressWindowUncached(words, lineRatio * words.length);
+}
+
+function resetLyricWordGroups(groups) {
+  (groups || []).forEach((group) => {
+    (group?.words || []).forEach((word) => setLyricWordProgress(word, 0));
+  });
 }
 
 function renderStaticLyricFocusIfNeeded() {
@@ -7554,7 +7757,7 @@ function renderNowLyricFocus() {
 
 function renderNowLyricFocusLine(line) {
   nowLyricCurrent.replaceChildren();
-  appendLyricLineContent(nowLyricCurrent, line, {
+  nowLyricWordGroups = appendLyricLineContent(nowLyricCurrent, line, {
     originalClassName: "now-lyric-original",
     translatedClassName: "now-lyric-translated",
   });
@@ -7576,7 +7779,6 @@ function renderTopLyricFocus(line) {
     return;
   }
 
-  topLyricOriginal.textContent = line.originalText || "";
   topLyricOriginal.hidden = !line.originalText;
   renderTopLyricCharacters(line);
   updateTopbarLyricState();
@@ -7603,12 +7805,15 @@ function updateTopbarLyricState() {
 // 顶栏歌词进入播放态时，将整句拆成单字 span，后续由时间轴逐字触发碎裂。
 function renderTopLyricCharacters(line) {
   const text = line?.text || line?.originalText || "";
+  const originalText = line?.originalText || "";
   const signature = [
     state.currentTrack?.Id || "",
     state.activeLyricIndex,
     line?.time ?? "",
+    originalText,
     text,
     line?.wordTimeline?.map((word) => `${word.time}:${word.value}`).join("|") || "",
+    line?.translatedWordTimeline?.map((word) => `${word.time}:${word.value}`).join("|") || "",
   ].join("::");
 
   if (signature === topLyricRenderedSignature) {
@@ -7621,15 +7826,36 @@ function renderTopLyricCharacters(line) {
   topLyricAlignPastOnNextLoop = false;
   topLyricCharacterSpans = [];
   topLyricCharacterTimings = [];
-  topLyricCurrent.replaceChildren(buildTopLyricCharacterFragment(text, line));
+  topLyricCharacterGroups = [];
+  topLyricOriginal.replaceChildren();
+  if (originalText) {
+    topLyricOriginal.replaceChildren(buildTopLyricCharacterFragment(originalText, line, {
+      role: "original",
+      timeline: line?.wordTimeline,
+      shard: false,
+    }));
+  }
+  topLyricCurrent.replaceChildren(buildTopLyricCharacterFragment(text, line, {
+    role: line?.originalText ? "translated" : "single",
+    timeline: line?.originalText ? line?.translatedWordTimeline : line?.wordTimeline,
+    shard: true,
+  }));
 }
 
 // DOM 拆分：每个字符一个 span，CSS 默认 opacity 0.6，触发后切到 is-sharded。
-function buildTopLyricCharacterFragment(text, line) {
+function buildTopLyricCharacterFragment(text, line, options = {}) {
   const wrapper = document.createElement("span");
   wrapper.className = "top-lyric-text";
   wrapper.setAttribute("aria-label", text);
   wrapper.dataset.topLyricText = text;
+  wrapper.dataset.topLyricRole = options.role || "line";
+  const group = {
+    role: options.role || "line",
+    spans: [],
+    timings: buildTopLyricCharacterTimings(text, line, options),
+    shard: options.shard !== false,
+    triggeredIndex: -1,
+  };
 
   Array.from(text || " ").forEach((character, index) => {
     const span = document.createElement("span");
@@ -7638,21 +7864,27 @@ function buildTopLyricCharacterFragment(text, line) {
     span.dataset.charIndex = String(index);
     span.setAttribute("aria-hidden", "true");
     wrapper.append(span);
-    topLyricCharacterSpans[index] = span;
+    group.spans[index] = span;
+    if (group.shard) {
+      topLyricCharacterSpans[index] = span;
+    }
   });
 
-  topLyricCharacterTimings = buildTopLyricCharacterTimings(text, line);
+  topLyricCharacterGroups.push(group);
+  if (group.shard) {
+    topLyricCharacterTimings = group.timings;
+  }
   return wrapper;
 }
 
 // 优先使用增强 LRC 的逐字时间；没有逐字时间时按当前行时长均分。
-function buildTopLyricCharacterTimings(text, line) {
+function buildTopLyricCharacterTimings(text, line, options = {}) {
   const characters = Array.from(text || " ");
   if (!characters.length) {
     return [];
   }
 
-  const wordTimeline = Array.isArray(line?.wordTimeline) ? line.wordTimeline : [];
+  const wordTimeline = Array.isArray(options.timeline) ? options.timeline : [];
   if (wordTimeline.length && doesTopLyricWordTimelineMatchText(text, wordTimeline)) {
     return mapTopLyricWordTimelineToCharacters(characters, wordTimeline, Number(line?.time));
   }
@@ -7744,8 +7976,7 @@ function shouldRunTopLyricShardLoop() {
     topLyricFocus
       && !topLyricFocus.hidden
       && document.body.classList.contains("topbar-lyric-active")
-      && topLyricCharacterSpans.length
-      && topLyricCharacterTimings.length
+      && topLyricCharacterGroups.some((group) => group.spans.length && group.timings.length)
       && state.currentTrack
       && audioPlayer.src
       && !audioPlayer.paused
@@ -7774,10 +8005,11 @@ function updateTopLyricShardFrame() {
   }
 
   const lyricSeconds = getAdjustedLyricSeconds(getLyricPlaybackTimeSeconds());
-  const nextIndex = findTopLyricShardIndex(lyricSeconds);
+  const shardGroup = getTopLyricShardGroup();
+  const nextIndex = findTopLyricShardIndex(lyricSeconds, shardGroup);
 
   if (nextIndex >= 0) {
-    if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds)) {
+    if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, shardGroup)) {
       alignTopLyricShardStateToIndex(nextIndex);
       syncTopLyricShardLoop();
       return;
@@ -7793,16 +8025,18 @@ function updateTopLyricShardFrame() {
     topLyricTriggeredWordIndex = Math.max(topLyricTriggeredWordIndex, triggerEndIndex);
   }
 
+  syncTopLyricProgressGroups(lyricSeconds);
+
   syncTopLyricShardLoop();
 }
 
-function shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds) {
+function shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, group = getTopLyricShardGroup()) {
   if (nextIndex <= topLyricTriggeredWordIndex + TOP_LYRIC_SHARD_MAX_FRAME_TRIGGERS) {
     return false;
   }
 
   const firstPendingIndex = topLyricTriggeredWordIndex + 1;
-  const firstPendingTime = topLyricCharacterTimings[firstPendingIndex];
+  const firstPendingTime = group?.timings?.[firstPendingIndex];
   if (!Number.isFinite(firstPendingTime)) {
     return true;
   }
@@ -7810,14 +8044,15 @@ function shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds) {
   return lyricSeconds - firstPendingTime > TOP_LYRIC_SHARD_CATCHUP_ALIGN_SECONDS;
 }
 
-function findTopLyricShardIndex(lyricSeconds) {
+function findTopLyricShardIndex(lyricSeconds, group = getTopLyricShardGroup()) {
   if (!Number.isFinite(lyricSeconds)) {
     return -1;
   }
 
-  let result = topLyricTriggeredWordIndex;
-  for (let index = topLyricTriggeredWordIndex + 1; index < topLyricCharacterTimings.length; index += 1) {
-    const time = topLyricCharacterTimings[index];
+  const timings = group?.timings || [];
+  let result = group?.shard ? topLyricTriggeredWordIndex : group?.triggeredIndex ?? -1;
+  for (let index = result + 1; index < timings.length; index += 1) {
+    const time = timings[index];
 
     if (!Number.isFinite(time)) {
       continue;
@@ -7833,29 +8068,73 @@ function findTopLyricShardIndex(lyricSeconds) {
   return result;
 }
 
+function getTopLyricShardGroup() {
+  return topLyricCharacterGroups.find((group) => group.shard) || topLyricCharacterGroups[0] || null;
+}
+
 // Timeline Controller：外部传入字符索引时，隐藏该字符并在原位置触发 Canvas 碎裂。
 function triggerNextWord(index) {
-  const span = topLyricCharacterSpans[index];
+  triggerTopLyricGroupCharacter(getTopLyricShardGroup(), index, { shard: true });
+}
+
+function triggerTopLyricGroupCharacter(group, index, options = {}) {
+  const span = group?.spans?.[index];
   if (!span || span.classList.contains("is-sharded")) {
     return;
   }
 
   span.classList.add("is-sharded");
-  if (span.textContent?.trim()) {
+  if (options.shard && span.textContent?.trim()) {
     spawnTopLyricShardCanvas(span);
   }
 }
 
 function alignTopLyricShardStateToTime(lyricSeconds) {
-  const currentIndex = findTopLyricShardIndex(lyricSeconds);
+  const currentIndex = findTopLyricShardIndex(lyricSeconds, getTopLyricShardGroup());
   alignTopLyricShardStateToIndex(currentIndex);
 }
 
 function alignTopLyricShardStateToIndex(currentIndex) {
-  topLyricCharacterSpans.forEach((span, index) => {
-    span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(topLyricCharacterTimings[index]));
+  const shardGroup = getTopLyricShardGroup();
+  shardGroup?.spans.forEach((span, index) => {
+    span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(shardGroup.timings[index]));
   });
   topLyricTriggeredWordIndex = currentIndex;
+  if (shardGroup) {
+    shardGroup.triggeredIndex = currentIndex;
+  }
+  syncTopLyricProgressGroupsToIndex(currentIndex);
+}
+
+function syncTopLyricProgressGroups(lyricSeconds) {
+  topLyricCharacterGroups.forEach((group) => {
+    if (!group || group.shard) {
+      return;
+    }
+
+    const nextIndex = findTopLyricShardIndex(lyricSeconds, group);
+    if (nextIndex === group.triggeredIndex) {
+      return;
+    }
+
+    group.spans.forEach((span, index) => {
+      span?.classList.toggle("is-sharded", index <= nextIndex && Number.isFinite(group.timings[index]));
+    });
+    group.triggeredIndex = nextIndex;
+  });
+}
+
+function syncTopLyricProgressGroupsToIndex(currentIndex) {
+  topLyricCharacterGroups.forEach((group) => {
+    if (!group || group.shard) {
+      return;
+    }
+
+    group.spans.forEach((span, index) => {
+      span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(group.timings[index]));
+    });
+    group.triggeredIndex = currentIndex;
+  });
 }
 
 // 为当前字符创建一个微型 canvas，覆盖在字符原位上方，动画结束后销毁。
@@ -8238,6 +8517,14 @@ function resetTopLyricShardState(options = {}) {
     topLyricRenderedSignature = "";
     topLyricCharacterSpans = [];
     topLyricCharacterTimings = [];
+    topLyricCharacterGroups = [];
+  } else {
+    topLyricCharacterGroups.forEach((group) => {
+      group.triggeredIndex = -1;
+      group.spans.forEach((span) => {
+        span?.classList?.remove("is-sharded");
+      });
+    });
   }
 }
 
@@ -8305,6 +8592,7 @@ function renderImmersiveLyricFocus() {
   immersiveLyricWordTimings = [];
   immersiveLyricWordEndTimings = [];
   immersiveLyricTimedWordUsable = [];
+  immersiveLyricWordGroups = [];
 
   const appendLine = (text, className = "") => {
     const line = document.createElement("p");
@@ -8325,6 +8613,7 @@ function renderImmersiveLyricFocus() {
     immersiveLyricWordTimings[index] = lineContent.timings;
     immersiveLyricWordEndTimings[index] = lineContent.endTimings;
     immersiveLyricTimedWordUsable[index] = lineContent.hasUsableTimedWords;
+    immersiveLyricWordGroups[index] = lineContent.groups;
     immersiveLyricLineElements[index] = line;
     if (state.isLyricSynced && Number.isFinite(lyricLine.time)) {
       line.tabIndex = 0;
@@ -8377,52 +8666,39 @@ function appendImmersiveLyricLineContent(container, line) {
   const translatedText = line?.originalText ? line.text : "";
   const original = document.createElement("span");
   original.className = line?.originalText ? "immersive-lyric-original" : "immersive-lyric-original-fallback";
-  const words = [];
-  const timings = [];
-  const endTimings = [];
-  const wordParts = getLyricWordParts(line, originalText);
-
-  wordParts.forEach((part) => {
-    if (part.type === "space") {
-      original.append(document.createTextNode(part.value));
-      return;
-    }
-
-    const word = document.createElement("span");
-    word.className = "word";
-    word.textContent = part.value;
-    word.dataset.wordText = part.value;
-    if (Number.isFinite(part.time)) {
-      word.dataset.wordTime = String(part.time);
-    }
-    if (Number.isFinite(part.endTime)) {
-      word.dataset.wordEndTime = String(part.endTime);
-    }
-    word._lyricProgress = 0;
-    word._lyricProgressCss = "0%";
-    word.style.setProperty("--word-progress", "0%");
-    original.append(word);
-    words.push(word);
-    timings.push(Number.isFinite(part.time) ? Number(part.time) : NaN);
-    endTimings.push(Number.isFinite(part.endTime) ? Number(part.endTime) : NaN);
-  });
+  const groups = [];
+  groups.push(appendLyricWordSpans(original, line, originalText, {
+    timeline: line?.wordTimeline,
+    fallbackText: originalText,
+    role: line?.originalText ? "original" : "single",
+  }));
 
   if (translatedText) {
     const translated = document.createElement("strong");
     translated.className = "immersive-lyric-translated";
-    translated.textContent = translatedText;
+    groups.push(appendLyricWordSpans(translated, line, translatedText, {
+      timeline: line?.translatedWordTimeline,
+      fallbackText: translatedText,
+      role: "translated",
+    }));
     container.replaceChildren(original, translated);
   } else {
     container.replaceChildren(original);
   }
 
+  const words = groups.flatMap((group) => group.words);
+  const primaryGroup = groups[0] || {
+    timings: [],
+    endTimings: [],
+    hasUsableTimedWords: false,
+  };
+
   return {
+    groups,
     words,
-    timings,
-    endTimings,
-    hasUsableTimedWords: timings.length === words.length
-      && timings.length > 0
-      && areTimedLyricWordTimingsUsable(timings),
+    timings: primaryGroup.timings,
+    endTimings: primaryGroup.endTimings,
+    hasUsableTimedWords: primaryGroup.hasUsableTimedWords,
   };
 }
 
@@ -8618,13 +8894,26 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     return;
   }
 
+  const groups = getLyricProgressGroupsForLine(activeIndex);
   const currentLine = state.lyricLines[activeIndex];
   const nextEntry = getNextLyricTimelineEntry(activeIndex);
   const start = Number(currentLine?.time);
   const lyricSeconds = getAdjustedLyricSeconds(currentSeconds);
 
   if (!Number.isFinite(start)) {
-    updateLyricWordProgressWindow(words, words.length);
+    updateLyricProgressGroupsByLineRatio(groups, words.length, {
+      useCachedWindow: groups.length <= 1,
+    });
+    return;
+  }
+
+  if (groups.length > 1) {
+    const progressState = updateLyricProgressGroups(activeIndex, groups, {
+      start,
+      lyricSeconds,
+      nextEntry,
+    });
+    scheduleLyricProgressResumeFromGroupState(progressState, lyricSeconds, nextEntry);
     return;
   }
 
@@ -8642,19 +8931,90 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
   scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry);
 }
 
-function hasTimedLyricWords(activeIndex, words) {
+function getLyricProgressGroupsForLine(activeIndex) {
+  const groups = immersiveLyricWordGroups[activeIndex];
+  if (Array.isArray(groups) && groups.length) {
+    return groups;
+  }
+
+  return [{
+    role: "line",
+    words: immersiveLyricWordElements[activeIndex] || [],
+    timings: immersiveLyricWordTimings[activeIndex] || [],
+    endTimings: immersiveLyricWordEndTimings[activeIndex] || [],
+    hasUsableTimedWords: Boolean(immersiveLyricTimedWordUsable[activeIndex]),
+  }];
+}
+
+function updateLyricProgressGroups(activeIndex, groups, options) {
+  return groups.reduce((stateSummary, group) => {
+    const words = group?.words || [];
+    if (!words.length) {
+      return stateSummary;
+    }
+
+    if (hasTimedLyricWords(activeIndex, words, group)) {
+      const timedState = updateTimedLyricWordProgress(activeIndex, words, options.lyricSeconds, options.nextEntry, group);
+      return mergeLyricProgressGroupState(stateSummary, timedState);
+    }
+
+    const end = getLyricWordProgressEndSeconds(options.start, options.nextEntry, words.length);
+    const lineRatio = end > options.start
+      ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
+      : 1;
+    updateLyricWordProgressWindowUncached(words, lineRatio * words.length);
+    return mergeLyricProgressGroupState(stateSummary, {
+      ratio: lineRatio,
+      complete: lineRatio >= 1,
+    });
+  }, { ratio: 1, complete: true });
+}
+
+function mergeLyricProgressGroupState(current, next) {
+  return {
+    ratio: Math.min(current.ratio, Number.isFinite(next?.ratio) ? next.ratio : 1),
+    complete: current.complete && Boolean(next?.complete),
+  };
+}
+
+function updateLyricProgressGroupsByLineRatio(groups, litWords, options = {}) {
+  groups.forEach((group) => {
+    const words = group?.words || [];
+    if (!words.length) {
+      return;
+    }
+
+    if (options.useCachedWindow && groups.length <= 1) {
+      updateLyricWordProgressWindow(words, litWords);
+    } else {
+      updateLyricWordProgressWindowUncached(words, words.length);
+    }
+  });
+}
+
+function scheduleLyricProgressResumeFromGroupState(progressState, lyricSeconds, nextEntry) {
+  if (progressState?.complete) {
+    scheduleLyricProgressResumeIfIdle(1, lyricSeconds, nextEntry);
+  }
+}
+
+function hasTimedLyricWords(activeIndex, words, group = null) {
+  if (group) {
+    return Boolean(group.hasUsableTimedWords) && (group.timings || []).length === words.length;
+  }
+
   return Boolean(immersiveLyricTimedWordUsable[activeIndex])
     && (immersiveLyricWordTimings[activeIndex] || []).length === words.length;
 }
 
-function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry) {
-  const timings = getTimedLyricWordTimings(activeIndex, words);
-  const endTimings = getTimedLyricWordEndTimings(activeIndex, words);
+function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry, group = null) {
+  const timings = group?.timings || getTimedLyricWordTimings(activeIndex, words);
+  const endTimings = group?.endTimings || getTimedLyricWordEndTimings(activeIndex, words);
   const activeWordIndex = findTimedLyricWordIndex(timings, lyricSeconds);
 
   if (activeWordIndex < 0) {
-    updateLyricWordProgressWindow(words, 0);
-    return;
+    updateLyricWordProgressByGroup(words, 0, group);
+    return { ratio: 0, complete: false };
   }
 
   const start = timings[activeWordIndex];
@@ -8671,8 +9031,24 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
   const activeWordProgress = getTimedLyricWordProgress(lyricSeconds, start, end);
   const litWords = activeWordIndex + (activeWordProgress / 100);
 
+  updateLyricWordProgressByGroup(words, litWords, group);
+  const isComplete = activeWordIndex >= words.length - 1 && activeWordProgress >= 100;
+  if (!group) {
+    scheduleTimedLyricProgressResumeIfIdle(isComplete, lyricSeconds, nextEntry);
+  }
+  return {
+    ratio: words.length ? clamp(litWords / words.length, 0, 1) : 1,
+    complete: isComplete,
+  };
+}
+
+function updateLyricWordProgressByGroup(words, litWords, group = null) {
+  if (group) {
+    updateLyricWordProgressWindowUncached(words, litWords);
+    return;
+  }
+
   updateLyricWordProgressWindow(words, litWords);
-  scheduleTimedLyricProgressResumeIfIdle(activeWordIndex >= words.length - 1 && activeWordProgress >= 100, lyricSeconds, nextEntry);
 }
 
 function getTimedLyricWordTimings(activeIndex, words) {
@@ -8896,6 +9272,21 @@ function updateLyricWordProgressWindow(words, litWords) {
   lyricProgressPartialWordIndex = nextPartialWordIndex;
 }
 
+function updateLyricWordProgressWindowUncached(words, litWords) {
+  const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
+  const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
+  const nextPartialProgress = nextPartialWordIndex >= 0
+    ? normalizeLyricWordProgressPercent(clamp(litWords - nextPartialWordIndex, 0, 1) * 100)
+    : 0;
+
+  words.forEach((word, index) => {
+    const progress = index < nextFullWordCount
+      ? 100
+      : (index === nextPartialWordIndex ? nextPartialProgress : 0);
+    setLyricWordProgress(word, progress);
+  });
+}
+
 function getNextLyricTimelineEntry(activeIndex) {
   const cachedTimelineIndex = state.activeLyricTimelineIndex;
   const currentEntry = state.lyricTimeline[cachedTimelineIndex];
@@ -9070,7 +9461,7 @@ function scrollActiveImmersiveQueueItem() {
     const activeItem = immersiveUpNextList.querySelector(".immersive-queue-item.active");
 
     if (activeItem) {
-      activeItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      scrollElementIntoContainerView(immersiveUpNextList, activeItem, { block: "nearest", behavior: "smooth" });
     }
   });
 }
@@ -9088,7 +9479,7 @@ function locateCurrentImmersiveQueueTrack() {
     return;
   }
 
-  activeItem.scrollIntoView({ block: "center", behavior: "smooth" });
+  scrollElementIntoContainerView(immersiveUpNextList, activeItem, { block: "center", behavior: "smooth" });
   activeItem.classList.add("located");
   setTimeout(() => activeItem.classList.remove("located"), 1000);
   setLibraryStatus("已在沉浸队列定位当前歌曲。");
@@ -9757,7 +10148,7 @@ function syncSearchSuggestActiveItem() {
   item.classList.add("active");
   item.closest(".search-suggest-item")?.classList.add("active");
   searchInput.setAttribute("aria-activedescendant", item.id);
-  item.scrollIntoView({ block: "nearest" });
+  scrollElementIntoContainerView(searchSuggestList, item.closest(".search-suggest-item") || item, { block: "nearest", behavior: "auto" });
 }
 
 function clearSearchSuggestActiveItems() {

@@ -585,6 +585,7 @@ function checkPageState(check, page) {
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
   const enhancedTailWordProgress = lyricProgress.enhancedTailWordProgress || {};
   const relativeEnhancedProgress = lyricProgress.relativeEnhancedProgress || {};
+  const bilingualEnhancedProgress = lyricProgress.bilingualEnhancedProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
@@ -679,6 +680,12 @@ function checkPageState(check, page) {
   assert(relativeEnhancedProgress.wordProgress?.[0] === 100, `${label} relative enhanced lyric first word should complete at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.wordProgress?.[1] > 0 && relativeEnhancedProgress.wordProgress?.[1] < 100, `${label} relative enhanced lyric second word should be partially highlighted at 80.75s: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
   assert(relativeEnhancedProgress.wordProgress?.[2] === 0, `${label} relative enhanced lyric third word should wait for its own line-relative timestamp: ${JSON.stringify(relativeEnhancedProgress.wordProgress)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.length === 2, `${label} bilingual enhanced lyric should render original and translated word groups: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.[0]?.timed === true && bilingualEnhancedProgress.wordGroups?.[1]?.timed === true, `${label} bilingual enhanced lyric groups should both use timed words: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[0] === 100, `${label} bilingual original first word should complete: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[0]?.wordProgress?.[1] < 100, `${label} bilingual original second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} bilingual translated first word should complete: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
+  assert(bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] > 0 && bilingualEnhancedProgress.wordGroups?.[1]?.wordProgress?.[1] < 100, `${label} bilingual translated second word should be partial: ${JSON.stringify(bilingualEnhancedProgress.wordGroups)}`);
   assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
   assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
   assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);

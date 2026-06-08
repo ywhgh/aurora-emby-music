@@ -380,18 +380,27 @@ function applySourceLyricOffsetSeconds(seconds, offsetSeconds) {
 }
 
 function applyLyricPayloadSourceOffset(payload, offsetSeconds) {
-  if (!payload?.wordTimeline?.length || !offsetSeconds) {
+  if ((!payload?.wordTimeline?.length && !payload?.translatedWordTimeline?.length) || !offsetSeconds) {
     return payload;
   }
 
   return {
     ...payload,
-    wordTimeline: payload.wordTimeline.map((word) => ({
-      ...word,
-      time: applySourceLyricOffsetSeconds(word.time, offsetSeconds),
-      ...(Number.isFinite(word.endTime) ? { endTime: applySourceLyricOffsetSeconds(word.endTime, offsetSeconds) } : {}),
-    })),
+    ...(payload.wordTimeline?.length
+      ? { wordTimeline: shiftLyricWordTimelineBySourceOffset(payload.wordTimeline, offsetSeconds) }
+      : {}),
+    ...(payload.translatedWordTimeline?.length
+      ? { translatedWordTimeline: shiftLyricWordTimelineBySourceOffset(payload.translatedWordTimeline, offsetSeconds) }
+      : {}),
   };
+}
+
+function shiftLyricWordTimelineBySourceOffset(timeline, offsetSeconds) {
+  return timeline.map((word) => ({
+    ...word,
+    time: applySourceLyricOffsetSeconds(word.time, offsetSeconds),
+    ...(Number.isFinite(word.endTime) ? { endTime: applySourceLyricOffsetSeconds(word.endTime, offsetSeconds) } : {}),
+  }));
 }
 
 function parseInlineLyricWordTimeline(text, inlineTimePattern) {
@@ -568,6 +577,7 @@ function mergeBilingualTimedLines(lines) {
         time: group[0].time,
         text: texts[0] || "",
         ...(timedWordLine ? { wordTimeline: timedWordLine.wordTimeline } : {}),
+        ...(timedWordLine?.translatedWordTimeline ? { translatedWordTimeline: timedWordLine.translatedWordTimeline } : {}),
       };
     }
 
@@ -575,14 +585,53 @@ function mergeBilingualTimedLines(lines) {
     const originalText = texts
       .filter((value) => value !== translatedText)
       .join(" / ");
+    const originalTimeline = findTimedWordTimelineForText(group, originalText)
+      || findTimedWordTimelineForText(group, originalText.split(" / ")[0])
+      || (!findTimedWordTimelineForText(group, translatedText) ? timedWordLine?.wordTimeline : null);
+    const translatedTimeline = findTimedWordTimelineForText(group, translatedText, "translatedWordTimeline")
+      || findTimedWordTimelineForText(group, translatedText);
 
     return {
       time: group[0].time,
       text: translatedText,
       originalText,
-      ...(timedWordLine ? { wordTimeline: timedWordLine.wordTimeline } : {}),
+      ...(originalTimeline?.length ? { wordTimeline: originalTimeline } : {}),
+      ...(translatedTimeline?.length ? { translatedWordTimeline: translatedTimeline } : {}),
     };
   }).filter((line) => line.text);
+}
+
+function findTimedWordTimelineForText(lines, text, timelineKey = "wordTimeline") {
+  const targetText = String(text || "").trim();
+
+  if (!targetText) {
+    return null;
+  }
+
+  const matchingLine = lines.find((line) => {
+    const timeline = line?.[timelineKey];
+    return Array.isArray(timeline)
+      && timeline.length
+      && normalizeLyricTextForTimeline(timeline.map((word) => word?.value || "").join("")) === normalizeLyricTextForTimeline(targetText);
+  });
+
+  if (matchingLine) {
+    return matchingLine[timelineKey];
+  }
+
+  const directLine = lines.find((line) => {
+    const timeline = line?.[timelineKey];
+    return Array.isArray(timeline)
+      && timeline.length
+      && !line.originalText
+      && normalizeLyricTextForTimeline(line.text) === normalizeLyricTextForTimeline(targetText);
+  });
+
+  return directLine?.[timelineKey] || null;
+}
+
+function normalizeLyricTextForTimeline(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
 }
 
 function appendUniqueText(texts, value) {

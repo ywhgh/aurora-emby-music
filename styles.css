@@ -9280,6 +9280,34 @@ body.action-sheet-open .content {
   font-weight: inherit;
 }
 
+.lyric-line .word,
+.now-lyric-focus .word {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  contain: paint;
+  vertical-align: baseline;
+}
+
+.lyric-line .word::after,
+.now-lyric-focus .word::after {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--now-accent);
+  clip-path: inset(0 calc(100% - var(--word-progress, 0%)) 0 0);
+  content: attr(data-word-text);
+  white-space: pre;
+  transform: translateZ(0);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.lyric-line.active .word::after,
+.now-lyric-focus.synced .word::after {
+  will-change: clip-path;
+}
+
 .up-next-item {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
