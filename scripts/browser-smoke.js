@@ -587,6 +587,8 @@ function checkPageState(check, page) {
   const relativeEnhancedProgress = lyricProgress.relativeEnhancedProgress || {};
   const bilingualEnhancedProgress = lyricProgress.bilingualEnhancedProgress || {};
   const bilingualSyntheticTranslationProgress = lyricProgress.bilingualSyntheticTranslationProgress || {};
+  const bilingualSyntheticSpacedTranslationProgress = lyricProgress.bilingualSyntheticSpacedTranslationProgress || {};
+  const bilingualSyntheticOriginalProgress = lyricProgress.bilingualSyntheticOriginalProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
@@ -691,6 +693,14 @@ function checkPageState(check, page) {
   assert(bilingualSyntheticTranslationProgress.wordGroups?.[0]?.timed === true && bilingualSyntheticTranslationProgress.wordGroups?.[1]?.timed === true, `${label} translated line without own timing should synthesize timed words from original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
   assert(bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[0] === 100, `${label} synthetic translated first word should complete with original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
   assert(bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[1] > 0 && bilingualSyntheticTranslationProgress.wordGroups?.[1]?.wordProgress?.[1] < 100, `${label} synthetic translated second word should be partial with original timing: ${JSON.stringify(bilingualSyntheticTranslationProgress.wordGroups)}`);
+  assert(/good night/.test(bilingualSyntheticSpacedTranslationProgress.activeLineText || ""), `${label} synthetic translated spaced words should preserve spaces: ${bilingualSyntheticSpacedTranslationProgress.activeLineText || "-"}`);
+  assert(bilingualSyntheticSpacedTranslationProgress.wordGroups?.[1]?.wordCount === 2, `${label} synthetic translated spaced words should keep two timed English words: ${JSON.stringify(bilingualSyntheticSpacedTranslationProgress.wordGroups)}`);
+  assert(bilingualSyntheticSpacedTranslationProgress.wordGroups?.[1]?.timed === true, `${label} synthetic translated spaced words should be timed: ${JSON.stringify(bilingualSyntheticSpacedTranslationProgress.wordGroups)}`);
+  assert(/Hello world/.test(bilingualSyntheticOriginalProgress.activeLineText || ""), `${label} synthetic original spaced words should preserve spaces: ${bilingualSyntheticOriginalProgress.activeLineText || "-"}`);
+  assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.wordCount === 2, `${label} original line without own timing should synthesize two English timed words from translated timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
+  assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.timed === true && bilingualSyntheticOriginalProgress.wordGroups?.[1]?.timed === true, `${label} bilingual original/translated groups should both be timed when only translation has timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
+  assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.wordProgress?.[0] === 100, `${label} synthetic original first word should complete with translated timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
+  assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.wordProgress?.[1] > 0 && bilingualSyntheticOriginalProgress.wordGroups?.[0]?.wordProgress?.[1] < 100, `${label} synthetic original second word should be partial with translated timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
   assert(denseWordPerformance.wordCount === 72, `${label} dense lyric scenario should render 72 timed words, got ${denseWordPerformance.wordCount || 0}`);
   assert(denseWordPerformance.sampleCount === 180, `${label} dense lyric scenario should run 180 progress samples, got ${denseWordPerformance.sampleCount || 0}`);
   assert(denseWordPerformance.progressWriteCount > 60 && denseWordPerformance.progressWriteCount < 260, `${label} dense lyric progress should only write changed clip progress values: ${JSON.stringify(denseWordPerformance)}`);
@@ -719,6 +729,9 @@ function checkPageState(check, page) {
   assert(topLyricShard.text === "满世界嘻嘻哈哈", `${label} top lyric shard text mismatch: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.charCount === 7, `${label} top lyric shard should split 7 characters: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.timingCount === 7, `${label} top lyric shard should map character timings: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bilingualGroupStates?.length === 2, `${label} top lyric should render bilingual character groups: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bilingualGroupStates?.[0]?.role === "original" && topLyricShard.bilingualGroupStates?.[0]?.timingCount === 10, `${label} top lyric original should synthesize character timing from translated timing: ${JSON.stringify(topLyricShard)}`);
+  assert(topLyricShard.bilingualGroupStates?.[1]?.role === "translated" && topLyricShard.bilingualGroupStates?.[1]?.timingCount === 2, `${label} top lyric translated should keep own character timing: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.firstSpanClass?.includes("is-sharded"), `${label} top lyric shard trigger should hide the activated character: ${JSON.stringify(topLyricShard)}`);
   if (check.name !== "mobile") {
     assert(topLyricShard.canvasCountAfterTrigger >= 1, `${label} top lyric shard trigger should create a canvas: ${JSON.stringify(topLyricShard)}`);

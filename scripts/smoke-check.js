@@ -263,6 +263,10 @@ function checkLyrics() {
   assert(app.includes("function updateInlineLyricProgress"), "Inline lyric surfaces should update word progress");
   assert(app.includes("function updateLyricProgressGroups"), "Immersive lyrics should update original and translated word groups together");
   assert(app.includes("function synthesizeTranslatedLyricWordTimeline"), "Translated lyrics without timed words should synthesize a display-only word timeline from the original timing");
+  assert(app.includes("function synthesizeLyricWordTimelineFromSource"), "Original or translated lyrics without timed words should share the same display-only synthesis helper");
+  assert(/options\.role === "original"[\s\S]*?line\?\.translatedWordTimeline[\s\S]*?synthesizeLyricWordTimelineFromSource\(fallbackText, line\.translatedWordTimeline\)/.test(app), "Original lyrics without timed words should synthesize display-only timing from translated timing");
+  assert(/function synthesizeTranslatedLyricWordTimeline\(text, sourceTimeline\) \{[\s\S]*?const parts = segmentLyricWords\(text\);[\s\S]*?if \(part\.type === "space"\) \{[\s\S]*?return \{ value: part\.value \};/.test(app), "Synthetic translated word timing should preserve spaces in translated text");
+  assert(app.includes("if (/^\\s+$/.test(value))"), "Lyric word parts should preserve synthetic space entries as a single space node");
   assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
   assert(index.includes('data-lyric-offset-adjust="later"'), "Lyrics panel should expose a button for lyrics that are too fast");
   assert(index.includes("data-lyric-offset-reset"), "Lyrics panel should expose a lyric offset reset button");

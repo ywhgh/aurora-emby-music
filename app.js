@@ -1645,6 +1645,46 @@ function runLyricProgressScenario() {
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
   updateLyricsHighlight(0.75, true);
   const bilingualSyntheticTranslationProgress = collectBrowserSmokeLyricState();
+  const bilingualSyntheticSpacedTranslationTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-bilingual-synthetic-spaced-translation-lyric-track",
+    name: "Browser Smoke Bilingual Synthetic Spaced Translation Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]<0.00>你<0.60>好",
+      "[00:00.00]good night",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = bilingualSyntheticSpacedTranslationTrack;
+  state.queue = [bilingualSyntheticSpacedTranslationTrack];
+  state.tracks = [bilingualSyntheticSpacedTranslationTrack];
+  state.filteredTracks = [bilingualSyntheticSpacedTranslationTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(bilingualSyntheticSpacedTranslationTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualSyntheticSpacedTranslationProgress = collectBrowserSmokeLyricState();
+  const bilingualSyntheticOriginalTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-bilingual-synthetic-original-lyric-track",
+    name: "Browser Smoke Bilingual Synthetic Original Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]Hello world",
+      "[00:00.00]<0.00>你<0.60>好",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = bilingualSyntheticOriginalTrack;
+  state.queue = [bilingualSyntheticOriginalTrack];
+  state.tracks = [bilingualSyntheticOriginalTrack];
+  state.filteredTracks = [bilingualSyntheticOriginalTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(bilingualSyntheticOriginalTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualSyntheticOriginalProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
@@ -1690,6 +1730,8 @@ function runLyricProgressScenario() {
     relativeEnhancedProgress,
     bilingualEnhancedProgress,
     bilingualSyntheticTranslationProgress,
+    bilingualSyntheticSpacedTranslationProgress,
+    bilingualSyntheticOriginalProgress,
     denseWordPerformance,
     endScrollLayout,
     topLyricShard,
@@ -1731,6 +1773,31 @@ function collectBrowserSmokeTopLyricShardState() {
   cancelTopLyricShardEffects();
   const canvasCountAfterCleanup = topLyricFocus?.querySelectorAll(".top-lyric-shard-canvas").length || 0;
   const animationFrameAfterCleanup = topLyricShardAnimationFrame;
+  const bilingualFallbackTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-top-lyric-bilingual-fallback-track",
+    name: "Browser Smoke Top Lyric Bilingual Fallback Track",
+    durationSeconds: 12,
+    lyricsText: [
+      "[00:00.00]Hello world",
+      "[00:00.00]<0.00>你<0.60>好",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = bilingualFallbackTrack;
+  state.queue = [bilingualFallbackTrack];
+  state.tracks = [bilingualFallbackTrack];
+  state.filteredTracks = [bilingualFallbackTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(bilingualFallbackTrack);
+  setPlayerEnabled(true);
+  switchView("home", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.75, true);
+  const bilingualGroupStates = topLyricCharacterGroups.map((group) => ({
+    role: group.role,
+    charCount: group.spans.length,
+    timingCount: group.timings.filter(Number.isFinite).length,
+    shard: Boolean(group.shard),
+  }));
   switchView("immersivePlayer", { updateHash: false, resetScroll: true });
 
   return {
@@ -1742,6 +1809,7 @@ function collectBrowserSmokeTopLyricShardState() {
     animationFrameAfterTrigger,
     canvasCountAfterCleanup,
     animationFrameAfterCleanup,
+    bilingualGroupStates,
   };
 }
 
@@ -7060,12 +7128,9 @@ function appendLyricWordParts(container, parts, group) {
 }
 
 function createLyricWordGroup(line, text, options = {}) {
-  const timeline = Array.isArray(options.timeline) ? options.timeline : [];
   const fallbackText = options.fallbackText || text || " ";
-  const fallbackTimeline = timeline.length
-    ? timeline
-    : getFallbackLyricWordTimeline(line, fallbackText, options);
-  const parts = getLyricWordParts({ wordTimeline: fallbackTimeline }, fallbackText);
+  const displayTimeline = getDisplayLyricWordTimeline(line, fallbackText, options);
+  const parts = getLyricWordParts({ wordTimeline: displayTimeline }, fallbackText);
 
   return {
     role: options.role || "line",
@@ -7080,15 +7145,29 @@ function createLyricWordGroup(line, text, options = {}) {
 }
 
 function getFallbackLyricWordTimeline(line, fallbackText, options = {}) {
-  if (options.role !== "translated" || !Array.isArray(line?.wordTimeline) || !line.wordTimeline.length) {
-    return [];
+  if (options.role === "translated" && Array.isArray(line?.wordTimeline) && line.wordTimeline.length) {
+    return synthesizeTranslatedLyricWordTimeline(fallbackText, line.wordTimeline);
   }
 
-  return synthesizeTranslatedLyricWordTimeline(fallbackText, line.wordTimeline);
+  if (options.role === "original" && Array.isArray(line?.translatedWordTimeline) && line.translatedWordTimeline.length) {
+    return synthesizeLyricWordTimelineFromSource(fallbackText, line.translatedWordTimeline);
+  }
+
+  return [];
+}
+
+function getDisplayLyricWordTimeline(line, fallbackText, options = {}) {
+  const timeline = Array.isArray(options.timeline) ? options.timeline : [];
+  return timeline.length ? timeline : getFallbackLyricWordTimeline(line, fallbackText, options);
 }
 
 function synthesizeTranslatedLyricWordTimeline(text, sourceTimeline) {
-  const wordParts = segmentLyricWords(text).filter((part) => part.type === "word");
+  return synthesizeLyricWordTimelineFromSource(text, sourceTimeline);
+}
+
+function synthesizeLyricWordTimelineFromSource(text, sourceTimeline) {
+  const parts = segmentLyricWords(text);
+  const wordParts = parts.filter((part) => part.type === "word");
 
   if (!wordParts.length || !sourceTimeline?.length) {
     return [];
@@ -7108,10 +7187,16 @@ function synthesizeTranslatedLyricWordTimeline(text, sourceTimeline) {
     ? Number(sourceWords[sourceWords.length - 1].time) + getSynthesizedLyricTailDurationSeconds(lastSourceWord)
     : start + Math.max(0.8, wordParts.length * 0.16);
   const duration = Math.max(0.18, sourceEnd - start);
+  let wordIndex = 0;
 
-  return wordParts.map((part, index) => {
-    const wordStart = start + ((duration * index) / Math.max(1, wordParts.length));
-    const wordEnd = start + ((duration * (index + 1)) / Math.max(1, wordParts.length));
+  return parts.map((part) => {
+    if (part.type === "space") {
+      return { value: part.value };
+    }
+
+    const wordStart = start + ((duration * wordIndex) / Math.max(1, wordParts.length));
+    const wordEnd = start + ((duration * (wordIndex + 1)) / Math.max(1, wordParts.length));
+    wordIndex += 1;
     return {
       value: part.value,
       time: wordStart,
@@ -7986,7 +8071,7 @@ function buildTopLyricCharacterTimings(text, line, options = {}) {
     return [];
   }
 
-  const wordTimeline = Array.isArray(options.timeline) ? options.timeline : [];
+  const wordTimeline = getDisplayLyricWordTimeline(line, text, options);
   if (wordTimeline.length && doesTopLyricWordTimelineMatchText(text, wordTimeline)) {
     return mapTopLyricWordTimelineToCharacters(characters, wordTimeline, Number(line?.time));
   }
@@ -8112,7 +8197,7 @@ function updateTopLyricShardFrame() {
 
   if (nextIndex >= 0) {
     if (shouldAlignTopLyricShardCatchup(nextIndex, lyricSeconds, shardGroup)) {
-      alignTopLyricShardStateToIndex(nextIndex);
+      alignTopLyricShardStateToIndex(nextIndex, lyricSeconds);
       syncTopLyricShardLoop();
       return;
     }
@@ -8193,10 +8278,10 @@ function triggerTopLyricGroupCharacter(group, index, options = {}) {
 
 function alignTopLyricShardStateToTime(lyricSeconds) {
   const currentIndex = findTopLyricShardIndex(lyricSeconds, getTopLyricShardGroup());
-  alignTopLyricShardStateToIndex(currentIndex);
+  alignTopLyricShardStateToIndex(currentIndex, lyricSeconds);
 }
 
-function alignTopLyricShardStateToIndex(currentIndex) {
+function alignTopLyricShardStateToIndex(currentIndex, lyricSeconds = NaN) {
   const shardGroup = getTopLyricShardGroup();
   shardGroup?.spans.forEach((span, index) => {
     span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(shardGroup.timings[index]));
@@ -8205,7 +8290,9 @@ function alignTopLyricShardStateToIndex(currentIndex) {
   if (shardGroup) {
     shardGroup.triggeredIndex = currentIndex;
   }
-  syncTopLyricProgressGroupsToIndex(currentIndex);
+  syncTopLyricProgressGroupsToTime(
+    Number.isFinite(lyricSeconds) ? lyricSeconds : shardGroup?.timings?.[currentIndex]
+  );
 }
 
 function syncTopLyricProgressGroups(lyricSeconds) {
@@ -8226,12 +8313,13 @@ function syncTopLyricProgressGroups(lyricSeconds) {
   });
 }
 
-function syncTopLyricProgressGroupsToIndex(currentIndex) {
+function syncTopLyricProgressGroupsToTime(lyricSeconds) {
   topLyricCharacterGroups.forEach((group) => {
     if (!group || group.shard) {
       return;
     }
 
+    const currentIndex = findTopLyricShardIndex(lyricSeconds, group);
     group.spans.forEach((span, index) => {
       span?.classList.toggle("is-sharded", index <= currentIndex && Number.isFinite(group.timings[index]));
     });
@@ -8813,6 +8901,10 @@ function getLyricWordParts(line, fallbackText) {
 
   return timeline.flatMap((entry) => {
     const value = String(entry?.value || "");
+    if (/^\s+$/.test(value)) {
+      return [{ type: "space", value }];
+    }
+
     const leadingSpace = value.match(/^\s+/)?.[0] || "";
     const trailingSpace = value.match(/\s+$/)?.[0] || "";
     const text = value.trim();
