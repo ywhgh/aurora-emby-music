@@ -182,6 +182,19 @@ function checkCss() {
   assert(css.includes(".top-lyric-shard-canvas"), "Topbar lyric shard effect should render temporary canvases");
   assert(/\.lyric-line \.lyric-original \{[\s\S]*?font-size:\s*0\.8rem;/.test(css), "Bilingual lyric original text should be smaller than the translated text");
   assert(/\.lyric-line \.lyric-translated \{[\s\S]*?font-size:\s*1rem;/.test(css), "Bilingual lyric translated text should be larger than the original text");
+  assert(css.includes("Mobile refinement layer"), "Mobile refinement layer should stay as the final phone layout guard");
+  assert(/body\.immersive-player-open \.playerbar,\s*body\.immersive-player-open \.mobile-bottom-nav,\s*body\.immersive-player-open \.mobile-nav[\s\S]*?display:\s*none !important;/.test(css), "Immersive mobile playback should hide shared player and bottom navigation");
+  assert(/\.login-view \.login-shell \{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/.test(css), "Mobile login shell should not crop saved accounts or the form");
+  assert(/\.login-view \.login-card \{[\s\S]*?order:\s*1;/.test(css), "Mobile login form should appear before the icon showcase");
+  assert(/\.login-view \.login-intro \{[\s\S]*?order:\s*2;/.test(css), "Mobile login icon showcase should appear below the form tools");
+  assert(/\.status-grid \{[\s\S]*?display:\s*flex;[\s\S]*?overflow-x:\s*auto;[\s\S]*?scroll-snap-type:\s*x mandatory;/.test(css), "Mobile home stats should be a one-card horizontal snap scroller");
+  assert(/\.status-grid::-webkit-scrollbar \{[\s\S]*?display:\s*none;/.test(css), "Mobile home stats should hide the horizontal scrollbar");
+  assert(/\.status-grid \.info-card \{[\s\S]*?flex:\s*0 0 100%;[\s\S]*?scroll-snap-align:\s*start;/.test(css), "Mobile home stat cards should show one card per row while swiping");
+  assert(/\.immersive-main h2 \{[\s\S]*?font-size:\s*1\.08rem;/.test(css), "Mobile immersive title should use compact phone typography");
+  assert(/\.immersive-lyric-list \.lyric-line,\s*\.immersive-lyric-list p \{[\s\S]*?font-size:\s*1\.02rem;/.test(css), "Mobile immersive lyrics should use compact phone typography");
+  assert(/\.immersive-lyric-offset-controls button \{[\s\S]*?border-radius:\s*50%;/.test(css), "Immersive lyric offset controls should be icon buttons");
+  assert(/\.immersive-empty-actions \.primary-mini-button,[\s\S]*?\.immersive-empty-actions \.secondary-mini-button \{[\s\S]*?font-size:\s*0;/.test(css), "Immersive empty actions should hide visible text and show icons");
+  assert(/\.immersive-queue-tools button \{[\s\S]*?border-radius:\s*50%;[\s\S]*?font-size:\s*0;/.test(css), "Immersive queue tools should use icon-only buttons");
 }
 
 function checkLyrics() {
@@ -283,6 +296,11 @@ function checkLyrics() {
   assert(index.includes('data-lyric-offset-adjust="earlier"'), "Lyrics panel should expose a button for lyrics that are too slow");
   assert(index.includes('data-lyric-offset-adjust="later"'), "Lyrics panel should expose a button for lyrics that are too fast");
   assert(index.includes("data-lyric-offset-reset"), "Lyrics panel should expose a lyric offset reset button");
+  assert(/id="immersiveLyricOffsetSlowerButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">/.test(index), "Immersive lyric offset buttons should be icon-only with screen-reader text");
+  assert(/id="immersiveShuffleStartButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">随机播放<\/span>/.test(index), "Immersive empty shuffle action should be icon-only");
+  assert(/id="immersiveQueueLocateButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">定位当前歌曲<\/span>/.test(index), "Immersive queue locate action should be icon-only");
+  assert(!/id="immersiveLyricOffsetSlowerButton"[^>]*>慢了<\/button>/.test(index), "Immersive lyric offset should not expose visible text buttons");
+  assert(!/id="immersiveQueueShuffleButton"[\s\S]*?>\s*<svg[\s\S]*?随机后续\s*<\/button>/.test(index), "Immersive queue tools should not expose visible text labels");
   assert(css.includes(".lyric-offset-controls"), "Lyric offset controls should have scoped styles");
   assert(app.includes('LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds"'), "Lyric offset should be persisted in localStorage");
   assert(app.includes("DEFAULT_LYRIC_OFFSET_SECONDS = 0.18"), "Lyric offset should preserve the previous default lead");
@@ -300,6 +318,12 @@ function checkLyrics() {
   assert(app.includes("function syncLyricPlaybackClock"), "Lyric playback clock should be explicitly synchronized");
   assert(app.includes("function getLyricPlaybackTimeSeconds"), "Lyric word progress should read from a smooth playback clock");
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
+  assert(app.includes("LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS"), "Lyric smooth clock should define a guarded resync threshold");
+  assert(app.includes("function maybeSyncLyricPlaybackClock"), "Lyric smooth clock should avoid small timeupdate resync jitter");
+  assert(/function handleAudioTimeUpdate\(\) \{\s*maybeSyncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\);/.test(app), "Audio timeupdate should use guarded lyric clock resync before progress rendering");
+  assert(/function shouldSyncLyricsFromProgressUpdate\(\) \{\s*return !shouldDeferLyricClockSync\(\);/.test(app), "Progress updates should reuse the guarded RAF lyric handoff condition");
+  assert(/Math\.abs\(audioSeconds - lyricSeconds\) >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS/.test(app), "Guarded lyric clock resync should still correct real clock drift");
+  assert(/syncLyricPlaybackClock\(\{ \.\.\.options, running: true \}\);/.test(app), "Guarded lyric drift resync should keep the RAF lyric clock running");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
   assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap fallback line durations when no next line is available");
   assert(app.includes("LYRIC_TIMED_WORD_MAX_DURATION_SECONDS"), "Timed lyric words should cap fallback word duration when no line end is available");
@@ -322,9 +346,7 @@ function checkLyrics() {
   assert(!/function updateLyricProgressFrame\(\) \{[\s\S]*?updateLyricsHighlight\(getAudioCurrentTimeSeconds\(\)\);/.test(app), "RAF lyric progress should not depend on discrete audio.currentTime reads");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?syncLyricPlaybackClock\(\{ running: true \}\);[\s\S]*?refreshLyricsForPlaybackResume\(\);/.test(app), "Audio play should immediately refresh lyrics from the smooth playback clock");
   assert(/function handleAudioPause\(\) \{[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Audio pause should freeze the smooth lyric playback clock");
-  assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\);/.test(app), "Audio timeupdate should recalibrate the smooth lyric playback clock");
   assert(app.includes("function shouldSyncLyricsFromProgressUpdate"), "Progress updates should avoid competing with the immersive lyric RAF loop");
-  assert(/function shouldSyncLyricsFromProgressUpdate\(\) \{[\s\S]*?areSmoothLyricSurfacesVisible\(\)[\s\S]*?&& lyricClockIsRunning[\s\S]*?&& \(lyricProgressFrame \|\| lyricProgressResumeTimer\)/.test(app), "Progress update lyric sync should defer to the active smooth lyric clock and RAF loop");
   assert(/if \(shouldSyncLyrics && shouldSyncLyricsFromProgressUpdate\(\)\) \{[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(current\)\);/.test(app), "Playback timeupdate should not double-drive immersive word progress while RAF is active");
   assert(/function handleAudioSeeked\(\) \{[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\{ syncLyrics: false \}\);[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Audio seeked should recalibrate and force-refresh lyrics");
   assert(app.includes('audioPlayer.addEventListener("ratechange", handleAudioRateChange)'), "Playback rate changes should recalibrate lyric timing");
@@ -518,6 +540,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
+  assert(browserSmoke.includes("stableTimeUpdateKeptLyricClock"), "Browser smoke should verify stable timeupdates do not reset the lyric RAF clock");
+  assert(browserSmoke.includes("driftTimeUpdateResyncedLyricClock"), "Browser smoke should verify drifted timeupdates still resync the lyric clock");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
   assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");

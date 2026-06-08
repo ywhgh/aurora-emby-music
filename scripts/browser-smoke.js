@@ -722,6 +722,8 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.rafTimeUpdateProgressWriteCount === 0, `${label} active RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.regularTimeUpdateProgressWriteCount >= 0, `${label} regular timeupdate lyric sync should remain measurable after RAF handoff is disabled: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingRafTimeUpdateProgressWriteCount === 0, `${label} now-playing RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.stableTimeUpdateKeptLyricClock === true, `${label} stable timeupdate should not reset the smooth lyric clock during RAF word progress: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.driftTimeUpdateResyncedLyricClock === true, `${label} drifted timeupdate should still resync the smooth lyric clock: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.hotPathFrameCount > denseWordPerformance.fullHighlightFrameCount, `${label} dense lyric progress should use the direct RAF hot path for most frames: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingHotPathFrameCount >= 40, `${label} now-playing lyrics should use the smooth RAF hot path: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingActiveIndex === 0, `${label} now-playing lyric hot path should stay on the active dense line: ${JSON.stringify(denseWordPerformance)}`);

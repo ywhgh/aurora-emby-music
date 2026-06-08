@@ -9563,9 +9563,26 @@ body.action-sheet-open .content {
   gap: 0.34rem;
 }
 
-.immersive-lyric-offset-controls button,
-.immersive-lyric-offset-controls .lyric-offset-value {
+.immersive-lyric-offset-controls button {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
   min-height: 2rem;
+  place-items: center;
+  padding: 0;
+  border-color: rgba(255, 244, 229, 0.16);
+  border-radius: 50%;
+  background: rgba(255, 244, 229, 0.08);
+  color: rgba(255, 244, 229, 0.78);
+}
+
+.immersive-lyric-offset-controls .lyric-offset-value {
+  display: inline-grid;
+  min-height: 2rem;
+  place-items: center;
+  padding: 0 0.72rem;
+  border-radius: 999px;
   border-color: rgba(255, 244, 229, 0.16);
   background: rgba(255, 244, 229, 0.08);
   color: rgba(255, 244, 229, 0.78);
@@ -9581,6 +9598,11 @@ body.action-sheet-open .content {
 .immersive-lyric-offset-controls .lyric-offset-value {
   background: rgba(236, 65, 65, 0.18);
   color: var(--immersive-control-active);
+}
+
+.immersive-lyric-offset-controls button .line-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .immersive-round-button,
@@ -9721,7 +9743,7 @@ body.action-sheet-open .content {
 
 .immersive-empty-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.55rem;
   margin-top: 1rem;
 }
@@ -9730,8 +9752,23 @@ body.action-sheet-open .content {
   display: none;
 }
 
+.immersive-empty-actions .primary-mini-button,
+.immersive-empty-actions .secondary-mini-button {
+  display: inline-grid;
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+}
+
 .immersive-empty-actions .primary-mini-button {
-  box-shadow: 0 12px 32px rgba(236, 65, 65, 0.3);
+  background: rgba(255, 244, 229, 0.18);
+  box-shadow: 0 12px 32px rgba(236, 65, 65, 0.18);
+  color: rgba(255, 244, 229, 0.96);
 }
 
 .immersive-empty-actions .secondary-mini-button {
@@ -9739,8 +9776,18 @@ body.action-sheet-open .content {
   color: rgba(255, 244, 229, 0.82);
 }
 
-.immersive-empty-actions .secondary-mini-button:hover {
+.immersive-empty-actions .primary-mini-button:hover,
+.immersive-empty-actions .primary-mini-button:focus-visible,
+.immersive-empty-actions .secondary-mini-button:hover,
+.immersive-empty-actions .secondary-mini-button:focus-visible {
   background: rgba(255, 244, 229, 0.16);
+  color: rgba(255, 244, 229, 0.98);
+}
+
+.immersive-empty-actions .line-icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  color: currentColor;
 }
 
 .immersive-empty-actions button:disabled {
@@ -10150,25 +10197,25 @@ body.action-sheet-open .content {
 }
 
 .immersive-queue-tools {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
   padding: 0 1rem 0.75rem;
 }
 
 .immersive-queue-tools button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-width: 0;
+  display: inline-grid;
+  width: 2.3rem;
+  min-width: 2.3rem;
+  height: 2.3rem;
   min-height: 2.3rem;
-  padding: 0 0.7rem;
+  place-items: center;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.82rem;
+  font-size: 0;
   font-weight: 740;
   transition:
     border-color 180ms ease,
@@ -10196,8 +10243,8 @@ body.action-sheet-open .content {
 }
 
 .immersive-queue-tools .line-icon {
-  width: 1rem;
-  height: 1rem;
+  width: 1.08rem;
+  height: 1.08rem;
   color: currentColor;
 }
 
@@ -11958,7 +12005,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .brand-row {
-    gap: 0.62rem;
+    gap: 0.5rem;
   }
 
   .brand-mark {
@@ -14066,5 +14113,489 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     min-height: 42px !important;
     max-height: 42px !important;
     flex-basis: 42px !important;
+  }
+}
+
+/* Mobile refinement layer: keep desktop untouched while correcting phone proportions. */
+@media (max-width: 620px) {
+  body.immersive-player-open .playerbar,
+  body.immersive-player-open .mobile-bottom-nav,
+  body.immersive-player-open .mobile-nav {
+    display: none !important;
+  }
+
+  .login-view {
+    width: 100%;
+    max-width: 100vw;
+    min-height: 100dvh;
+    height: auto;
+    align-items: start;
+    justify-items: stretch;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: max(0.62rem, env(safe-area-inset-top)) 0.7rem max(0.9rem, env(safe-area-inset-bottom));
+  }
+
+  .login-view .login-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: start;
+    gap: 0.62rem;
+    overflow: visible;
+  }
+
+  .login-view .login-card {
+    order: 1;
+  }
+
+  .login-view .login-intro {
+    order: 2;
+  }
+
+  .login-view .login-intro,
+  .login-view .login-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    border-radius: 14px;
+  }
+
+  .login-view .login-intro {
+    gap: 0.48rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .login-view .brand-row {
+    display: none;
+  }
+
+  .login-view .brand-mark {
+    width: 2.18rem;
+    height: 2.18rem;
+    border-radius: 10px;
+  }
+
+  .login-view .brand-row strong {
+    font-size: 0.94rem;
+  }
+
+  .login-view .cover-showcase {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.38rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .login-view .showcase-card {
+    width: auto !important;
+    max-width: none !important;
+    height: clamp(3.15rem, 17vw, 3.7rem);
+    min-height: 0;
+    padding: 0.38rem;
+    border-radius: 12px;
+  }
+
+  .login-view .feature-icon {
+    width: clamp(2.22rem, 12vw, 2.72rem);
+    height: clamp(2.22rem, 12vw, 2.72rem);
+    max-width: none;
+    max-height: none;
+  }
+
+  .login-view .login-card {
+    max-height: none;
+    align-self: start;
+    padding: 0.7rem;
+  }
+
+  .login-view .form-heading h2 {
+    font-size: 1.22rem;
+    line-height: 1.18;
+  }
+
+  .login-view .login-source-mode {
+    margin-top: 0.56rem;
+  }
+
+  .login-view .saved-accounts {
+    max-height: min(10.5rem, 26dvh);
+    overflow: auto;
+    margin-top: 0.52rem;
+    padding: 0.46rem;
+  }
+
+  .login-view .field {
+    margin-top: 0.5rem;
+  }
+
+  .login-view .field input {
+    height: 2.32rem;
+  }
+
+  .login-view .login-device-options,
+  .login-view .login-actions {
+    margin-top: 0.56rem;
+  }
+
+  .login-view .primary-button,
+  .login-view .secondary-login-button {
+    min-height: 2.34rem;
+  }
+
+  .hero-side,
+  .status-grid {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .status-grid {
+    display: flex;
+    grid-template-columns: none;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    width: 100%;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .status-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .status-grid .info-card {
+    width: 100%;
+    min-width: 0;
+    min-height: 4.15rem;
+    flex: 0 0 100%;
+    align-content: start;
+    gap: 0.24rem;
+    scroll-snap-align: start;
+    padding: 0.62rem;
+  }
+
+  .info-card strong,
+  .info-card small,
+  .info-card span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .info-card strong {
+    font-size: 0.94rem;
+    line-height: 1.1;
+  }
+
+  .info-card small,
+  .info-card span {
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .stat-icon {
+    width: 1.64rem;
+    height: 1.64rem;
+  }
+
+  .track-list {
+    overflow: hidden;
+  }
+
+  .track-row,
+  #homeRecentPlayedList .track-row,
+  #recentTrackList .track-row,
+  .track-list.unified-track-list .track-row {
+    min-height: 3.72rem;
+    gap: 0.42rem;
+    padding: 0.52rem 0.62rem;
+    border-radius: 10px;
+  }
+
+  .track-play-area,
+  .library-track-row .track-play-area,
+  .queue-track-row .track-play-area {
+    min-height: 2.52rem;
+    gap: 0.46rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .track-main {
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .track-cover,
+  .home-track-cover {
+    width: 2.34rem;
+    height: 2.34rem;
+    flex-basis: 2.34rem;
+    border-radius: 7px;
+  }
+
+  .track-title {
+    font-size: 0.88rem;
+    line-height: 1.25;
+  }
+
+  .track-subtitle-wrap .track-link-button,
+  .track-duration {
+    font-size: 0.72rem;
+  }
+
+  .library-track-row .track-duration,
+  .queue-track-row .track-duration {
+    min-width: 2.3rem;
+  }
+
+  .track-row:not(.home-track-row) .track-actions {
+    gap: 0.12rem;
+  }
+
+  .favorite-button,
+  .track-action-button,
+  .track-row:not(.home-track-row) .track-more-button {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex-basis: 1.9rem;
+  }
+
+  .immersive-player-panel.active {
+    z-index: 220;
+  }
+
+  .immersive-player-shell {
+    grid-template-rows: 38px minmax(0, 1fr) auto;
+    min-height: 100dvh;
+    padding: max(0.42rem, env(safe-area-inset-top)) 0.8rem max(0.58rem, env(safe-area-inset-bottom));
+  }
+
+  .immersive-topbar {
+    min-height: 36px;
+  }
+
+  .immersive-top-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 0.46rem;
+  }
+
+  .immersive-lyric-offset-controls {
+    max-width: min(15.8rem, 62vw);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .immersive-lyric-offset-controls::-webkit-scrollbar {
+    display: none;
+  }
+
+  .immersive-lyric-offset-controls button,
+  .immersive-lyric-offset-controls .lyric-offset-value {
+    min-height: 1.82rem;
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  .immersive-lyric-offset-controls button {
+    width: 1.82rem;
+    min-width: 1.82rem;
+    height: 1.82rem;
+    padding: 0;
+  }
+
+  .immersive-lyric-offset-controls .lyric-offset-value {
+    padding: 0 0.54rem;
+  }
+
+  .immersive-round-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .immersive-player-shell .line-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .immersive-stage {
+    height: auto;
+    min-height: 0;
+    justify-content: start;
+    gap: 0.62rem;
+    padding: 0.2rem 0 0.46rem;
+  }
+
+  .immersive-left {
+    width: 100%;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .immersive-cover {
+    width: min(40vw, 9.8rem, 20dvh);
+    height: min(40vw, 9.8rem, 20dvh);
+    border-radius: 14px;
+  }
+
+  .immersive-main {
+    width: 100%;
+    margin-top: 0.64rem;
+    text-align: center;
+  }
+
+  .immersive-main h2 {
+    font-size: 1.08rem;
+    line-height: 1.22;
+  }
+
+  .immersive-link {
+    margin-top: 0.24rem;
+    margin-right: 0.24rem;
+    font-size: 0.78rem;
+  }
+
+  .immersive-empty-actions {
+    justify-content: center;
+    gap: 0.42rem;
+    margin-top: 0.7rem;
+  }
+
+  .immersive-empty-actions .primary-mini-button,
+  .immersive-empty-actions .secondary-mini-button {
+    width: 2.18rem;
+    min-width: 2.18rem;
+    height: 2.18rem;
+    min-height: 2.18rem;
+    padding: 0;
+  }
+
+  .immersive-lyric-focus {
+    width: 100%;
+    height: min(31dvh, 12.5rem);
+    flex: 1 1 auto;
+    padding-left: 0;
+    transform: none;
+    mask-image: linear-gradient(180deg, transparent, #000 14%, #000 86%, transparent);
+  }
+
+  .immersive-lyric-list {
+    padding: 1.15rem 0;
+  }
+
+  .immersive-lyric-list .lyric-line + .lyric-line,
+  .immersive-lyric-list p + p {
+    margin-top: 0.72rem;
+  }
+
+  .immersive-lyric-list .lyric-line,
+  .immersive-lyric-list p {
+    text-align: center;
+    font-size: 1.02rem;
+    line-height: 1.26;
+  }
+
+  .immersive-lyric-original {
+    font-size: 0.62em;
+    line-height: 1.32;
+  }
+
+  .immersive-lyric-translated {
+    margin-top: 0.12em;
+    font-size: 0.92em;
+    line-height: 1.24;
+  }
+
+  .immersive-control-deck {
+    width: 100%;
+    gap: 0.62rem;
+    padding-bottom: 0;
+  }
+
+  .immersive-progress {
+    gap: 0.5rem !important;
+  }
+
+  .immersive-time {
+    min-width: 2.2rem;
+    font-size: 0.66rem;
+  }
+
+  .immersive-player-shell .immersive-control-row {
+    justify-content: space-between;
+    gap: 0.16rem;
+    padding: 0 0.1rem;
+  }
+
+  .immersive-player-shell .immersive-control-row button,
+  .immersive-player-shell .immersive-control-row .mode-button,
+  .immersive-player-shell .immersive-control-row .queue-button,
+  .immersive-player-shell .immersive-control-row .favorite-button {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    flex: 0 0 30px !important;
+  }
+
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    flex: 0 0 40px !important;
+  }
+
+  .immersive-player-shell .immersive-control-row button .line-icon,
+  .immersive-player-shell .immersive-control-row button svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .login-view .showcase-card {
+    height: clamp(2.9rem, 16vw, 3.35rem);
+  }
+
+  .login-view .saved-accounts {
+    max-height: min(8.5rem, 24dvh);
+  }
+
+  .status-grid {
+    grid-template-columns: none;
+  }
+
+  .immersive-cover {
+    width: min(42vw, 9.6rem, 21dvh);
+    height: min(42vw, 9.6rem, 21dvh);
+  }
+
+  .immersive-main h2 {
+    font-size: 1rem;
+  }
+
+  .immersive-lyric-list .lyric-line,
+  .immersive-lyric-list p {
+    font-size: 0.96rem;
   }
 }

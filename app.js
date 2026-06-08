@@ -126,6 +126,7 @@ const LYRIC_TIMED_WORD_MIN_DURATION_SECONDS = 0.16;
 const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 3.2;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
+const LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS = 0.18;
 const TOP_LYRIC_SHARD_MIN_COUNT = 16;
 const TOP_LYRIC_SHARD_MAX_COUNT = 22;
 const TOP_LYRIC_SHARD_PADDING = 24;
@@ -1904,6 +1905,10 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   let progressWriteCountAfterRegularTimeUpdate = 0;
   let nowPlayingProgressWriteCountBeforeTimeUpdate = 0;
   let nowPlayingProgressWriteCountAfterRafTimeUpdate = 0;
+  let lyricClockStartedAtBeforeStableTimeUpdate = 0;
+  let lyricClockStartedAtAfterStableTimeUpdate = 0;
+  let lyricClockStartedAtBeforeDriftTimeUpdate = 0;
+  let lyricClockStartedAtAfterDriftTimeUpdate = 0;
   let hotPathFrameCount = 0;
   let nowPlayingHotPathFrameCount = 0;
   let fullHighlightFrameCount = 0;
@@ -1952,8 +1957,22 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     progressWriteCountBeforeTimeUpdate = progressWriteCount;
     const existingLyricProgressFrame = lyricProgressFrame;
     const existingLyricClockRunning = lyricClockIsRunning;
+    const existingLyricClockAudioSeconds = lyricClockAudioSeconds;
+    const existingLyricClockStartedAtMs = lyricClockStartedAtMs;
+    const existingLyricClockPlaybackRate = lyricClockPlaybackRate;
     lyricProgressFrame = lyricProgressFrame || 1;
     lyricClockIsRunning = true;
+    lyricClockAudioSeconds = getAudioCurrentTimeSeconds();
+    lyricClockStartedAtMs = getMonotonicNowMs();
+    lyricClockPlaybackRate = 1;
+    lyricClockStartedAtBeforeStableTimeUpdate = lyricClockStartedAtMs;
+    handleAudioTimeUpdate();
+    lyricClockStartedAtAfterStableTimeUpdate = lyricClockStartedAtMs;
+    lyricClockAudioSeconds = getAudioCurrentTimeSeconds() + 1;
+    lyricClockStartedAtMs = getMonotonicNowMs() - 1000;
+    lyricClockStartedAtBeforeDriftTimeUpdate = lyricClockStartedAtMs;
+    handleAudioTimeUpdate();
+    lyricClockStartedAtAfterDriftTimeUpdate = lyricClockStartedAtMs;
     updateProgress();
     progressWriteCountAfterRafTimeUpdate = progressWriteCount;
     lyricProgressFrame = 0;
@@ -1962,6 +1981,9 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     progressWriteCountAfterRegularTimeUpdate = progressWriteCount;
     lyricProgressFrame = existingLyricProgressFrame;
     lyricClockIsRunning = existingLyricClockRunning;
+    lyricClockAudioSeconds = existingLyricClockAudioSeconds;
+    lyricClockStartedAtMs = existingLyricClockStartedAtMs;
+    lyricClockPlaybackRate = existingLyricClockPlaybackRate;
     switchView("nowPlaying", { updateHash: false, resetScroll: true });
     progressWriteValues.clear();
     for (let index = 0; index < 45; index += 1) {
@@ -1998,6 +2020,8 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     rafTimeUpdateProgressWriteCount: progressWriteCountAfterRafTimeUpdate - progressWriteCountBeforeTimeUpdate,
     regularTimeUpdateProgressWriteCount: progressWriteCountAfterRegularTimeUpdate - progressWriteCountAfterRafTimeUpdate,
     nowPlayingRafTimeUpdateProgressWriteCount: nowPlayingProgressWriteCountAfterRafTimeUpdate - nowPlayingProgressWriteCountBeforeTimeUpdate,
+    stableTimeUpdateKeptLyricClock: lyricClockStartedAtAfterStableTimeUpdate === lyricClockStartedAtBeforeStableTimeUpdate,
+    driftTimeUpdateResyncedLyricClock: lyricClockStartedAtAfterDriftTimeUpdate !== lyricClockStartedAtBeforeDriftTimeUpdate,
     hotPathFrameCount,
     nowPlayingHotPathFrameCount,
     fullHighlightFrameCount,
@@ -16099,6 +16123,30 @@ function syncLyricPlaybackClock(options = {}) {
   lyricClockIsRunning = options.running ?? shouldEstimateLyricPlaybackClock();
 }
 
+function maybeSyncLyricPlaybackClock(options = {}) {
+  const shouldKeepRafHandoff = shouldDeferLyricClockSync();
+  if (options.force || !shouldKeepRafHandoff) {
+    syncLyricPlaybackClock(options);
+    return true;
+  }
+
+  const audioSeconds = getAudioCurrentTimeSeconds();
+  const lyricSeconds = getLyricPlaybackTimeSeconds();
+  if (Math.abs(audioSeconds - lyricSeconds) >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS) {
+    syncLyricPlaybackClock({ ...options, running: true });
+    return true;
+  }
+
+  lyricClockPlaybackRate = Number(audioPlayer.playbackRate) || 1;
+  return false;
+}
+
+function shouldDeferLyricClockSync() {
+  return areSmoothLyricSurfacesVisible()
+    && lyricClockIsRunning
+    && (lyricProgressFrame || lyricProgressResumeTimer);
+}
+
 function shouldEstimateLyricPlaybackClock() {
   return Boolean(
     state.currentTrack
@@ -18431,7 +18479,7 @@ function handleAudioPause() {
 }
 
 function handleAudioTimeUpdate() {
-  syncLyricPlaybackClock();
+  maybeSyncLyricPlaybackClock();
   updateProgress();
   persistPlaybackPosition();
 
@@ -18508,11 +18556,7 @@ function updateProgress(options = {}) {
 }
 
 function shouldSyncLyricsFromProgressUpdate() {
-  return !(
-    areSmoothLyricSurfacesVisible()
-    && lyricClockIsRunning
-    && (lyricProgressFrame || lyricProgressResumeTimer)
-  );
+  return !shouldDeferLyricClockSync();
 }
 
 function setProgressDisplay(current, duration) {
