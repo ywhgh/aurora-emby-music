@@ -3,7 +3,7 @@ const path = require("path");
 const vm = require("vm");
 
 const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n");
 const errors = [];
 
 function assert(condition, message) {
@@ -25,8 +25,25 @@ function getCssRule(css, selectorStart) {
     return "";
   }
 
-  const end = css.indexOf("\n}", start);
-  return end >= 0 ? css.slice(start, end + 2) : css.slice(start);
+  const open = css.indexOf("{", start);
+
+  if (open < 0) {
+    return "";
+  }
+
+  let depth = 0;
+  for (let index = open; index < css.length; index += 1) {
+    if (css[index] === "{") {
+      depth += 1;
+    } else if (css[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return css.slice(start, index + 1);
+      }
+    }
+  }
+
+  return css.slice(start);
 }
 
 function createMemoryLocalStorage() {
@@ -303,7 +320,9 @@ function checkLyrics() {
   assert(/id="immersiveLyricOffsetSlowerButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">/.test(index), "Immersive lyric offset buttons should be icon-only with screen-reader text");
   assert(/id="immersiveShuffleStartButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">随机播放<\/span>/.test(index), "Immersive empty shuffle action should be icon-only");
   assert(/id="immersiveQueueLocateButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">定位当前歌曲<\/span>/.test(index), "Immersive queue locate action should be icon-only");
-  assert(/id="immersiveBackgroundButton"[^>]*aria-label="背景样式：原始"[^>]*title="背景样式：原始"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">背景样式：原始<\/span>/.test(index), "Immersive background action should be an accessible icon-only button");
+  assert(/id="immersiveBackgroundButton"[^>]*aria-label="皮肤样式：原始"[^>]*title="皮肤样式：原始"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">皮肤样式：原始<\/span>/.test(index), "Immersive skin action should be an accessible icon-only button");
+  assert(/id="immersiveDownloadButton"[^>]*aria-label="下载当前音乐"[^>]*title="下载当前音乐"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">下载当前音乐<\/span>/.test(index), "Immersive download action should be an accessible icon-only button");
+  assert(/id="immersiveMoreButton"[^>]*aria-label="更多沉浸播放操作"[^>]*title="更多沉浸播放操作"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">更多沉浸播放操作<\/span>/.test(index), "Immersive more action should be an accessible icon-only button");
   assert(/id="immersiveModeButton"[^>]*aria-label="播放模式：顺序"[^>]*title="播放模式：顺序"[^>]*data-mode="order"[\s\S]*?mode-order[\s\S]*?mode-shuffle[\s\S]*?mode-repeat[\s\S]*?mode-repeat-one[\s\S]*?<span class="sr-only">顺序<\/span>/.test(index), "Immersive playback mode should expose state-specific icons with a screen-reader label");
   assert(/id="immersivePlayButton"[^>]*aria-label="播放"[^>]*title="播放"[\s\S]*?<span class="sr-only">播放<\/span>/.test(index), "Immersive play control should expose only an accessible icon label");
   assert(/id="immersiveQueueButton"[^>]*aria-label="打开播放队列"[^>]*title="打开播放队列"[\s\S]*?<span class="sr-only">播放队列<\/span>/.test(index), "Immersive queue toggle should start as an accessible icon-only button");
@@ -334,10 +353,14 @@ function checkLyrics() {
   assert(app.includes("function getLyricPlaybackTimeSeconds"), "Lyric word progress should read from a smooth playback clock");
   assert(app.includes("function getVisibleLyricSyncTimeSeconds"), "Visible lyric sync should choose the smooth clock only when appropriate");
   assert(app.includes("LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS"), "Lyric smooth clock should define a guarded resync threshold");
+  assert(app.includes("LYRIC_CLOCK_HARD_RESYNC_THRESHOLD_SECONDS"), "Lyric smooth clock should separate soft correction from hard resync");
+  assert(app.includes("LYRIC_CLOCK_DRIFT_CORRECTION_RATIO"), "Lyric smooth clock should define a gradual correction ratio");
   assert(app.includes("function maybeSyncLyricPlaybackClock"), "Lyric smooth clock should avoid small timeupdate resync jitter");
+  assert(app.includes("function nudgeLyricPlaybackClock"), "Lyric smooth clock should gently correct small drift instead of snapping");
   assert(/function handleAudioTimeUpdate\(\) \{\s*maybeSyncLyricPlaybackClock\(\);[\s\S]*?updateProgress\(\);/.test(app), "Audio timeupdate should use guarded lyric clock resync before progress rendering");
   assert(/function shouldSyncLyricsFromProgressUpdate\(\) \{\s*return !shouldDeferLyricClockSync\(\);/.test(app), "Progress updates should reuse the guarded RAF lyric handoff condition");
-  assert(/Math\.abs\(audioSeconds - lyricSeconds\) >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS/.test(app), "Guarded lyric clock resync should still correct real clock drift");
+  assert(/absoluteDriftSeconds >= LYRIC_CLOCK_HARD_RESYNC_THRESHOLD_SECONDS[\s\S]*?syncLyricPlaybackClock\(\{ \.\.\.options, running: true \}\)/.test(app), "Guarded lyric clock resync should still hard-correct real clock drift");
+  assert(/absoluteDriftSeconds >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS[\s\S]*?nudgeLyricPlaybackClock\(driftSeconds\)/.test(app), "Lyric smooth clock should gently correct small drift during RAF handoff");
   assert(/syncLyricPlaybackClock\(\{ \.\.\.options, running: true \}\);/.test(app), "Guarded lyric drift resync should keep the RAF lyric clock running");
   assert(app.includes("LYRIC_WORD_MIN_LINE_DURATION_SECONDS"), "Lyric word progress should define a minimum line duration");
   assert(app.includes("LYRIC_WORD_MAX_LINE_DURATION_SECONDS"), "Lyric word progress should cap fallback line durations when no next line is available");
@@ -563,6 +586,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("persistedDroppedPlayableUrls === true"), "Browser smoke should verify persisted plugin queues drop stale playable URLs");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
   assert(browserSmoke.includes("stableTimeUpdateKeptLyricClock"), "Browser smoke should verify stable timeupdates do not reset the lyric RAF clock");
+  assert(browserSmoke.includes("softDriftAdjustedLyricClock"), "Browser smoke should verify small lyric clock drift is gradually corrected");
+  assert(browserSmoke.includes("softDriftAvoidedHardResync"), "Browser smoke should verify small lyric clock drift does not hard-snap");
   assert(browserSmoke.includes("driftTimeUpdateResyncedLyricClock"), "Browser smoke should verify drifted timeupdates still resync the lyric clock");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");

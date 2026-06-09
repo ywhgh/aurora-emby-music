@@ -763,6 +763,8 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.regularTimeUpdateProgressWriteCount >= 0, `${label} regular timeupdate lyric sync should remain measurable after RAF handoff is disabled: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingRafTimeUpdateProgressWriteCount === 0, `${label} now-playing RAF lyric loop should absorb coarse timeupdate lyric sync writes: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.stableTimeUpdateKeptLyricClock === true, `${label} stable timeupdate should not reset the smooth lyric clock during RAF word progress: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.softDriftAdjustedLyricClock === true, `${label} soft lyric clock drift should be corrected gradually: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.softDriftAvoidedHardResync === true, `${label} soft lyric clock drift should avoid a hard lyric snap: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.driftTimeUpdateResyncedLyricClock === true, `${label} drifted timeupdate should still resync the smooth lyric clock: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.hotPathFrameCount > denseWordPerformance.fullHighlightFrameCount, `${label} dense lyric progress should use the direct RAF hot path for most frames: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingHotPathFrameCount >= 40, `${label} now-playing lyrics should use the smooth RAF hot path: ${JSON.stringify(denseWordPerformance)}`);
@@ -810,7 +812,7 @@ function checkPageState(check, page) {
   assert(immersiveIconButtons.stateLabels?.queueClosedTitle === "打开播放队列", `${label} immersive queue closed title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(immersiveIconButtons.stateLabels?.zenOnTitle === "关闭纯享无干扰模式", `${label} immersive zen on title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(immersiveIconButtons.stateLabels?.zenOffTitle === "开启纯享无干扰模式", `${label} immersive zen off title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
-  assert(/^背景样式：/.test(immersiveIconButtons.stateLabels?.backgroundTitle || ""), `${label} immersive background title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(/^皮肤样式：/.test(immersiveIconButtons.stateLabels?.backgroundTitle || ""), `${label} immersive skin title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(mobileImmersiveLayout.before?.modeIconCount === 4, `${label} immersive mode button should expose four mode icons: ${JSON.stringify(mobileImmersiveLayout.before)}`);
   assert(mobileImmersiveLayout.before?.visibleModeIconCount === 1, `${label} immersive mode button should show exactly one mode icon: ${JSON.stringify(mobileImmersiveLayout.before)}`);
   assert(mobileImmersiveLayout.afterModeClick?.mode !== mobileImmersiveLayout.before?.modeBefore, `${label} immersive mode button should cycle mode on click: ${JSON.stringify(mobileImmersiveLayout.afterModeClick)}`);

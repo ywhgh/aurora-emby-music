@@ -1274,7 +1274,7 @@ body.topbar-lyric-active .top-tabs:focus-within .top-lyric-focus {
   height: 1.18rem;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.75;
   vector-effect: non-scaling-stroke;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -9429,7 +9429,7 @@ body.action-sheet-open .content {
 
 .immersive-player-shell {
   --immersive-icon-size: 22px;
-  --immersive-icon-stroke: 1.5;
+  --immersive-icon-stroke: 1.85;
   --immersive-lyric-active: rgba(255, 244, 229, 0.98);
   --immersive-lyric-primary: rgba(255, 244, 229, 0.28);
   --immersive-lyric-original: rgba(255, 244, 229, 0.42);
@@ -14043,7 +14043,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   height: 22px !important;
   color: currentColor !important;
   stroke: currentColor !important;
-  stroke-width: 1.5 !important;
+  stroke-width: 1.85 !important;
   fill: none;
 }
 

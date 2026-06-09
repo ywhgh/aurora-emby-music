@@ -674,7 +674,7 @@ function rememberPluginTrack(track) {
     state.pluginTrackCache.set(key, snapshot);
   });
   trimPluginTrackCache();
-  schedulePluginTrackCacheFlush();
+  schedulePluginTrackCacheFlush({ immediate: isPluginTrackCachePathInTempDir() });
 }
 
 function loadPluginTrackCache() {
@@ -778,12 +778,17 @@ function getUniquePluginTrackCacheEntries() {
   return [...unique.values()];
 }
 
-function schedulePluginTrackCacheFlush() {
+function schedulePluginTrackCacheFlush(options = {}) {
   if (isPluginTrackCacheDisabled) {
     return;
   }
 
   state.pluginTrackCacheDirty = true;
+
+  if (options.immediate) {
+    flushPluginTrackCache();
+    return;
+  }
 
   if (state.pluginTrackCacheFlushTimer) {
     clearTimeout(state.pluginTrackCacheFlushTimer);
@@ -791,6 +796,12 @@ function schedulePluginTrackCacheFlush() {
 
   state.pluginTrackCacheFlushTimer = setTimeout(flushPluginTrackCache, PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS);
   state.pluginTrackCacheFlushTimer.unref?.();
+}
+
+function isPluginTrackCachePathInTempDir() {
+  const tempRoot = path.resolve(os.tmpdir());
+  const cachePath = path.resolve(pluginTrackCachePath);
+  return cachePath === tempRoot || cachePath.startsWith(`${tempRoot}${path.sep}`);
 }
 
 function flushPluginTrackCache() {

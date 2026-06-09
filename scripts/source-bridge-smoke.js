@@ -64,6 +64,7 @@ async function main() {
     assert(matchedLyric.matched === true, "local track without sidecar lyrics should use plugin lyric matching");
     assert(String(matchedLyric.lrc || "").includes("[00:01.00]Bridge lyric line"), `matched lyric text mismatch: ${matchedLyric.lrc || "-"}`);
 
+    await waitForPluginCache(pluginCachePath, "resume-song");
     const cachePayload = JSON.parse(fs.readFileSync(pluginCachePath, "utf8"));
     assert(cachePayload.tracks?.some((item) => item.sourceId === "resume-song"), "plugin track cache did not persist the searched track");
 
@@ -224,6 +225,25 @@ async function waitForHealth(url) {
   }
 
   throw new Error(`source bridge did not become healthy: ${url}`);
+}
+
+async function waitForPluginCache(cachePath, sourceId) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < HEALTH_TIMEOUT_MS) {
+    try {
+      const payload = JSON.parse(fs.readFileSync(cachePath, "utf8"));
+      if (payload.tracks?.some((item) => item.sourceId === sourceId)) {
+        return payload;
+      }
+    } catch {
+      // Cache flush is asynchronous; keep polling until it appears.
+    }
+
+    await delay(100);
+  }
+
+  throw new Error(`plugin cache did not persist ${sourceId}: ${cachePath}`);
 }
 
 function stopBridge(child) {

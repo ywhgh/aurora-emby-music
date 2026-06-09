@@ -126,7 +126,9 @@ const LYRIC_TIMED_WORD_MIN_DURATION_SECONDS = 0.16;
 const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 3.2;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
-const LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS = 0.18;
+const LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS = 0.08;
+const LYRIC_CLOCK_HARD_RESYNC_THRESHOLD_SECONDS = 0.45;
+const LYRIC_CLOCK_DRIFT_CORRECTION_RATIO = 0.35;
 const TOP_LYRIC_SHARD_MIN_COUNT = 16;
 const TOP_LYRIC_SHARD_MAX_COUNT = 22;
 const TOP_LYRIC_SHARD_PADDING = 24;
@@ -771,6 +773,9 @@ const immersivePlayerPanel = document.querySelector("#immersivePlayerPanel");
 const immersiveBackgroundButton = document.querySelector("#immersiveBackgroundButton");
 const immersiveFullscreenButton = document.querySelector("#immersiveFullscreenButton");
 const immersiveCloseButton = document.querySelector("#immersiveCloseButton");
+const immersiveQualityButton = document.querySelector("#immersiveQualityButton");
+const immersiveDownloadButton = document.querySelector("#immersiveDownloadButton");
+const immersiveMoreButton = document.querySelector("#immersiveMoreButton");
 const immersivePrevButton = document.querySelector("#immersivePrevButton");
 const immersivePlayButton = document.querySelector("#immersivePlayButton");
 const immersiveNextButton = document.querySelector("#immersiveNextButton");
@@ -1318,6 +1323,12 @@ function init() {
   immersiveQueueClearPlayedButton.addEventListener("click", clearPlayedQueueTracks);
   immersiveQueueClearButton.addEventListener("click", clearQueue);
   immersiveBackgroundButton?.addEventListener("click", cycleImmersiveBackgroundMode);
+  immersiveQualityButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openAudioQualityModal();
+  });
+  immersiveDownloadButton?.addEventListener("click", downloadCurrentTrack);
+  immersiveMoreButton?.addEventListener("click", openImmersiveMoreActions);
   immersiveFullscreenButton.addEventListener("click", toggleImmersiveFullscreen);
   immersiveCloseButton.addEventListener("click", closeImmersivePlayer);
   immersiveZenButton?.addEventListener("click", toggleImmersiveZenMode);
@@ -2161,6 +2172,9 @@ function collectBrowserSmokeImmersiveIconButtonState() {
     "#immersiveLyricOffsetResetButton",
     "#immersiveBackgroundButton",
     "#immersiveFullscreenButton",
+    "#immersiveQualityButton",
+    "#immersiveDownloadButton",
+    "#immersiveMoreButton",
     "#immersiveCloseButton",
     "#immersiveShuffleStartButton",
     "#immersivePlayLibraryButton",
@@ -2363,6 +2377,9 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   let nowPlayingProgressWriteCountAfterRafTimeUpdate = 0;
   let lyricClockStartedAtBeforeStableTimeUpdate = 0;
   let lyricClockStartedAtAfterStableTimeUpdate = 0;
+  let lyricClockAudioSecondsAtSoftDrift = 0;
+  let lyricClockAudioSecondsBeforeSoftDrift = 0;
+  let lyricClockAudioSecondsAfterSoftDrift = 0;
   let lyricClockStartedAtBeforeDriftTimeUpdate = 0;
   let lyricClockStartedAtAfterDriftTimeUpdate = 0;
   let hotPathFrameCount = 0;
@@ -2424,6 +2441,12 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     lyricClockStartedAtBeforeStableTimeUpdate = lyricClockStartedAtMs;
     handleAudioTimeUpdate();
     lyricClockStartedAtAfterStableTimeUpdate = lyricClockStartedAtMs;
+    lyricClockAudioSecondsAtSoftDrift = getAudioCurrentTimeSeconds();
+    lyricClockAudioSeconds = lyricClockAudioSecondsAtSoftDrift + 0.12;
+    lyricClockStartedAtMs = getMonotonicNowMs();
+    lyricClockAudioSecondsBeforeSoftDrift = lyricClockAudioSeconds;
+    handleAudioTimeUpdate();
+    lyricClockAudioSecondsAfterSoftDrift = lyricClockAudioSeconds;
     lyricClockAudioSeconds = getAudioCurrentTimeSeconds() + 1;
     lyricClockStartedAtMs = getMonotonicNowMs() - 1000;
     lyricClockStartedAtBeforeDriftTimeUpdate = lyricClockStartedAtMs;
@@ -2477,6 +2500,9 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     regularTimeUpdateProgressWriteCount: progressWriteCountAfterRegularTimeUpdate - progressWriteCountAfterRafTimeUpdate,
     nowPlayingRafTimeUpdateProgressWriteCount: nowPlayingProgressWriteCountAfterRafTimeUpdate - nowPlayingProgressWriteCountBeforeTimeUpdate,
     stableTimeUpdateKeptLyricClock: lyricClockStartedAtAfterStableTimeUpdate === lyricClockStartedAtBeforeStableTimeUpdate,
+    softDriftAdjustedLyricClock: lyricClockAudioSecondsAfterSoftDrift < lyricClockAudioSecondsBeforeSoftDrift,
+    softDriftAvoidedHardResync: lyricClockAudioSecondsAfterSoftDrift > lyricClockAudioSecondsAtSoftDrift
+      && lyricClockAudioSecondsAfterSoftDrift < lyricClockAudioSecondsBeforeSoftDrift,
     driftTimeUpdateResyncedLyricClock: lyricClockStartedAtAfterDriftTimeUpdate !== lyricClockStartedAtBeforeDriftTimeUpdate,
     hotPathFrameCount,
     nowPlayingHotPathFrameCount,
@@ -5963,6 +5989,44 @@ function openMobilePlayerActions() {
         ? `${state.currentTrack.Name || "当前歌曲"} · ${getArtists(state.currentTrack) || "未知艺人"}`
         : "选择歌曲后可使用更多播放操作",
       emptyMessage: "暂无播放操作。",
+    },
+  );
+  state.trackActionSheetTrack = null;
+}
+
+function openImmersiveMoreActions() {
+  openTrackActionSheet(
+    state.currentTrack,
+    [
+      {
+        icon: "moveUp",
+        label: "歌词慢了",
+        detail: "让逐字歌词提前 0.1 秒",
+        handler: () => adjustLyricOffset(LYRIC_OFFSET_STEP_SECONDS),
+      },
+      {
+        icon: "moveDown",
+        label: "歌词快了",
+        detail: "让逐字歌词延后 0.1 秒",
+        handler: () => adjustLyricOffset(-LYRIC_OFFSET_STEP_SECONDS),
+      },
+      {
+        icon: "repeat",
+        label: "重置歌词同步",
+        detail: `恢复默认偏移 ${formatLyricOffsetLabel(DEFAULT_LYRIC_OFFSET_SECONDS)}`,
+        handler: resetLyricOffset,
+      },
+      {
+        icon: "spark",
+        label: immersiveZenButton?.getAttribute("aria-pressed") === "true" ? "关闭纯享模式" : "开启纯享模式",
+        detail: "隐藏非必要信息，保留沉浸播放",
+        handler: toggleImmersiveZenMode,
+      },
+    ],
+    {
+      title: "更多操作",
+      subtitle: `歌词同步 ${formatLyricOffsetLabel(state.lyricOffsetSeconds)}`,
+      emptyMessage: "暂无更多沉浸播放操作。",
     },
   );
   state.trackActionSheetTrack = null;
@@ -12083,7 +12147,7 @@ function applyImmersiveBackgroundMode() {
   shell.classList.toggle("is-fluid-bg", mode === "fluid");
   shell.classList.toggle("is-stage-bg", mode === "stage");
   immersiveBackgroundButton?.setAttribute("aria-pressed", mode === "original" ? "false" : "true");
-  setIconButtonLabel(immersiveBackgroundButton, `背景样式：${labelMap[mode]}`);
+  setIconButtonLabel(immersiveBackgroundButton, `皮肤样式：${labelMap[mode]}`);
 }
 
 function toggleImmersiveQueue() {
@@ -12356,6 +12420,7 @@ function handleAudioQualityDocumentClick(event) {
     audioQualityModal.querySelector(".audio-quality-card")?.contains(event.target)
     || audioQualityButton.contains(event.target)
     || mobilePlayerQualityButton.contains(event.target)
+    || immersiveQualityButton?.contains(event.target)
   ) {
     return;
   }
@@ -15973,6 +16038,121 @@ async function playTrack(track, queue, options = {}) {
     });
 }
 
+async function downloadCurrentTrack() {
+  const track = state.currentTrack;
+
+  if (!track?.Id) {
+    setLibraryStatus("当前没有可下载的音乐。");
+    return;
+  }
+
+  const previousDisabled = Boolean(immersiveDownloadButton?.disabled);
+  if (immersiveDownloadButton) {
+    immersiveDownloadButton.disabled = true;
+  }
+
+  try {
+    setLibraryStatus(`正在准备下载：${track.Name || "当前音乐"}...`);
+    const source = await resolveTrackDownloadSource(track);
+    if (!source) {
+      throw new Error("没有获取到可下载的播放源");
+    }
+
+    triggerBrowserDownload(source, buildTrackDownloadFilename(track, source));
+    setLibraryStatus(`已开始下载：${track.Name || "当前音乐"}。`);
+  } catch (error) {
+    showNotice(`下载失败：${readableError(error)}`, {
+      type: "error",
+      actions: [{ label: "重试下载", handler: downloadCurrentTrack }],
+    });
+  } finally {
+    if (immersiveDownloadButton) {
+      immersiveDownloadButton.disabled = previousDisabled || !state.currentTrack;
+    }
+  }
+}
+
+async function resolveTrackDownloadSource(track) {
+  if (isExternalSourceTrack(track)) {
+    const media = await externalSourceApi.fetchMediaSource(getExternalTrackApiUrl(track), track, {
+      quality: getExternalPlaybackQuality(track),
+      videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
+      forceResolve: false,
+    });
+    applyExternalMediaMetadata(track, media, { qualityState: "resolved" });
+    syncExternalTrackReference(track);
+    return media.downloadUrl || media.streamUrl || media.directUrl || track.ExternalSource?.mediaUrl || "";
+  }
+
+  const currentSource = state.currentTrack?.Id === track.Id ? (audioPlayer.currentSrc || audioPlayer.src || "") : "";
+  if (currentSource && !/\.m3u8(?:[?#].*)?$/i.test(currentSource)) {
+    return currentSource;
+  }
+
+  const playSessionId = ensurePlaybackSessionId(track);
+  const mediaSourceId = getMediaSourceId(track);
+  return getAudioStreamUrl(track, "direct", playSessionId, mediaSourceId);
+}
+
+function triggerBrowserDownload(url, filename) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.target = "_blank";
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+function buildTrackDownloadFilename(track, url) {
+  const title = sanitizeDownloadFilename(track?.Name || "music");
+  const artist = sanitizeDownloadFilename(getArtists(track) || "");
+  const baseName = [artist, title].filter(Boolean).join(" - ") || "music";
+  const extension = getDownloadExtension(track, url);
+
+  return `${baseName.slice(0, 140)}.${extension}`;
+}
+
+function sanitizeDownloadFilename(value) {
+  return String(value || "")
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getDownloadExtension(track, url) {
+  try {
+    const parsed = new URL(url, location.href);
+    const match = parsed.pathname.match(/\.([a-z0-9]{2,5})$/i);
+    if (match) {
+      return match[1].toLowerCase();
+    }
+  } catch {
+    // Fall through to metadata-based extension.
+  }
+
+  const mediaSource = getPrimaryMediaSource(track);
+  const stream = getPrimaryAudioStream(mediaSource);
+  const codec = normalizeCodecLabel(stream?.Codec || mediaSource?.Container || track?.ExternalSource?.codec).toLowerCase();
+  if (/flac/.test(codec)) {
+    return "flac";
+  }
+  if (/aac|m4a/.test(codec)) {
+    return "m4a";
+  }
+  if (/opus/.test(codec)) {
+    return "opus";
+  }
+  if (/ogg|vorbis/.test(codec)) {
+    return "ogg";
+  }
+  if (/wav/.test(codec)) {
+    return "wav";
+  }
+  return "mp3";
+}
+
 function normalizePlaybackSessionId(value) {
   return String(value || "").trim();
 }
@@ -16717,13 +16897,31 @@ function maybeSyncLyricPlaybackClock(options = {}) {
 
   const audioSeconds = getAudioCurrentTimeSeconds();
   const lyricSeconds = getLyricPlaybackTimeSeconds();
-  if (Math.abs(audioSeconds - lyricSeconds) >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS) {
+  const driftSeconds = audioSeconds - lyricSeconds;
+  const absoluteDriftSeconds = Math.abs(driftSeconds);
+
+  if (absoluteDriftSeconds >= LYRIC_CLOCK_HARD_RESYNC_THRESHOLD_SECONDS) {
     syncLyricPlaybackClock({ ...options, running: true });
     return true;
   }
 
+  if (absoluteDriftSeconds >= LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS) {
+    nudgeLyricPlaybackClock(driftSeconds);
+    return false;
+  }
+
   lyricClockPlaybackRate = Number(audioPlayer.playbackRate) || 1;
   return false;
+}
+
+function nudgeLyricPlaybackClock(driftSeconds) {
+  const playbackRate = Number(audioPlayer.playbackRate) || 1;
+  const correctedSeconds = getLyricPlaybackTimeSeconds() + (driftSeconds * LYRIC_CLOCK_DRIFT_CORRECTION_RATIO);
+
+  lyricClockAudioSeconds = Math.max(0, correctedSeconds);
+  lyricClockStartedAtMs = getMonotonicNowMs();
+  lyricClockPlaybackRate = playbackRate;
+  lyricClockIsRunning = true;
 }
 
 function shouldDeferLyricClockSync() {
@@ -17577,6 +17775,7 @@ function renderAudioQualityButton() {
     audioQualityButton.dataset.mode = "external";
     mobilePlayerQualityLabel.textContent = isVideoTrack(state.currentTrack) ? option.shortLabel : option.shortLabel;
     mobilePlayerQualityButton.title = audioQualityButton.title;
+    setIconButtonLabel(immersiveQualityButton, audioQualityButton.title);
     renderHomeStartPanel();
     return;
   }
@@ -17588,6 +17787,7 @@ function renderAudioQualityButton() {
     ? "无损"
     : `${profile.codec.slice(0, 3).toUpperCase()}${profile.bitrate ? Math.round(profile.bitrate / 1000) : ""}`;
   mobilePlayerQualityButton.title = audioQualityButton.title;
+  setIconButtonLabel(immersiveQualityButton, audioQualityButton.title);
   renderHomeStartPanel();
 }
 
@@ -18961,6 +19161,12 @@ function setPlayerEnabled(isEnabled) {
   mobilePlayerLyricsButton.disabled = !isEnabled || !state.currentTrack;
   mobilePlayerImmersiveButton.disabled = !isEnabled || !state.currentTrack;
   mobilePlayerMoreButton.disabled = !state.session;
+  if (immersiveQualityButton) {
+    immersiveQualityButton.disabled = !state.session;
+  }
+  if (immersiveDownloadButton) {
+    immersiveDownloadButton.disabled = !isEnabled || !state.currentTrack;
+  }
   immersiveQueueButton.disabled = !isEnabled || !state.queue.length;
   immersiveQueueLocateButton.disabled = !isEnabled || !state.currentTrack || !state.queue.length;
   immersiveQueueShuffleButton.disabled = !isEnabled || getShuffleableQueueRange().length < 2;
