@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.143" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.143" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.143" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.144" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.144" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.144" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.143</span>
+            <span id="loginVersion">v0.93.144</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1363,7 +1363,7 @@
                 <span class="immersive-top-caption">沉浸播放</span>
                 <div class="immersive-top-actions">
                   <div class="lyric-offset-controls immersive-lyric-offset-controls" aria-label="歌词同步校准">
-                    <button id="immersiveLyricOffsetSlowerButton" type="button" data-lyric-offset-adjust="earlier" aria-label="歌词慢了，提前 0.1 秒">
+                    <button id="immersiveLyricOffsetSlowerButton" type="button" data-lyric-offset-adjust="earlier" aria-label="歌词慢了，提前 0.1 秒" title="歌词慢了，提前 0.1 秒">
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="m11 7-5 5 5 5"></path>
                         <path d="m18 7-5 5 5 5"></path>
@@ -1371,14 +1371,14 @@
                       <span class="sr-only">歌词慢了，提前 0.1 秒</span>
                     </button>
                     <span id="immersiveLyricOffsetValue" class="lyric-offset-value" data-lyric-offset-value aria-live="polite">+0.18s</span>
-                    <button id="immersiveLyricOffsetFasterButton" type="button" data-lyric-offset-adjust="later" aria-label="歌词快了，延后 0.1 秒">
+                    <button id="immersiveLyricOffsetFasterButton" type="button" data-lyric-offset-adjust="later" aria-label="歌词快了，延后 0.1 秒" title="歌词快了，延后 0.1 秒">
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="m6 7 5 5-5 5"></path>
                         <path d="m13 7 5 5-5 5"></path>
                       </svg>
                       <span class="sr-only">歌词快了，延后 0.1 秒</span>
                     </button>
-                    <button id="immersiveLyricOffsetResetButton" type="button" data-lyric-offset-reset aria-label="重置歌词同步偏移">
+                    <button id="immersiveLyricOffsetResetButton" type="button" data-lyric-offset-reset aria-label="重置歌词同步偏移" title="重置歌词同步偏移">
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 12a8 8 0 1 0 2.35-5.65"></path>
                         <path d="M4 4.5v6h6"></path>
@@ -1386,7 +1386,7 @@
                       <span class="sr-only">重置歌词同步偏移</span>
                     </button>
                   </div>
-                  <button id="immersiveBackgroundButton" class="immersive-round-button immersive-background-button" type="button" aria-label="背景样式：原始">
+                  <button id="immersiveBackgroundButton" class="immersive-round-button immersive-background-button" type="button" aria-label="背景样式：原始" title="背景样式：原始">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M5 7.5c2.8-2.8 7.2-2.8 10 0"></path>
                       <path d="M9 16.5c2.8 2.8 7.2 2.8 10 0"></path>
@@ -1394,19 +1394,22 @@
                       <circle cx="6" cy="12" r="2"></circle>
                       <circle cx="18" cy="12" r="2"></circle>
                     </svg>
+                    <span class="sr-only">背景样式：原始</span>
                   </button>
-                  <button id="immersiveFullscreenButton" class="immersive-round-button" type="button" aria-label="切换全屏">
+                  <button id="immersiveFullscreenButton" class="immersive-round-button" type="button" aria-label="切换全屏" title="切换全屏">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
                       <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
                       <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
                       <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
                     </svg>
+                    <span class="sr-only">切换全屏</span>
                   </button>
-                  <button id="immersiveCloseButton" class="immersive-round-button" type="button" aria-label="退出沉浸播放">
+                  <button id="immersiveCloseButton" class="immersive-round-button" type="button" aria-label="退出沉浸播放" title="退出沉浸播放">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="m6 9 6 6 6-6"></path>
                     </svg>
+                    <span class="sr-only">退出沉浸播放</span>
                   </button>
                 </div>
               </header>
@@ -1428,7 +1431,7 @@
                     </button>
                     <div id="immersiveMeta" class="now-playing-meta immersive-meta" hidden></div>
                     <div id="immersiveEmptyActions" class="immersive-empty-actions" hidden>
-                      <button id="immersiveShuffleStartButton" class="primary-mini-button" type="button" aria-label="随机播放">
+                      <button id="immersiveShuffleStartButton" class="primary-mini-button" type="button" aria-label="随机播放" title="随机播放">
                         <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M16 3h5v5"></path>
                           <path d="M4 20 21 3"></path>
@@ -1438,7 +1441,7 @@
                         </svg>
                         <span class="sr-only">随机播放</span>
                       </button>
-                      <button id="immersivePlayLibraryButton" class="secondary-mini-button" type="button" aria-label="播放列表">
+                      <button id="immersivePlayLibraryButton" class="secondary-mini-button" type="button" aria-label="播放列表" title="播放列表">
                         <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M8 6h12"></path>
                           <path d="M8 12h12"></path>
@@ -1447,7 +1450,7 @@
                         </svg>
                         <span class="sr-only">播放列表</span>
                       </button>
-                      <button id="immersiveOpenLibraryButton" class="secondary-mini-button" type="button" aria-label="打开音乐库">
+                      <button id="immersiveOpenLibraryButton" class="secondary-mini-button" type="button" aria-label="打开音乐库" title="打开音乐库">
                         <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M5 4.5h10a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z"></path>
                           <path d="M8 4.5V17a3 3 0 0 0 3 3"></path>
@@ -1472,15 +1475,16 @@
                       <span>Queue</span>
                       <strong>播放队列</strong>
                     </div>
-                    <button id="immersiveQueueCloseButton" class="immersive-round-button" type="button" aria-label="关闭队列">
+                    <button id="immersiveQueueCloseButton" class="immersive-round-button" type="button" aria-label="关闭队列" title="关闭队列">
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M18 6 6 18"></path>
                         <path d="m6 6 12 12"></path>
                       </svg>
+                      <span class="sr-only">关闭队列</span>
                     </button>
                   </div>
                   <div class="immersive-queue-tools" aria-label="队列操作">
-                    <button id="immersiveQueueLocateButton" type="button" disabled>
+                    <button id="immersiveQueueLocateButton" type="button" aria-label="定位当前歌曲" title="定位当前歌曲" disabled>
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 3v3"></path>
                         <path d="M12 18v3"></path>
@@ -1490,7 +1494,7 @@
                       </svg>
                       <span class="sr-only">定位当前歌曲</span>
                     </button>
-                    <button id="immersiveQueueShuffleButton" type="button" disabled>
+                    <button id="immersiveQueueShuffleButton" type="button" aria-label="随机后续" title="随机后续" disabled>
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M16 3h5v5"></path>
                         <path d="M4 20 21 3"></path>
@@ -1500,16 +1504,16 @@
                       </svg>
                       <span class="sr-only">随机后续</span>
                     </button>
-                    <button id="immersiveQueueClearPlayedButton" type="button" disabled>
+                    <button id="immersiveQueueClearPlayedButton" type="button" aria-label="清除已播放" title="清除已播放" disabled>
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 7h16"></path>
                         <path d="M7 7l1 13h8l1-13"></path>
                         <path d="M9 7V4h6v3"></path>
                         <path d="m9 13 2 2 4-4"></path>
                       </svg>
-                      <span class="sr-only">清已播</span>
+                      <span class="sr-only">清除已播放</span>
                     </button>
-                    <button id="immersiveQueueClearButton" type="button" disabled>
+                    <button id="immersiveQueueClearButton" type="button" aria-label="清空队列" title="清空队列" disabled>
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 7h16"></path>
                         <path d="M7 7l1 13h8l1-13"></path>
@@ -1534,34 +1538,39 @@
                 </button>
 
                 <div class="immersive-control-row">
-                  <button id="immersiveModeButton" class="mode-button playback-mode-chip immersive-control-button" type="button">
+                  <button id="immersiveModeButton" class="mode-button playback-mode-chip immersive-control-button" type="button" aria-label="播放模式：顺序" title="播放模式：顺序">
                     <svg class="line-icon mode-chip-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 7h12"></path>
                       <path d="m13 4 3 3-3 3"></path>
                       <path d="M4 17h12"></path>
                       <path d="m13 14 3 3-3 3"></path>
                     </svg>
-                    <span>顺序</span>
+                    <span class="sr-only">顺序</span>
                   </button>
-                  <button id="immersiveFavoriteButton" class="favorite-button immersive-control-button" type="button" disabled aria-label="收藏">
+                  <button id="immersiveFavoriteButton" class="favorite-button immersive-control-button" type="button" disabled aria-label="收藏" title="收藏">
                     <svg class="line-icon favorite-line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 1 0-7.2 7.2l1 1L12 21l7.2-7 1-1a5.1 5.1 0 0 0 0-7.2Z"></path>
                     </svg>
+                    <span class="sr-only">收藏</span>
                   </button>
-                  <button id="immersivePrevButton" class="immersive-control-button" type="button" aria-label="上一首" disabled>
+                  <button id="immersivePrevButton" class="immersive-control-button" type="button" aria-label="上一首" title="上一首" disabled>
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M6 6v12"></path>
                       <path d="m18 6-8.5 6L18 18V6Z"></path>
                     </svg>
+                    <span class="sr-only">上一首</span>
                   </button>
-                  <button id="immersivePlayButton" class="play-button immersive-play-core" type="button" aria-label="播放" disabled></button>
-                  <button id="immersiveNextButton" class="immersive-control-button" type="button" aria-label="下一首" disabled>
+                  <button id="immersivePlayButton" class="play-button immersive-play-core" type="button" aria-label="播放" title="播放" disabled>
+                    <span class="sr-only">播放</span>
+                  </button>
+                  <button id="immersiveNextButton" class="immersive-control-button" type="button" aria-label="下一首" title="下一首" disabled>
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M18 6v12"></path>
                       <path d="m6 6 8.5 6L6 18V6Z"></path>
                     </svg>
+                    <span class="sr-only">下一首</span>
                   </button>
-                  <button id="immersiveZenButton" class="immersive-control-button immersive-zen-button" type="button" aria-label="开启纯享无干扰模式" aria-pressed="false">
+                  <button id="immersiveZenButton" class="immersive-control-button immersive-zen-button" type="button" aria-label="开启纯享无干扰模式" title="开启纯享无干扰模式" aria-pressed="false">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8 4H5a1 1 0 0 0-1 1v3"></path>
                       <path d="M16 4h3a1 1 0 0 1 1 1v3"></path>
@@ -1569,8 +1578,9 @@
                       <path d="M16 20h3a1 1 0 0 0 1-1v-3"></path>
                       <path d="M9 12h6"></path>
                     </svg>
+                    <span class="sr-only">开启纯享无干扰模式</span>
                   </button>
-                  <button id="immersiveQueueButton" class="queue-button immersive-control-button immersive-queue-toggle" type="button" aria-expanded="false" disabled>
+                  <button id="immersiveQueueButton" class="queue-button immersive-control-button immersive-queue-toggle" type="button" aria-label="打开播放队列" title="打开播放队列" aria-expanded="false" disabled>
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8 6h13"></path>
                       <path d="M8 12h13"></path>
@@ -2459,7 +2469,7 @@
 
     <script>
       (() => {
-        const version = "0.93.143";
+        const version = "0.93.144";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2837,13 +2847,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.143" defer></script>
-    <script src="./src/format.js?v=0.93.143" defer></script>
-    <script src="./src/lyrics.js?v=0.93.143" defer></script>
-    <script src="./src/emby-api.js?v=0.93.143" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.143" defer></script>
-    <script src="./src/storage.js?v=0.93.143" defer></script>
-    <script src="./app.js?v=0.93.143" defer></script>
+    <script src="./src/config.js?v=0.93.144" defer></script>
+    <script src="./src/format.js?v=0.93.144" defer></script>
+    <script src="./src/lyrics.js?v=0.93.144" defer></script>
+    <script src="./src/emby-api.js?v=0.93.144" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.144" defer></script>
+    <script src="./src/storage.js?v=0.93.144" defer></script>
+    <script src="./app.js?v=0.93.144" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>

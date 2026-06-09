@@ -195,6 +195,7 @@ function checkCss() {
   assert(/\.immersive-lyric-offset-controls button \{[\s\S]*?border-radius:\s*50%;/.test(css), "Immersive lyric offset controls should be icon buttons");
   assert(/\.immersive-empty-actions \.primary-mini-button,[\s\S]*?\.immersive-empty-actions \.secondary-mini-button \{[\s\S]*?font-size:\s*0;/.test(css), "Immersive empty actions should hide visible text and show icons");
   assert(/\.immersive-queue-tools button \{[\s\S]*?border-radius:\s*50%;[\s\S]*?font-size:\s*0;/.test(css), "Immersive queue tools should use icon-only buttons");
+  assert(/\.immersive-player-shell :where\([\s\S]*?\.immersive-round-button,[\s\S]*?\.immersive-control-row button[\s\S]*?\) > span:not\(\.sr-only\):not\(\.action-icon-wrap\):not\(\.immersive-queue-badge\) \{[\s\S]*?display:\s*none !important;/.test(css), "Immersive controls should hide non-accessibility text labels across desktop and mobile");
 }
 
 function checkLyrics() {
@@ -299,8 +300,16 @@ function checkLyrics() {
   assert(/id="immersiveLyricOffsetSlowerButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">/.test(index), "Immersive lyric offset buttons should be icon-only with screen-reader text");
   assert(/id="immersiveShuffleStartButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">随机播放<\/span>/.test(index), "Immersive empty shuffle action should be icon-only");
   assert(/id="immersiveQueueLocateButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">定位当前歌曲<\/span>/.test(index), "Immersive queue locate action should be icon-only");
+  assert(/id="immersiveBackgroundButton"[^>]*aria-label="背景样式：原始"[^>]*title="背景样式：原始"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">背景样式：原始<\/span>/.test(index), "Immersive background action should be an accessible icon-only button");
+  assert(/id="immersiveModeButton"[^>]*aria-label="播放模式：顺序"[^>]*title="播放模式：顺序"[\s\S]*?<svg class="line-icon mode-chip-icon"[\s\S]*?<span class="sr-only">顺序<\/span>/.test(index), "Immersive playback mode should use a screen-reader label instead of visible text");
+  assert(/id="immersivePlayButton"[^>]*aria-label="播放"[^>]*title="播放"[\s\S]*?<span class="sr-only">播放<\/span>/.test(index), "Immersive play control should expose only an accessible icon label");
+  assert(/id="immersiveQueueButton"[^>]*aria-label="打开播放队列"[^>]*title="打开播放队列"[\s\S]*?<span class="sr-only">播放队列<\/span>/.test(index), "Immersive queue toggle should start as an accessible icon-only button");
   assert(!/id="immersiveLyricOffsetSlowerButton"[^>]*>慢了<\/button>/.test(index), "Immersive lyric offset should not expose visible text buttons");
+  assert(!/id="immersiveModeButton"[\s\S]*?<span>顺序<\/span>/.test(index), "Immersive playback mode should not expose visible text labels");
   assert(!/id="immersiveQueueShuffleButton"[\s\S]*?>\s*<svg[\s\S]*?随机后续\s*<\/button>/.test(index), "Immersive queue tools should not expose visible text labels");
+  assert(app.includes("function setIconButtonLabel"), "Dynamic icon-only buttons should share one label synchronizer");
+  assert(app.includes("setIconButtonLabel(immersivePlayButton, label)"), "Immersive play label should update its screen-reader text and title");
+  assert(app.includes('setIconButtonLabel(immersiveQueueButton, "打开播放队列")'), "Immersive queue toggle should restore its accessible open label after close");
   assert(css.includes(".lyric-offset-controls"), "Lyric offset controls should have scoped styles");
   assert(app.includes('LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds"'), "Lyric offset should be persisted in localStorage");
   assert(app.includes("DEFAULT_LYRIC_OFFSET_SECONDS = 0.18"), "Lyric offset should preserve the previous default lead");

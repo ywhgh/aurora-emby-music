@@ -10248,6 +10248,27 @@ body.action-sheet-open .content {
   color: currentColor;
 }
 
+.immersive-player-shell :where(
+  .immersive-round-button,
+  .immersive-lyric-offset-controls button,
+  .immersive-empty-actions button,
+  .immersive-queue-tools button,
+  .immersive-control-row button
+) {
+  font-size: 0 !important;
+  line-height: 1 !important;
+}
+
+.immersive-player-shell :where(
+  .immersive-round-button,
+  .immersive-lyric-offset-controls button,
+  .immersive-empty-actions button,
+  .immersive-queue-tools button,
+  .immersive-control-row button
+) > span:not(.sr-only):not(.action-icon-wrap):not(.immersive-queue-badge) {
+  display: none !important;
+}
+
 .immersive-up-next-list {
   display: grid;
   align-content: start;

@@ -1732,6 +1732,7 @@ function runLyricProgressScenario() {
   updateLyricsHighlight(88.2, true);
   const endScrollLayout = collectBrowserSmokeImmersiveLayoutState();
   const topLyricShard = collectBrowserSmokeTopLyricShardState();
+  const immersiveIconButtons = collectBrowserSmokeImmersiveIconButtonState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1754,6 +1755,7 @@ function runLyricProgressScenario() {
     bilingualDenseWordPerformance,
     endScrollLayout,
     topLyricShard,
+    immersiveIconButtons,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -1810,6 +1812,123 @@ function collectBrowserSmokeTopLyricShardState() {
     immersiveCharCount,
     immersiveCanvasCount,
     immersiveAnimationFrame,
+  };
+}
+
+function collectBrowserSmokeImmersiveIconButtonState() {
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  renderQueue();
+  const selectors = [
+    "#immersiveLyricOffsetSlowerButton",
+    "#immersiveLyricOffsetFasterButton",
+    "#immersiveLyricOffsetResetButton",
+    "#immersiveBackgroundButton",
+    "#immersiveFullscreenButton",
+    "#immersiveCloseButton",
+    "#immersiveShuffleStartButton",
+    "#immersivePlayLibraryButton",
+    "#immersiveOpenLibraryButton",
+    "#immersiveQueueCloseButton",
+    "#immersiveQueueLocateButton",
+    "#immersiveQueueShuffleButton",
+    "#immersiveQueueClearPlayedButton",
+    "#immersiveQueueClearButton",
+    "#immersiveModeButton",
+    "#immersiveFavoriteButton",
+    "#immersivePrevButton",
+    "#immersivePlayButton",
+    "#immersiveNextButton",
+    "#immersiveZenButton",
+    "#immersiveQueueButton",
+  ];
+  const visibleTextLabels = [];
+  const missingAccessibleLabels = [];
+  const missingTitles = [];
+  const missingIcons = [];
+  const smallTargets = [];
+  const stateLabels = {};
+
+  selectors.forEach((selector) => {
+    const button = document.querySelector(selector);
+    if (!(button instanceof HTMLElement)) {
+      missingAccessibleLabels.push(`${selector}:missing`);
+      return;
+    }
+
+    const style = window.getComputedStyle(button);
+    const rect = button.getBoundingClientRect();
+    const isRendered = style.display !== "none"
+      && style.visibility !== "hidden"
+      && rect.width > 0
+      && rect.height > 0;
+    const visibleText = [...button.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join("")
+      .trim();
+    const visibleElementText = [...button.querySelectorAll("span:not(.sr-only):not(.immersive-queue-badge)")]
+      .filter((element) => {
+        const elementStyle = window.getComputedStyle(element);
+        const elementRect = element.getBoundingClientRect();
+        return elementStyle.display !== "none"
+          && elementStyle.visibility !== "hidden"
+          && elementRect.width > 1
+          && elementRect.height > 1;
+      })
+      .map((element) => element.textContent.trim())
+      .filter(Boolean);
+
+    if (isRendered && (visibleText || visibleElementText.length || Number.parseFloat(style.fontSize) > 1)) {
+      visibleTextLabels.push({
+        selector,
+        visibleText,
+        visibleElementText,
+        fontSize: style.fontSize,
+      });
+    }
+
+    if (!button.querySelector("svg, .line-icon") && selector !== "#immersivePlayButton") {
+      missingIcons.push(selector);
+    }
+
+    if (!button.getAttribute("aria-label")) {
+      missingAccessibleLabels.push(selector);
+    }
+
+    if (!button.getAttribute("title")) {
+      missingTitles.push(selector);
+    }
+
+    if (isRendered && (rect.width < 28 || rect.height < 28)) {
+      smallTargets.push({
+        selector,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      });
+    }
+  });
+
+  openImmersiveQueue();
+  stateLabels.queueOpenTitle = immersiveQueueButton?.getAttribute("title") || "";
+  closeImmersiveQueue({ restoreFocus: false });
+  stateLabels.queueClosedTitle = immersiveQueueButton?.getAttribute("title") || "";
+  setImmersiveZenMode(true);
+  stateLabels.zenOnTitle = immersiveZenButton?.getAttribute("title") || "";
+  setImmersiveZenMode(false);
+  stateLabels.zenOffTitle = immersiveZenButton?.getAttribute("title") || "";
+  cycleImmersiveBackgroundMode();
+  stateLabels.backgroundTitle = immersiveBackgroundButton?.getAttribute("title") || "";
+  state.immersiveBackgroundMode = "original";
+  applyImmersiveBackgroundMode();
+
+  return {
+    checkedCount: selectors.length,
+    visibleTextLabels,
+    missingAccessibleLabels,
+    missingTitles,
+    missingIcons,
+    smallTargets,
+    stateLabels,
   };
 }
 
@@ -7079,8 +7198,21 @@ function renderPlaybackFavoriteButton(button, track) {
     button.className = `favorite-button ${isActive ? "active" : ""}`.trim();
     button.replaceChildren(createActionIcon("heart"));
   }
-  button.title = isActive ? "取消收藏" : "收藏";
-  button.setAttribute("aria-label", button.title);
+  setIconButtonLabel(button, isActive ? "取消收藏" : "收藏");
+}
+
+function setIconButtonLabel(button, label) {
+  if (!button || !label) {
+    return;
+  }
+
+  button.title = label;
+  button.setAttribute("aria-label", label);
+
+  const srOnlyLabel = button.querySelector(".sr-only");
+  if (srOnlyLabel) {
+    srOnlyLabel.textContent = label;
+  }
 }
 
 function renderImmersivePlayer(track = state.currentTrack) {
@@ -11473,7 +11605,7 @@ function setImmersiveZenMode(isEnabled) {
 
   shell.classList.toggle("is-zen-mode", Boolean(isEnabled));
   immersiveZenButton?.setAttribute("aria-pressed", isEnabled ? "true" : "false");
-  immersiveZenButton?.setAttribute("aria-label", isEnabled ? "关闭纯享无干扰模式" : "开启纯享无干扰模式");
+  setIconButtonLabel(immersiveZenButton, isEnabled ? "关闭纯享无干扰模式" : "开启纯享无干扰模式");
   if (isEnabled) {
     closeImmersiveQueue({ restoreFocus: false });
   }
@@ -11503,9 +11635,8 @@ function applyImmersiveBackgroundMode() {
 
   shell.classList.toggle("is-fluid-bg", mode === "fluid");
   shell.classList.toggle("is-stage-bg", mode === "stage");
-  immersiveBackgroundButton?.setAttribute("aria-label", `背景样式：${labelMap[mode]}`);
   immersiveBackgroundButton?.setAttribute("aria-pressed", mode === "original" ? "false" : "true");
-  immersiveBackgroundButton?.setAttribute("title", `背景样式：${labelMap[mode]}`);
+  setIconButtonLabel(immersiveBackgroundButton, `背景样式：${labelMap[mode]}`);
 }
 
 function toggleImmersiveQueue() {
@@ -11527,6 +11658,7 @@ function openImmersiveQueue() {
   renderImmersiveQueue();
   immersiveQueueDrawer.hidden = false;
   immersiveQueueButton.setAttribute("aria-expanded", "true");
+  setIconButtonLabel(immersiveQueueButton, "关闭播放队列");
 }
 
 function closeImmersiveQueue(options = {}) {
@@ -11537,6 +11669,7 @@ function closeImmersiveQueue(options = {}) {
   state.isImmersiveQueueOpen = false;
   immersiveQueueDrawer.hidden = true;
   immersiveQueueButton.setAttribute("aria-expanded", "false");
+  setIconButtonLabel(immersiveQueueButton, "打开播放队列");
 
   if (options.restoreFocus !== false && getActiveView() === "immersivePlayer") {
     immersiveQueueButton.focus();
@@ -16352,13 +16485,14 @@ function updateModeChip(button, modeLabel) {
     return;
   }
 
-  const label = button.querySelector("span");
+  const label = button.querySelector(".sr-only") || button.querySelector("span");
   if (label) {
     label.textContent = modeLabel;
-    return;
+  } else {
+    button.textContent = modeLabel;
   }
 
-  button.textContent = modeLabel;
+  button.setAttribute("aria-label", `播放模式：${modeLabel}`);
 }
 
 function cycleSleepTimer() {
@@ -18415,8 +18549,7 @@ function updatePlayButtonLabels() {
   playButton.title = label;
   nowPlayButton.setAttribute("aria-label", label);
   nowPlayButton.title = label;
-  immersivePlayButton.setAttribute("aria-label", label);
-  immersivePlayButton.title = label;
+  setIconButtonLabel(immersivePlayButton, label);
 }
 
 function renderRestoredPlaybackProgress(track) {

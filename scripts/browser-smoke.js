@@ -594,6 +594,7 @@ function checkPageState(check, page) {
   const bilingualDenseWordPerformance = lyricProgress.bilingualDenseWordPerformance || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
+  const immersiveIconButtons = lyricProgress.immersiveIconButtons || {};
   const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
@@ -760,6 +761,17 @@ function checkPageState(check, page) {
   assert(topLyricShard.immersiveCharCount === 0, `${label} immersive player should clear topbar lyric characters: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.immersiveCanvasCount === 0, `${label} immersive player should not keep topbar lyric shard canvases: ${JSON.stringify(topLyricShard)}`);
   assert(topLyricShard.immersiveAnimationFrame === 0, `${label} immersive player should stop topbar lyric shard scheduler: ${JSON.stringify(topLyricShard)}`);
+  assert(immersiveIconButtons.checkedCount >= 20, `${label} immersive icon button smoke should check every action button: ${JSON.stringify(immersiveIconButtons)}`);
+  assert(immersiveIconButtons.visibleTextLabels?.length === 0, `${label} immersive action buttons should not expose visible text labels: ${JSON.stringify(immersiveIconButtons.visibleTextLabels)}`);
+  assert(immersiveIconButtons.missingAccessibleLabels?.length === 0, `${label} immersive icon buttons should keep aria labels: ${JSON.stringify(immersiveIconButtons.missingAccessibleLabels)}`);
+  assert(immersiveIconButtons.missingTitles?.length === 0, `${label} immersive icon buttons should keep hover titles: ${JSON.stringify(immersiveIconButtons.missingTitles)}`);
+  assert(immersiveIconButtons.missingIcons?.length === 0, `${label} immersive icon buttons should render icons: ${JSON.stringify(immersiveIconButtons.missingIcons)}`);
+  assert(immersiveIconButtons.smallTargets?.length === 0, `${label} immersive icon buttons should keep usable tap targets: ${JSON.stringify(immersiveIconButtons.smallTargets)}`);
+  assert(immersiveIconButtons.stateLabels?.queueOpenTitle === "关闭播放队列", `${label} immersive queue open title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(immersiveIconButtons.stateLabels?.queueClosedTitle === "打开播放队列", `${label} immersive queue closed title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(immersiveIconButtons.stateLabels?.zenOnTitle === "关闭纯享无干扰模式", `${label} immersive zen on title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(immersiveIconButtons.stateLabels?.zenOffTitle === "开启纯享无干扰模式", `${label} immersive zen off title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(/^背景样式：/.test(immersiveIconButtons.stateLabels?.backgroundTitle || ""), `${label} immersive background title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 
