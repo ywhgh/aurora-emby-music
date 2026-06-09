@@ -400,6 +400,7 @@ function checkLyrics() {
   assert(/function installBrowserSmokeHooks\(\) \{[\s\S]*?if \(!isBrowserSmokeRun\(\)\) \{[\s\S]*?return;[\s\S]*?window\.EmbyMusicBrowserSmoke = \{[\s\S]*?runLyricProgressScenario,/.test(app), "Browser smoke lyric hooks should only be exposed during browser-smoke runs");
   assert(app.includes('["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)'), "Browser smoke lyric hooks should only be available on local test hosts");
   assert(app.includes("function runLyricProgressScenario"), "Browser smoke should be able to run a real synthetic lyric progress scenario");
+  assert(app.includes("function runExternalSourceReentryScenario"), "Browser smoke should be able to run a real external source re-entry scenario");
   assert(app.includes("function collectBrowserSmokeLyricState"), "Browser smoke should collect actual word progress state from rendered lyrics");
   assert(app.includes("function getLyricWordParts"), "Immersive lyrics should render enhanced LRC timed words");
   assert(lyricsCode.includes("function normalizeInlineLyricWordTimeline"), "Enhanced LRC parser should normalize line-relative word timings");
@@ -554,6 +555,12 @@ function checkLyrics() {
   assert(browserSmoke.includes("bilingualDenseWordPerformance"), "Browser smoke should verify dense bilingual word lyric performance");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
+  assert(browserSmoke.includes("createExternalSourceReentrySmokeScript"), "Browser smoke should include a real external source re-entry playback scenario");
+  assert(browserSmoke.includes("runExternalSourceReentryScenario"), "Browser smoke should call the guarded external source re-entry hook");
+  assert(browserSmoke.includes("awaitPromise: true"), "Browser smoke should wait for async playback re-entry scenarios");
+  assert(browserSmoke.includes("usedCurrentBridgeUrl === true"), "Browser smoke should verify restored external tracks use the current bridge URL");
+  assert(browserSmoke.includes("forceResolve === true"), "Browser smoke should verify restored external tracks force a fresh media resolve");
+  assert(browserSmoke.includes("persistedDroppedPlayableUrls === true"), "Browser smoke should verify persisted plugin queues drop stale playable URLs");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
   assert(browserSmoke.includes("stableTimeUpdateKeptLyricClock"), "Browser smoke should verify stable timeupdates do not reset the lyric RAF clock");
   assert(browserSmoke.includes("driftTimeUpdateResyncedLyricClock"), "Browser smoke should verify drifted timeupdates still resync the lyric clock");
@@ -1121,6 +1128,8 @@ function checkAppFunctionReferences() {
   assert(app.includes("state.externalResolveRetryTrackId = \"\";\n        clearPlaybackErrorState();"), "Successful playback should clear the external fresh resolve retry marker");
   assert(app.includes("forceExternalResolve: isExternalSourceTrack(state.currentTrack)"), "Restored external queue playback should force a fresh bridge resolve");
   assert(app.includes("function markRestoredQueueTrackForFreshResolve"), "Restored queue tracks should be marked for a fresh external media resolve");
+  assert(app.includes("createBrowserSmokeExternalRestoredTrack"), "Browser smoke should model restored plugin-backed external tracks");
+  assert(app.includes("writeBrowserSmokeLegacyExternalQueue"), "Browser smoke should verify legacy bridge queue restoration");
   assert(/function loadRecentTracks\(session\) \{[\s\S]*?const tracks = storage\.loadRecentTracks\(session\);[\s\S]*?tracks\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?return tracks;/.test(app), "Loaded recent external tracks should be marked for a fresh external media resolve");
   assert(/function loadQueueState\(session\) \{[\s\S]*?queueState\.queue\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?markRestoredQueueTrackForFreshResolve\(queueState\.currentTrack\);/.test(app), "Loaded external queue tracks should be marked as restored cache entries");
   assert(/function shouldForceResolveExternalTrack\(track, options = \{\}, queue = \[\]\) \{[\s\S]*?restoredQueueTrack\?\._restoredQueueNeedsFreshResolve[\s\S]*?\}/.test(app), "Any restored external queue item should bypass stale inline URLs when played");

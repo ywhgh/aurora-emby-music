@@ -1425,6 +1425,7 @@ function installBrowserSmokeHooks() {
 
   window.EmbyMusicBrowserSmoke = {
     runLyricProgressScenario,
+    runExternalSourceReentryScenario,
     runSearchAbortScenario,
   };
 }
@@ -1517,6 +1518,333 @@ function runSearchAbortScenario() {
     abortedImmediately,
     timerScheduled,
   };
+}
+
+async function runExternalSourceReentryScenario() {
+  const staleBridgeUrl = "http://127.0.0.1:5999";
+  const currentBridgeUrl = "http://127.0.0.1:5174";
+  const track = createBrowserSmokeExternalRestoredTrack(staleBridgeUrl);
+  const staleSession = buildExternalSourceSession(staleBridgeUrl, {
+    name: "Browser Smoke Stale Bridge",
+    version: "stale",
+  });
+  const currentSession = buildExternalSourceSession(currentBridgeUrl, {
+    name: "Browser Smoke Current Bridge",
+    version: "current",
+  });
+  const previous = {
+    session: state.session,
+    sourceMode: state.sourceMode,
+    externalSourceApiUrl: state.externalSourceApiUrl,
+    tracks: state.tracks,
+    filteredTracks: state.filteredTracks,
+    queue: state.queue,
+    currentTrack: state.currentTrack,
+    currentTrackIndex: state.currentTrackIndex,
+    currentPlaybackMode: state.currentPlaybackMode,
+    currentMediaSourceId: state.currentMediaSourceId,
+    currentPlaySessionId: state.currentPlaySessionId,
+    hasReportedPlaybackStart: state.hasReportedPlaybackStart,
+    savedPlaybackPositionSeconds: state.savedPlaybackPositionSeconds,
+    isChangingTrack: state.isChangingTrack,
+    isPlaybackBuffering: state.isPlaybackBuffering,
+    audioUnlocked: state.audioUnlocked,
+    pendingAutoplayResume: state.pendingAutoplayResume,
+    lastPlaybackInfoError: state.lastPlaybackInfoError,
+    lastPlaybackError: state.lastPlaybackError,
+    externalResolveRetryTrackId: state.externalResolveRetryTrackId,
+  };
+  const originalFetchMediaSource = externalSourceApi.fetchMediaSource;
+  const originalAudioPlay = audioPlayer.play;
+  const hadOwnAudioPlay = Object.prototype.hasOwnProperty.call(audioPlayer, "play");
+  const fetchCalls = [];
+  let playCalled = false;
+  let loadedQueueState = null;
+  let playbackTrack = null;
+  let persistedQueueState = null;
+  let restoredMarkerBeforePlay = false;
+  let result = null;
+
+  externalSourceApi.fetchMediaSource = async (apiUrl, requestedTrack, options = {}) => {
+    fetchCalls.push({
+      apiUrl,
+      forceResolve: Boolean(options.forceResolve),
+      quality: options.quality || "",
+      trackApiUrl: requestedTrack?.ExternalSource?.apiUrl || "",
+      trackMediaUrl: requestedTrack?.ExternalSource?.mediaUrl || "",
+      trackBridgeStreamUrl: requestedTrack?.ExternalSource?.bridgeStreamUrl || "",
+      trackDirectUrl: requestedTrack?.ExternalSource?.directUrl || "",
+    });
+
+    return createBrowserSmokeExternalMediaResponse(currentBridgeUrl, requestedTrack);
+  };
+  audioPlayer.play = () => {
+    playCalled = true;
+    return Promise.resolve();
+  };
+
+  try {
+    clearBrowserSmokeExternalQueueKeys(staleSession, currentSession);
+    writeBrowserSmokeLegacyExternalQueue(staleSession, track, 12.5);
+
+    loadedQueueState = loadQueueState(staleSession);
+    playbackTrack = loadedQueueState.currentTrack || loadedQueueState.queue[0];
+    state.session = currentSession;
+    state.sourceMode = "external";
+    state.externalSourceApiUrl = currentBridgeUrl;
+    state.tracks = [playbackTrack];
+    state.filteredTracks = [playbackTrack];
+    state.queue = loadedQueueState.queue;
+    state.currentTrack = playbackTrack;
+    state.currentTrackIndex = 0;
+    state.savedPlaybackPositionSeconds = loadedQueueState.positionSeconds;
+    state.audioUnlocked = true;
+    state.pendingAutoplayResume = false;
+    state.lastPlaybackInfoError = "";
+    state.lastPlaybackError = "";
+    state.externalResolveRetryTrackId = "";
+    clearPreload();
+    restoredMarkerBeforePlay = Boolean(playbackTrack?._restoredQueueNeedsFreshResolve);
+
+    await playTrack(playbackTrack, loadedQueueState.queue, {
+      positionSeconds: loadedQueueState.positionSeconds,
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    persistedQueueState = storage.loadQueueState(currentSession);
+    const persistedTrack = persistedQueueState.queue[0] || null;
+    const persistedExternal = persistedTrack?.ExternalSource || {};
+    const currentExternal = playbackTrack.ExternalSource || {};
+    const loadedExternal = loadedQueueState.queue[0]?.ExternalSource || {};
+    const staleValues = [
+      loadedExternal.mediaUrl,
+      loadedExternal.bridgeStreamUrl,
+      loadedExternal.directUrl,
+    ].filter(Boolean);
+    const persistedValues = [
+      persistedExternal.mediaUrl,
+      persistedExternal.bridgeStreamUrl,
+      persistedExternal.directUrl,
+    ].filter(Boolean);
+
+    result = {
+      loadedFromLegacyQueue: loadedQueueState.queue.length === 1 && playbackTrack?.Id === track.Id,
+      restoredMarkerBeforePlay,
+      restoredMarkerClearedAfterPlay: !playbackTrack?._restoredQueueNeedsFreshResolve,
+      fetchCallCount: fetchCalls.length,
+      fetchCall: fetchCalls[0] || null,
+      usedCurrentBridgeUrl: fetchCalls[0]?.apiUrl === currentBridgeUrl,
+      ignoredStaleTrackBridgeUrl: fetchCalls[0]?.apiUrl !== track.ExternalSource.apiUrl,
+      forceResolve: fetchCalls[0]?.forceResolve === true,
+      staleInlineUrlPassedToFetch: fetchCalls[0]?.trackMediaUrl === track.ExternalSource.mediaUrl,
+      playCalled,
+      audioSourceUsesCurrentBridge: String(audioPlayer.src || "").startsWith(`${currentBridgeUrl}/plugin-stream`),
+      currentMediaUrl: currentExternal.mediaUrl || "",
+      currentBridgeStreamUrl: currentExternal.bridgeStreamUrl || "",
+      currentDirectUrl: currentExternal.directUrl || "",
+      currentUsesFreshBridgeStream: currentExternal.bridgeStreamUrl?.startsWith(`${currentBridgeUrl}/plugin-stream`) || false,
+      currentUsesFreshDirectUrl: currentExternal.directUrl === "https://fresh.example.invalid/browser-smoke.flac",
+      persistedQueueLength: persistedQueueState.queue.length,
+      persistedCurrentTrackId: persistedQueueState.currentTrack?.Id || "",
+      persistedMediaUrl: persistedExternal.mediaUrl || "",
+      persistedBridgeStreamUrl: persistedExternal.bridgeStreamUrl || "",
+      persistedDirectUrl: persistedExternal.directUrl || "",
+      persistedDroppedStaleUrls: !persistedValues.some((value) => staleValues.includes(value)),
+      persistedDroppedPlayableUrls: !persistedExternal.mediaUrl && !persistedExternal.bridgeStreamUrl && !persistedExternal.directUrl,
+      persistedRestoreHasPluginIdentity: Boolean(
+        persistedExternal.restore?.pluginKey
+          && persistedExternal.restore?.pluginUrl
+          && persistedExternal.restore?.raw
+      ),
+      persistedPluginUrl: persistedExternal.pluginUrl || "",
+      savedPositionSeconds: persistedQueueState.positionSeconds,
+      lastPlaybackInfoError: state.lastPlaybackInfoError,
+      lastPlaybackError: state.lastPlaybackError,
+      pendingAutoplayResume: state.pendingAutoplayResume,
+      externalResolveRetryTrackId: state.externalResolveRetryTrackId,
+    };
+  } finally {
+    state.playRequestId += 1;
+    audioPlayer.pause();
+    unloadAudioSource();
+    externalSourceApi.fetchMediaSource = originalFetchMediaSource;
+    if (hadOwnAudioPlay) {
+      audioPlayer.play = originalAudioPlay;
+    } else {
+      delete audioPlayer.play;
+    }
+    state.session = previous.session;
+    state.sourceMode = previous.sourceMode;
+    state.externalSourceApiUrl = previous.externalSourceApiUrl;
+    state.tracks = previous.tracks;
+    state.filteredTracks = previous.filteredTracks;
+    state.queue = previous.queue;
+    state.currentTrack = previous.currentTrack;
+    state.currentTrackIndex = previous.currentTrackIndex;
+    state.currentPlaybackMode = previous.currentPlaybackMode;
+    state.currentMediaSourceId = previous.currentMediaSourceId;
+    state.currentPlaySessionId = previous.currentPlaySessionId;
+    state.hasReportedPlaybackStart = previous.hasReportedPlaybackStart;
+    state.savedPlaybackPositionSeconds = previous.savedPlaybackPositionSeconds;
+    state.isChangingTrack = previous.isChangingTrack;
+    state.audioUnlocked = previous.audioUnlocked;
+    state.pendingAutoplayResume = previous.pendingAutoplayResume;
+    state.lastPlaybackInfoError = previous.lastPlaybackInfoError;
+    state.lastPlaybackError = previous.lastPlaybackError;
+    state.externalResolveRetryTrackId = previous.externalResolveRetryTrackId;
+    setPlaybackBuffering(previous.isPlaybackBuffering);
+    clearBrowserSmokeExternalQueueKeys(staleSession, currentSession);
+  }
+
+  return result;
+}
+
+function createBrowserSmokeExternalRestoredTrack(apiUrl) {
+  const pluginKey = "browser-smoke-plugin";
+  const sourceId = "restored-track";
+  const rawTrack = {
+    id: sourceId,
+    Id: sourceId,
+    name: "Browser Smoke Restored Bridge Track",
+    title: "Browser Smoke Restored Bridge Track",
+    artist: "Smoke Tests",
+    album: "Bridge Restore",
+    duration: 180,
+  };
+
+  return {
+    Id: `external:plugin:${pluginKey}:${sourceId}`,
+    Type: "Audio",
+    MediaType: "Audio",
+    Name: rawTrack.name,
+    Album: rawTrack.album,
+    Artists: [rawTrack.artist],
+    ArtistItems: [{ Id: "browser-smoke-bridge-artist", Name: rawTrack.artist }],
+    RunTimeTicks: secondsToTicks(rawTrack.duration),
+    UserData: {},
+    ExternalSource: {
+      apiUrl,
+      id: `plugin:${pluginKey}:${sourceId}`,
+      platform: "browser-smoke",
+      pluginKey,
+      pluginName: "Browser Smoke Plugin",
+      pluginUrl: "https://browser-smoke.invalid/plugin.js",
+      pluginPlatform: "Browser Smoke",
+      sourceId,
+      mediaKind: "audio",
+      codec: "MP3",
+      bitrate: 320000,
+      sourceQuality: "HQ",
+      qualityLabel: "HQ",
+      qualityState: "resolved",
+      qualityVerified: true,
+      contentType: "audio/mpeg",
+      mediaUrl: "https://stale.example.invalid/browser-smoke.mp3",
+      bridgeStreamUrl: `${apiUrl}/plugin-stream?id=stale`,
+      directUrl: "https://stale.example.invalid/direct-browser-smoke.mp3",
+      raw: {
+        pluginKey,
+        pluginName: "Browser Smoke Plugin",
+        pluginUrl: "https://browser-smoke.invalid/plugin.js",
+        pluginPlatform: "Browser Smoke",
+        sourceId,
+        raw: rawTrack,
+      },
+      restore: {
+        pluginKey,
+        pluginName: "Browser Smoke Plugin",
+        pluginUrl: "https://browser-smoke.invalid/plugin.js",
+        pluginPlatform: "Browser Smoke",
+        sourceId,
+        mediaKind: "audio",
+        raw: rawTrack,
+      },
+    },
+    MediaSources: [
+      {
+        Id: `external-media:plugin:${pluginKey}:${sourceId}`,
+        Container: "mp3",
+        BitRate: 320000,
+        MediaKind: "audio",
+        MediaStreams: [{ Type: "Audio", Codec: "MP3", BitRate: 320000 }],
+      },
+    ],
+  };
+}
+
+function createBrowserSmokeExternalMediaResponse(apiUrl, track) {
+  const sourceId = track?.ExternalSource?.sourceId || "restored-track";
+  const streamUrl = `${apiUrl}/plugin-stream?id=${encodeURIComponent(sourceId)}&quality=super`;
+  const raw = track?.ExternalSource?.restore?.raw || track?.ExternalSource?.raw?.raw || {};
+
+  return {
+    mediaSourceId: "browser-smoke-fresh-media",
+    playSessionId: "browser-smoke-fresh-session",
+    streamUrl,
+    bridgeStreamUrl: streamUrl,
+    directUrl: "https://fresh.example.invalid/browser-smoke.flac",
+    contentType: "audio/flac",
+    codec: "FLAC",
+    bitrate: 1000000,
+    sourceQuality: "SQ",
+    qualityLabel: "FLAC",
+    qualityVerified: true,
+    raw: {
+      pluginKey: "browser-smoke-plugin",
+      pluginName: "Browser Smoke Plugin",
+      pluginUrl: "https://browser-smoke.invalid/plugin.js",
+      pluginPlatform: "Browser Smoke",
+      sourceId,
+      raw,
+      media: {
+        streamUrl,
+        directUrl: "https://fresh.example.invalid/browser-smoke.flac",
+      },
+    },
+    restore: {
+      pluginKey: "browser-smoke-plugin",
+      pluginName: "Browser Smoke Plugin",
+      pluginUrl: "https://browser-smoke.invalid/plugin.js",
+      pluginPlatform: "Browser Smoke",
+      sourceId,
+      mediaKind: "audio",
+      sourceQuality: "SQ",
+      qualityLabel: "FLAC",
+      qualityVerified: true,
+      raw,
+    },
+  };
+}
+
+function writeBrowserSmokeLegacyExternalQueue(session, track, positionSeconds = 0) {
+  localStorage.setItem(getBrowserSmokeLegacyQueueKey(session), JSON.stringify({
+    serverUrl: session.serverUrl,
+    userId: session.userId,
+    serverId: session.serverId,
+    queue: [track],
+    currentTrackId: track.Id,
+    currentTrackIndex: 0,
+    positionSeconds,
+    savedAt: new Date().toISOString(),
+  }));
+}
+
+function getBrowserSmokeLegacyQueueKey(session) {
+  const serverUrl = String(session?.serverUrl || "").replace(/\/+$/, "").toLowerCase();
+  return `${QUEUE_KEY}/${encodeURIComponent(`${serverUrl}::${session.userId}`)}`;
+}
+
+function clearBrowserSmokeExternalQueueKeys(...sessions) {
+  const keys = new Set([
+    QUEUE_KEY,
+    ...sessions.filter(Boolean).flatMap((session) => [
+      getBrowserSmokeLegacyQueueKey(session),
+      `${QUEUE_KEY}/${encodeURIComponent(`source-bridge://external-source::${session.userId}`)}`,
+      `${QUEUE_KEY}/${encodeURIComponent(`source-bridge://unconfigured::${session.userId}`)}`,
+    ]),
+  ]);
+
+  keys.forEach((key) => localStorage.removeItem(key));
 }
 
 function runLyricProgressScenario() {

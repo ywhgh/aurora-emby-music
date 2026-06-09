@@ -297,6 +297,27 @@ function createSearchAbortSmokeScript() {
   })()`;
 }
 
+function createExternalSourceReentrySmokeScript() {
+  return `(async () => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runExternalSourceReentryScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...(await hooks.runExternalSourceReentryScenario()),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
+
 function killProcessTree(pid) {
   if (!pid) {
     return;
@@ -496,8 +517,9 @@ async function runBrowserCheck(cdp, check) {
     await delay(250);
 
     const evaluation = await cdp.send("Runtime.evaluate", {
+      awaitPromise: true,
       returnByValue: true,
-      expression: `(() => {
+      expression: `(async () => {
         const lyricOffset = ${createLyricOffsetSmokeScript()};
         const text = (selector) => document.querySelector(selector)?.textContent?.trim() || "";
         const exists = (selector) => Boolean(document.querySelector(selector));
@@ -553,6 +575,7 @@ async function runBrowserCheck(cdp, check) {
         return {
           ...pageState,
           lyricProgress: ${createLyricProgressSmokeScript()},
+          externalSourceReentry: await ${createExternalSourceReentrySmokeScript()},
           searchAbort: ${createSearchAbortSmokeScript()},
         };
       })()`,
@@ -596,6 +619,7 @@ function checkPageState(check, page) {
   const topLyricShard = lyricProgress.topLyricShard || {};
   const immersiveIconButtons = lyricProgress.immersiveIconButtons || {};
   const mobileImmersiveLayout = lyricProgress.mobileImmersiveLayout || {};
+  const externalSourceReentry = page.externalSourceReentry || {};
   const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
@@ -653,6 +677,20 @@ function checkPageState(check, page) {
   assert(!searchAbort.error, `${label} search abort smoke failed: ${searchAbort.error || "-"}`);
   assert(searchAbort.abortedImmediately === true, `${label} search should abort stale in-flight requests immediately: ${JSON.stringify(searchAbort)}`);
   assert(searchAbort.timerScheduled === true, `${label} search abort smoke should still schedule the next debounced search: ${JSON.stringify(searchAbort)}`);
+  assert(externalSourceReentry.hasHook, `${label} missing browser-smoke external source re-entry hook`);
+  assert(!externalSourceReentry.error, `${label} external source re-entry smoke failed: ${externalSourceReentry.error || "-"}`);
+  assert(externalSourceReentry.loadedFromLegacyQueue === true, `${label} external source queue should restore from legacy bridge storage: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.restoredMarkerBeforePlay === true, `${label} restored external queue track should be marked before playback: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.restoredMarkerClearedAfterPlay === true, `${label} restored marker should clear after fresh resolve: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.fetchCallCount === 1, `${label} external source should resolve media exactly once on re-entry play: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.forceResolve === true, `${label} external source re-entry playback should bypass stale inline URLs: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.usedCurrentBridgeUrl === true, `${label} external source re-entry playback should use current bridge URL: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.ignoredStaleTrackBridgeUrl === true, `${label} external source re-entry playback should ignore stale track bridge URL: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.audioSourceUsesCurrentBridge === true, `${label} external source audio src should point at current bridge stream: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.currentUsesFreshBridgeStream === true, `${label} external source metadata should keep the fresh bridge stream during playback: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.persistedDroppedStaleUrls === true, `${label} persisted queue should drop stale external playback URLs: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.persistedDroppedPlayableUrls === true, `${label} persisted plugin queue should not keep playable URLs that expire after app restart: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.persistedRestoreHasPluginIdentity === true, `${label} persisted plugin queue should keep restore identity for future re-entry: ${JSON.stringify(externalSourceReentry)}`);
   assert(lyricProgress.hasHook, `${label} missing browser-smoke lyric progress hook`);
   assert(!lyricProgress.error, `${label} lyric progress smoke failed: ${lyricProgress.error || "-"}`);
   assert(lyricProgress.activeView === "immersivePlayer", `${label} lyric progress smoke did not open immersive player`);
