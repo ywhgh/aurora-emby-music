@@ -595,6 +595,7 @@ function checkPageState(check, page) {
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
   const immersiveIconButtons = lyricProgress.immersiveIconButtons || {};
+  const mobileImmersiveLayout = lyricProgress.mobileImmersiveLayout || {};
   const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
@@ -772,6 +773,20 @@ function checkPageState(check, page) {
   assert(immersiveIconButtons.stateLabels?.zenOnTitle === "关闭纯享无干扰模式", `${label} immersive zen on title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(immersiveIconButtons.stateLabels?.zenOffTitle === "开启纯享无干扰模式", `${label} immersive zen off title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
   assert(/^背景样式：/.test(immersiveIconButtons.stateLabels?.backgroundTitle || ""), `${label} immersive background title should update: ${JSON.stringify(immersiveIconButtons.stateLabels)}`);
+  assert(mobileImmersiveLayout.before?.modeIconCount === 4, `${label} immersive mode button should expose four mode icons: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+  assert(mobileImmersiveLayout.before?.visibleModeIconCount === 1, `${label} immersive mode button should show exactly one mode icon: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+  assert(mobileImmersiveLayout.afterModeClick?.mode !== mobileImmersiveLayout.before?.modeBefore, `${label} immersive mode button should cycle mode on click: ${JSON.stringify(mobileImmersiveLayout.afterModeClick)}`);
+  assert(/^播放模式：/.test(mobileImmersiveLayout.afterModeClick?.title || ""), `${label} immersive mode title should update after click: ${JSON.stringify(mobileImmersiveLayout.afterModeClick)}`);
+  if (check.name === "mobile") {
+    assert(mobileImmersiveLayout.before?.view === "cover", `${label} mobile immersive should default to cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.visualizerBarCount >= 12, `${label} mobile immersive should render visualizer bars: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.lyricVisible === true, `${label} mobile immersive lyrics should show after tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.coverVisible === false, `${label} mobile immersive cover should hide after lyric tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+  }
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 

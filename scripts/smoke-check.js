@@ -190,8 +190,11 @@ function checkCss() {
   assert(/\.status-grid \{[\s\S]*?display:\s*flex;[\s\S]*?overflow-x:\s*auto;[\s\S]*?scroll-snap-type:\s*x mandatory;/.test(css), "Mobile home stats should be a one-card horizontal snap scroller");
   assert(/\.status-grid::-webkit-scrollbar \{[\s\S]*?display:\s*none;/.test(css), "Mobile home stats should hide the horizontal scrollbar");
   assert(/\.status-grid \.info-card \{[\s\S]*?flex:\s*0 0 100%;[\s\S]*?scroll-snap-align:\s*start;/.test(css), "Mobile home stat cards should show one card per row while swiping");
-  assert(/\.immersive-main h2 \{[\s\S]*?font-size:\s*1\.08rem;/.test(css), "Mobile immersive title should use compact phone typography");
-  assert(/\.immersive-lyric-list \.lyric-line,\s*\.immersive-lyric-list p \{[\s\S]*?font-size:\s*1\.02rem;/.test(css), "Mobile immersive lyrics should use compact phone typography");
+  assert(/\.immersive-main h2 \{[\s\S]*?font-size:\s*1rem;/.test(css), "Mobile immersive title should use compact phone typography");
+  assert(/\.immersive-lyric-list \.lyric-line,\s*\.immersive-lyric-list p \{[\s\S]*?font-size:\s*clamp\(1\.22rem,\s*6\.7vw,\s*2\.05rem\);/.test(css), "Mobile immersive lyrics should use larger lyric typography");
+  assert(css.includes('.immersive-player-shell[data-mobile-view="cover"] .immersive-lyric-focus'), "Mobile immersive cover view should hide lyric focus");
+  assert(/\.immersive-left \{[\s\S]*?display:\s*none;/.test(css), "Mobile immersive should hide the old cover/info column");
+  assert(/\.immersive-lyric-offset-controls \.lyric-offset-value \{[\s\S]*?display:\s*none !important;/.test(css), "Mobile immersive should hide the lyric offset numeric value");
   assert(/\.immersive-lyric-offset-controls button \{[\s\S]*?border-radius:\s*50%;/.test(css), "Immersive lyric offset controls should be icon buttons");
   assert(/\.immersive-empty-actions \.primary-mini-button,[\s\S]*?\.immersive-empty-actions \.secondary-mini-button \{[\s\S]*?font-size:\s*0;/.test(css), "Immersive empty actions should hide visible text and show icons");
   assert(/\.immersive-queue-tools button \{[\s\S]*?border-radius:\s*50%;[\s\S]*?font-size:\s*0;/.test(css), "Immersive queue tools should use icon-only buttons");
@@ -301,7 +304,7 @@ function checkLyrics() {
   assert(/id="immersiveShuffleStartButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">随机播放<\/span>/.test(index), "Immersive empty shuffle action should be icon-only");
   assert(/id="immersiveQueueLocateButton"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">定位当前歌曲<\/span>/.test(index), "Immersive queue locate action should be icon-only");
   assert(/id="immersiveBackgroundButton"[^>]*aria-label="背景样式：原始"[^>]*title="背景样式：原始"[\s\S]*?<svg class="line-icon"[\s\S]*?<span class="sr-only">背景样式：原始<\/span>/.test(index), "Immersive background action should be an accessible icon-only button");
-  assert(/id="immersiveModeButton"[^>]*aria-label="播放模式：顺序"[^>]*title="播放模式：顺序"[\s\S]*?<svg class="line-icon mode-chip-icon"[\s\S]*?<span class="sr-only">顺序<\/span>/.test(index), "Immersive playback mode should use a screen-reader label instead of visible text");
+  assert(/id="immersiveModeButton"[^>]*aria-label="播放模式：顺序"[^>]*title="播放模式：顺序"[^>]*data-mode="order"[\s\S]*?mode-order[\s\S]*?mode-shuffle[\s\S]*?mode-repeat[\s\S]*?mode-repeat-one[\s\S]*?<span class="sr-only">顺序<\/span>/.test(index), "Immersive playback mode should expose state-specific icons with a screen-reader label");
   assert(/id="immersivePlayButton"[^>]*aria-label="播放"[^>]*title="播放"[\s\S]*?<span class="sr-only">播放<\/span>/.test(index), "Immersive play control should expose only an accessible icon label");
   assert(/id="immersiveQueueButton"[^>]*aria-label="打开播放队列"[^>]*title="打开播放队列"[\s\S]*?<span class="sr-only">播放队列<\/span>/.test(index), "Immersive queue toggle should start as an accessible icon-only button");
   assert(!/id="immersiveLyricOffsetSlowerButton"[^>]*>慢了<\/button>/.test(index), "Immersive lyric offset should not expose visible text buttons");
@@ -310,6 +313,9 @@ function checkLyrics() {
   assert(app.includes("function setIconButtonLabel"), "Dynamic icon-only buttons should share one label synchronizer");
   assert(app.includes("setIconButtonLabel(immersivePlayButton, label)"), "Immersive play label should update its screen-reader text and title");
   assert(app.includes('setIconButtonLabel(immersiveQueueButton, "打开播放队列")'), "Immersive queue toggle should restore its accessible open label after close");
+  assert(app.includes("function setMobileImmersiveStageView"), "Mobile immersive stage should have an explicit cover/lyrics state controller");
+  assert(app.includes("toggleMobileImmersiveStageView"), "Mobile immersive stage should toggle between cover and lyrics");
+  assert(app.includes("updateImmersiveFullscreenLabel"), "Immersive fullscreen button should sync its browser fullscreen state label");
   assert(css.includes(".lyric-offset-controls"), "Lyric offset controls should have scoped styles");
   assert(app.includes('LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds"'), "Lyric offset should be persisted in localStorage");
   assert(app.includes("DEFAULT_LYRIC_OFFSET_SECONDS = 0.18"), "Lyric offset should preserve the previous default lead");

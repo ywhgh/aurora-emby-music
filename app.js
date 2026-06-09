@@ -751,6 +751,9 @@ const playerNextPreview = document.querySelector("#playerNextPreview");
 const playerNextTitle = document.querySelector("#playerNextTitle");
 const immersiveBackdrop = document.querySelector("#immersiveBackdrop");
 const immersiveCover = document.querySelector("#immersiveCover");
+const immersiveMobileStageToggle = document.querySelector("#immersiveMobileStageToggle");
+const immersiveMobileCoverProxy = document.querySelector(".immersive-mobile-cover-proxy");
+const immersiveMobileTitle = document.querySelector("#immersiveMobileTitle");
 const immersiveTitle = document.querySelector("#immersiveTitle");
 const immersiveArtist = document.querySelector("#immersiveArtist");
 const immersiveAlbum = document.querySelector("#immersiveAlbum");
@@ -1004,6 +1007,7 @@ const state = {
   isCreatingPlaylist: false,
   isMovingPlaylistTrack: false,
   isImmersiveQueueOpen: false,
+  mobileImmersiveView: "cover",
   immersiveBackgroundMode: "original",
   immersiveReturnView: "home",
   videoFloatingMode: "hidden",
@@ -1348,6 +1352,8 @@ function init() {
   immersiveShuffleStartButton.addEventListener("click", shufflePlayFromImmersive);
   immersivePlayLibraryButton.addEventListener("click", playLibraryFromImmersive);
   immersiveOpenLibraryButton.addEventListener("click", () => switchView("library"));
+  immersiveMobileStageToggle?.addEventListener("click", toggleMobileImmersiveStageView);
+  immersiveLyricList?.addEventListener("click", handleImmersiveLyricBlankClick);
   muteButton.addEventListener("click", toggleMute);
   volumeSlider.addEventListener("input", handleVolumeInput);
   progressTrack.addEventListener("click", seekFromProgress);
@@ -1374,6 +1380,7 @@ function init() {
   audioPlayer.addEventListener("ratechange", handleAudioRateChange);
   audioPlayer.addEventListener("volumechange", updateVolumeButton);
   audioPlayer.addEventListener("error", handleAudioElementError);
+  document.addEventListener("fullscreenchange", updateImmersiveFullscreenLabel);
   playerbarSweepLayer?.addEventListener("animationend", () => {
     playerbarSweepLayer.classList.remove("is-active");
   });
@@ -1733,6 +1740,7 @@ function runLyricProgressScenario() {
   const endScrollLayout = collectBrowserSmokeImmersiveLayoutState();
   const topLyricShard = collectBrowserSmokeTopLyricShardState();
   const immersiveIconButtons = collectBrowserSmokeImmersiveIconButtonState();
+  const mobileImmersiveLayout = collectBrowserSmokeMobileImmersiveState();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -1756,6 +1764,7 @@ function runLyricProgressScenario() {
     endScrollLayout,
     topLyricShard,
     immersiveIconButtons,
+    mobileImmersiveLayout,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
@@ -2250,6 +2259,7 @@ function runBrowserSmokeBilingualDenseLyricPerformanceScenario() {
 
 function collectBrowserSmokeImmersiveLayoutState() {
   const shell = document.querySelector(".immersive-player-shell");
+  setMobileImmersiveStageView("lyrics");
   const shellRect = shell?.getBoundingClientRect();
   const listRect = immersiveLyricList?.getBoundingClientRect();
   const activeLine = immersiveLyricLineElements[state.activeLyricIndex] || null;
@@ -2262,7 +2272,7 @@ function collectBrowserSmokeImmersiveLayoutState() {
   const shellTop = shellRect ? Math.round(shellRect.top) : null;
   const shellBottom = shellRect ? Math.round(shellRect.bottom) : null;
 
-  return {
+  const layoutState = {
     activeIndex: state.activeLyricIndex,
     lyricCount: state.lyricLines.length,
     activeLineText: activeLine?.textContent?.trim() || "",
@@ -2294,6 +2304,65 @@ function collectBrowserSmokeImmersiveLayoutState() {
       && activeRect.top >= listRect.top - 1
       && activeRect.bottom <= listRect.bottom + 1
     ),
+  };
+  setMobileImmersiveStageView("cover");
+  return layoutState;
+}
+
+function collectBrowserSmokeMobileImmersiveState() {
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  setMobileImmersiveStageView("cover");
+
+  const originalPlayMode = state.playMode;
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  const coverToggle = immersiveMobileStageToggle;
+  const lyricFocus = immersivePlayerPanel?.querySelector(".immersive-lyric-focus");
+  const offsetValue = immersivePlayerPanel?.querySelector("#immersiveLyricOffsetValue");
+  const isVisibleElement = (element) => {
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+  };
+  const before = {
+    view: shell?.getAttribute("data-mobile-view") || "",
+    coverVisible: isVisibleElement(coverToggle),
+    lyricVisible: isVisibleElement(lyricFocus),
+    offsetValueVisible: isVisibleElement(offsetValue),
+    visualizerBarCount: coverToggle?.querySelectorAll(".immersive-visualizer span").length || 0,
+    titleText: immersiveMobileTitle?.textContent?.trim() || "",
+    modeIconCount: immersiveModeButton?.querySelectorAll(".player-mode-icon").length || 0,
+    visibleModeIconCount: [...(immersiveModeButton?.querySelectorAll(".player-mode-icon") || [])]
+      .filter((icon) => window.getComputedStyle(icon).display !== "none").length,
+    modeBefore: immersiveModeButton?.dataset.mode || "",
+  };
+
+  coverToggle?.click();
+  const afterToggle = {
+    view: shell?.getAttribute("data-mobile-view") || "",
+    coverVisible: isVisibleElement(coverToggle),
+    lyricVisible: isVisibleElement(lyricFocus),
+    ariaPressed: coverToggle?.getAttribute("aria-pressed") || "",
+  };
+
+  immersiveModeButton?.click();
+  const afterModeClick = {
+    mode: immersiveModeButton?.dataset.mode || "",
+    title: immersiveModeButton?.getAttribute("title") || "",
+    ariaLabel: immersiveModeButton?.getAttribute("aria-label") || "",
+  };
+  state.playMode = originalPlayMode;
+  storage.savePlayMode(state.playMode);
+  updatePlayModeButton();
+  setMobileImmersiveStageView("cover");
+
+  return {
+    before,
+    afterToggle,
+    afterModeClick,
   };
 }
 
@@ -7215,6 +7284,47 @@ function setIconButtonLabel(button, label) {
   }
 }
 
+function setMobileImmersiveStageView(view = "cover") {
+  const nextView = view === "lyrics" ? "lyrics" : "cover";
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+
+  state.mobileImmersiveView = nextView;
+  shell?.setAttribute("data-mobile-view", nextView);
+  immersiveMobileStageToggle?.setAttribute("aria-pressed", nextView === "lyrics" ? "true" : "false");
+  immersiveMobileStageToggle?.setAttribute("aria-label", nextView === "lyrics" ? "显示封面和音乐律动" : "显示歌词");
+  if (nextView === "lyrics") {
+    updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
+    requestAnimationFrame(() => {
+      updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
+    });
+  }
+}
+
+function toggleMobileImmersiveStageView() {
+  setMobileImmersiveStageView(state.mobileImmersiveView === "lyrics" ? "cover" : "lyrics");
+}
+
+function handleImmersiveLyricBlankClick(event) {
+  if (event.target === immersiveLyricList) {
+    setMobileImmersiveStageView("cover");
+  }
+}
+
+function syncImmersiveMobileCover(imageUrl, track) {
+  if (!immersiveMobileCoverProxy) {
+    return;
+  }
+
+  immersiveMobileCoverProxy.replaceChildren();
+  immersiveMobileCoverProxy.className = "immersive-mobile-cover-proxy cover-a";
+  if (track) {
+    appendImage(immersiveMobileCoverProxy, imageUrl, track.Name);
+    return;
+  }
+
+  immersiveMobileCoverProxy.classList.add("is-empty");
+}
+
 function renderImmersivePlayer(track = state.currentTrack) {
   immersiveCover.replaceChildren();
   immersiveBackdrop.replaceChildren();
@@ -7225,10 +7335,14 @@ function renderImmersivePlayer(track = state.currentTrack) {
   if (!track) {
     immersiveCover.classList.remove("media-video-host");
     immersiveTitle.textContent = "等待选择音乐";
+    if (immersiveMobileTitle) {
+      immersiveMobileTitle.textContent = "等待选择音乐";
+    }
     immersiveArtist.textContent = "Emby Music Web";
     immersiveAlbum.textContent = "-";
     immersiveArtist.disabled = true;
     immersiveAlbum.disabled = true;
+    syncImmersiveMobileCover("", null);
     renderImmersivePlaybackMeta(null);
     renderPlaybackFavoriteButton(immersiveFavoriteButton, null);
     renderImmersiveLyricFocus();
@@ -7237,6 +7351,9 @@ function renderImmersivePlayer(track = state.currentTrack) {
 
   const imageUrl = getTrackImageUrl(track, 1100);
   immersiveTitle.textContent = track.Name || "未命名歌曲";
+  if (immersiveMobileTitle) {
+    immersiveMobileTitle.textContent = track.Name || "未命名歌曲";
+  }
   immersiveArtist.textContent = getArtists(track) || "未知艺人";
   immersiveAlbum.textContent = track.Album || "未知专辑";
   immersiveArtist.disabled = !getPrimaryTrackArtist(track);
@@ -7250,6 +7367,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
     appendImage(immersiveCover, imageUrl, track.Name);
   }
   appendImage(immersiveBackdrop, imageUrl, "");
+  syncImmersiveMobileCover(imageUrl, track);
   renderImmersivePlaybackMeta(track);
   renderPlaybackFavoriteButton(immersiveFavoriteButton, track);
   renderImmersiveLyricFocus();
@@ -11582,6 +11700,7 @@ function openMobileImmersivePlayer() {
   }
 
   state.immersiveReturnView = getActiveView() === "immersivePlayer" ? "home" : getActiveView();
+  setMobileImmersiveStageView("cover");
   switchView("immersivePlayer");
 }
 
@@ -11742,6 +11861,11 @@ function toggleImmersiveFullscreen() {
   }
 
   document.exitFullscreen?.();
+}
+
+function updateImmersiveFullscreenLabel() {
+  const isFullscreen = Boolean(document.fullscreenElement);
+  setIconButtonLabel(immersiveFullscreenButton, isFullscreen ? "退出全屏" : "进入全屏");
 }
 
 function getPlayerMetaTargetLabel(target = state.playerMetaTarget) {
@@ -18947,6 +19071,10 @@ function switchView(view, options = {}) {
   document.body.classList.toggle("immersive-player-open", nextView === "immersivePlayer");
   if (previousView === "immersivePlayer" && nextView !== "immersivePlayer") {
     setImmersiveZenMode(false);
+  }
+  if (previousView !== "immersivePlayer" && nextView === "immersivePlayer") {
+    setMobileImmersiveStageView("cover");
+    updateImmersiveFullscreenLabel();
   }
   if (nextView !== "library") {
     hideLibraryAlphabetScrubber();

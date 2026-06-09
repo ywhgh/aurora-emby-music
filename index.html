@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.144" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.144" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.144" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.145" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.145" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.145" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.144</span>
+            <span id="loginVersion">v0.93.145</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1361,6 +1361,9 @@
 
               <header class="immersive-topbar">
                 <span class="immersive-top-caption">沉浸播放</span>
+                <div class="immersive-mobile-title" aria-hidden="true">
+                  <span id="immersiveMobileTitle">等待选择音乐</span>
+                </div>
                 <div class="immersive-top-actions">
                   <div class="lyric-offset-controls immersive-lyric-offset-controls" aria-label="歌词同步校准">
                     <button id="immersiveLyricOffsetSlowerButton" type="button" data-lyric-offset-adjust="earlier" aria-label="歌词慢了，提前 0.1 秒" title="歌词慢了，提前 0.1 秒">
@@ -1462,6 +1465,26 @@
                   </div>
                 </div>
 
+                <button id="immersiveMobileStageToggle" class="immersive-mobile-stage-toggle" type="button" aria-label="显示歌词" aria-pressed="false">
+                  <span class="immersive-mobile-cover-stack" aria-hidden="true">
+                    <span class="immersive-mobile-cover-proxy cover-a"></span>
+                    <span class="audio-visualizer large immersive-visualizer">
+                      <span style="--level: 0.38; --delay: 0s"></span>
+                      <span style="--level: 0.72; --delay: -0.24s"></span>
+                      <span style="--level: 0.5; --delay: -0.48s"></span>
+                      <span style="--level: 0.92; --delay: -0.12s"></span>
+                      <span style="--level: 0.58; --delay: -0.66s"></span>
+                      <span style="--level: 0.82; --delay: -0.84s"></span>
+                      <span style="--level: 0.46; --delay: -0.34s"></span>
+                      <span style="--level: 0.76; --delay: -0.58s"></span>
+                      <span style="--level: 0.54; --delay: -1s"></span>
+                      <span style="--level: 0.88; --delay: -0.42s"></span>
+                      <span style="--level: 0.48; --delay: -0.78s"></span>
+                      <span style="--level: 0.66; --delay: -1.12s"></span>
+                    </span>
+                  </span>
+                </button>
+
                 <div class="immersive-lyric-focus" aria-live="polite">
                   <div id="immersiveLyricList" class="immersive-lyric-list">
                     <p class="active">播放歌曲后显示歌词。</p>
@@ -1538,12 +1561,31 @@
                 </button>
 
                 <div class="immersive-control-row">
-                  <button id="immersiveModeButton" class="mode-button playback-mode-chip immersive-control-button" type="button" aria-label="播放模式：顺序" title="播放模式：顺序">
-                    <svg class="line-icon mode-chip-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <button id="immersiveModeButton" class="mode-button playback-mode-chip immersive-control-button" type="button" aria-label="播放模式：顺序" title="播放模式：顺序" data-mode="order">
+                    <svg class="line-icon player-mode-icon mode-order" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 7h12"></path>
                       <path d="m13 4 3 3-3 3"></path>
                       <path d="M4 17h12"></path>
                       <path d="m13 14 3 3-3 3"></path>
+                    </svg>
+                    <svg class="line-icon player-mode-icon mode-shuffle" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 7h3.5a4 4 0 0 1 3.1 1.45l2.8 3.1A4 4 0 0 0 16.5 13H20"></path>
+                      <path d="M4 17h3.5a4 4 0 0 0 3.1-1.45l.45-.5"></path>
+                      <path d="m17 10 3 3-3 3"></path>
+                      <path d="m17 4 3 3-3 3"></path>
+                    </svg>
+                    <svg class="line-icon player-mode-icon mode-repeat" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M17 2.8 21 7l-4 4.2"></path>
+                      <path d="M3 11V9a2 2 0 0 1 2-2h16"></path>
+                      <path d="M7 21.2 3 17l4-4.2"></path>
+                      <path d="M21 13v2a2 2 0 0 1-2 2H3"></path>
+                    </svg>
+                    <svg class="line-icon player-mode-icon mode-repeat-one" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M17 2.8 21 7l-4 4.2"></path>
+                      <path d="M3 11V9a2 2 0 0 1 2-2h16"></path>
+                      <path d="M7 21.2 3 17l4-4.2"></path>
+                      <path d="M21 13v2a2 2 0 0 1-2 2H3"></path>
+                      <path d="M12 10.5v5"></path>
                     </svg>
                     <span class="sr-only">顺序</span>
                   </button>
@@ -2469,7 +2511,7 @@
 
     <script>
       (() => {
-        const version = "0.93.144";
+        const version = "0.93.145";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2847,13 +2889,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.144" defer></script>
-    <script src="./src/format.js?v=0.93.144" defer></script>
-    <script src="./src/lyrics.js?v=0.93.144" defer></script>
-    <script src="./src/emby-api.js?v=0.93.144" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.144" defer></script>
-    <script src="./src/storage.js?v=0.93.144" defer></script>
-    <script src="./app.js?v=0.93.144" defer></script>
+    <script src="./src/config.js?v=0.93.145" defer></script>
+    <script src="./src/format.js?v=0.93.145" defer></script>
+    <script src="./src/lyrics.js?v=0.93.145" defer></script>
+    <script src="./src/emby-api.js?v=0.93.145" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.145" defer></script>
+    <script src="./src/storage.js?v=0.93.145" defer></script>
+    <script src="./app.js?v=0.93.145" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>
