@@ -14728,13 +14728,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-player-shell {
-    grid-template-rows: 46px minmax(0, 1fr) auto;
-    padding: max(0.56rem, env(safe-area-inset-top)) 0.96rem max(0.72rem, env(safe-area-inset-bottom));
+    grid-template-rows: 42px minmax(0, 1fr) auto;
+    padding: max(0.28rem, env(safe-area-inset-top)) 0.96rem max(0.72rem, env(safe-area-inset-bottom));
     overflow: hidden;
   }
 
   .immersive-topbar {
-    display: block;
+    display: grid;
+    align-items: start;
     min-height: 42px;
   }
 
@@ -14746,7 +14747,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     display: grid;
     width: 100%;
     grid-template-columns: 40px minmax(0, 1fr) 40px 40px;
-    align-items: center;
+    align-items: start;
     gap: 0.38rem;
   }
 
@@ -14777,71 +14778,131 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-mobile-tool-button,
   .immersive-mobile-stage-toggle {
     -webkit-tap-highlight-color: transparent;
+    background: transparent !important;
+    outline: 0;
+  }
+
+  .immersive-round-button:not(:disabled):hover,
+  .immersive-round-button:not(:disabled):focus,
+  .immersive-round-button:not(:disabled):focus-visible,
+  .immersive-control-button:not(:disabled):hover,
+  .immersive-control-button:not(:disabled):focus,
+  .immersive-control-button:not(:disabled):focus-visible,
+  .immersive-mobile-tool-button:not(:disabled):hover,
+  .immersive-mobile-tool-button:not(:disabled):focus,
+  .immersive-mobile-tool-button:not(:disabled):focus-visible,
+  .immersive-mobile-stage-toggle:not(:disabled):hover,
+  .immersive-mobile-stage-toggle:not(:disabled):focus,
+  .immersive-mobile-stage-toggle:not(:disabled):focus-visible {
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: 0 !important;
   }
 
   .immersive-round-button:not(:disabled):active,
   .immersive-control-button:not(:disabled):active,
-  .immersive-mobile-tool-button:not(:disabled):active {
-    background: transparent;
+  .immersive-mobile-tool-button:not(:disabled):active,
+  .immersive-mobile-stage-toggle:not(:disabled):active {
+    background: transparent !important;
+    box-shadow: none !important;
     transform: scale(0.92);
   }
 
   .immersive-mobile-title {
-    top: 50%;
-    width: min(46vw, 12rem);
-    font-size: 0.88rem;
-    line-height: 1.15;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
+    display: none !important;
   }
 
   .immersive-stage {
     align-items: center;
+    justify-items: center;
     padding: 0.18rem 0 0.48rem;
   }
 
   .immersive-mobile-stage-toggle {
     min-height: 0;
     height: 100%;
+    width: 100%;
     align-content: center;
+    justify-content: center;
+    justify-items: center;
   }
 
   .immersive-mobile-cover-stack {
-    width: 100%;
-    max-width: 25rem;
-    gap: 0.86rem;
+    width: min(100%, 26rem);
+    max-width: 26rem;
+    justify-self: center;
+    justify-items: center;
+    gap: 1.08rem;
     align-content: center;
   }
 
   .immersive-mobile-cover-proxy {
+    justify-self: center;
     width: min(68vw, 18.4rem, 33dvh);
     height: min(68vw, 18.4rem, 33dvh);
+    overflow: visible;
     border-radius: 20px;
+    box-shadow:
+      0 18px 58px rgba(0, 0, 0, 0.38),
+      0 0 56px rgba(255, 246, 235, 0.24),
+      0 0 96px rgba(255, 232, 197, 0.16);
+  }
+
+  .immersive-mobile-cover-proxy::before {
+    position: absolute;
+    inset: -18%;
+    z-index: 0;
+    border-radius: 30px;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(255, 250, 242, 0.42), transparent 62%),
+      radial-gradient(circle at 50% 55%, rgba(255, 228, 192, 0.24), transparent 70%);
+    content: "";
+    filter: blur(24px);
+    opacity: 0.92;
+  }
+
+  .immersive-mobile-cover-proxy img {
+    overflow: hidden;
+    border-radius: inherit;
+  }
+
+  .immersive-lyric-focus {
+    justify-self: center;
+    max-width: min(100%, 26rem);
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .immersive-lyric-list {
+    width: 100%;
+    margin-right: auto;
+    margin-left: auto;
   }
 
   .immersive-mobile-track-copy {
     display: grid;
-    width: min(84vw, 23rem);
-    gap: 0.18rem;
+    justify-self: center;
+    width: min(88vw, 24rem);
+    gap: 0.48rem;
     color: rgba(255, 246, 235, 0.94);
     text-align: center;
   }
 
   #immersiveMobileDeckTitle {
     overflow: hidden;
-    font-size: clamp(1.05rem, 5vw, 1.38rem);
-    font-weight: 840;
-    line-height: 1.18;
+    font-size: clamp(1.28rem, 6vw, 1.72rem);
+    font-weight: 860;
+    line-height: 1.16;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   #immersiveMobileDeckSubtitle {
     overflow: hidden;
-    color: rgba(255, 246, 235, 0.62);
-    font-size: clamp(0.72rem, 3.2vw, 0.86rem);
-    font-weight: 650;
-    line-height: 1.2;
+    color: rgba(255, 246, 235, 0.72);
+    font-size: clamp(0.88rem, 3.8vw, 1.06rem);
+    font-weight: 680;
+    line-height: 1.26;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -14850,10 +14911,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     --wave-glow: 0.22;
     --wave-motion-opacity: 0;
     display: block;
+    justify-self: center;
     width: min(94vw, 28rem) !important;
     height: 5.25rem !important;
     padding: 0.18rem 0 !important;
-    margin-top: -0.18rem;
+    margin-top: 0.42rem;
     overflow: visible;
     opacity: 0.96;
     mask-image: linear-gradient(90deg, transparent 0%, #000 8%, #000 92%, transparent 100%);
@@ -14910,7 +14972,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-control-deck {
-    gap: 0.58rem;
+    gap: 0.76rem;
   }
 
   .immersive-progress {
@@ -14922,8 +14984,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     align-items: center;
     justify-items: center;
-    gap: 0;
-    padding: 0 0.08rem;
+    column-gap: clamp(0.38rem, 3.2vw, 0.92rem);
+    padding: 0 0.32rem;
   }
 
   #immersiveModeButton {
@@ -14957,8 +15019,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     align-items: center;
     justify-items: center;
-    gap: 0;
-    padding: 0 0.08rem;
+    column-gap: clamp(0.38rem, 3.2vw, 0.92rem);
+    padding: 0 0.32rem;
   }
 
   .immersive-mobile-tool-button {
@@ -14992,11 +15054,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-mobile-tool-button:not(:disabled):hover,
+  .immersive-mobile-tool-button:not(:disabled):focus,
   .immersive-mobile-tool-button:not(:disabled):focus-visible,
   .immersive-mobile-tool-button[aria-pressed="true"],
   .immersive-mobile-tool-button.favorite-button.active {
+    background: transparent !important;
+    box-shadow: none !important;
     color: rgba(255, 246, 235, 0.96);
-    outline: 0;
+    outline: 0 !important;
   }
 
   .immersive-mobile-tool-button:disabled {

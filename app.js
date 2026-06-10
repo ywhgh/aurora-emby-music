@@ -821,6 +821,8 @@ let immersiveVisualizerAudioContext = null;
 let immersiveVisualizerSource = null;
 let immersiveVisualizerAnalyser = null;
 let immersiveVisualizerData = null;
+let immersiveVisualizerStream = null;
+let immersiveVisualizerSourceElement = null;
 let immersiveVisualizerFrame = 0;
 let immersiveVisualizerLevels = [];
 let activeTrackRows = [];
@@ -2726,8 +2728,11 @@ function collectBrowserSmokeMobileImmersiveState() {
       ? {
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
         top: Math.round(rect.top),
         bottom: Math.round(rect.bottom),
+        centerX: Math.round(rect.left + (rect.width / 2)),
       }
       : null;
   };
@@ -2747,6 +2752,10 @@ function collectBrowserSmokeMobileImmersiveState() {
     offsetValueVisible: isVisibleElement(offsetValue),
     waveformVisible: isVisibleElement(coverToggle?.querySelector(".immersive-waveform")),
     waveformRect: getRect(coverToggle?.querySelector(".immersive-waveform")),
+    coverRect: getRect(coverToggle?.querySelector(".immersive-mobile-cover-proxy")),
+    trackCopyRect: getRect(coverToggle?.querySelector(".immersive-mobile-track-copy")),
+    topTitleVisible: isVisibleElement(immersiveMobileTitle),
+    viewportCenterX: Math.round(window.innerWidth / 2),
     waveformPathCount: coverToggle?.querySelectorAll(".immersive-waveform-line, .immersive-waveform-fill, .immersive-waveform-runner").length || 0,
     waveformLinePath: coverToggle?.querySelector(".immersive-waveform-line")?.getAttribute("d") || "",
     waveformHasCurvePath: /C/.test(coverToggle?.querySelector(".immersive-waveform-line")?.getAttribute("d") || ""),
@@ -16552,6 +16561,17 @@ function loadAudioSource(source, profile = getAudioQualityProfile()) {
     return;
   }
 
+  const shouldUseCors = shouldEnableAudioElementCors(source);
+  if (shouldUseCors) {
+    audioPlayer.crossOrigin = "anonymous";
+  } else {
+    audioPlayer.removeAttribute("crossorigin");
+  }
+
+  if (audioPlayer.src !== source) {
+    releaseImmersiveVisualizerAnalyser();
+  }
+
   if (useHlsJs) {
     if (!hlsPlayer) {
       hlsPlayer = new window.Hls({
@@ -16632,6 +16652,23 @@ function destroyHlsPlayer() {
   }
 
   state.isHlsJsActive = false;
+}
+
+function shouldEnableAudioElementCors(source) {
+  if (!source) {
+    return false;
+  }
+
+  if (isSourceBridgeStreamUrl(source)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(String(source), location.href);
+    return parsed.origin === location.origin;
+  } catch {
+    return false;
+  }
 }
 
 function handleHlsPlayerError(event, data = {}) {
@@ -18281,7 +18318,9 @@ function clearPreload(options = {}) {
 
 function unloadAudioSource() {
   activePlaybackLoadProfile = null;
+  releaseImmersiveVisualizerAnalyser();
   destroyHlsPlayer();
+  audioPlayer.removeAttribute("crossorigin");
   audioPlayer.removeAttribute("src");
   audioPlayer.load();
 }
@@ -19689,13 +19728,59 @@ function getImmersiveWaveformParts() {
 }
 
 function ensureImmersiveVisualizerAnalyser() {
-  // Emergency stability fix: never route the shared <audio> element through
-  // Web Audio here. A suspended AudioContext can mute MediaElementSource output.
+  if (immersiveVisualizerAnalyser && immersiveVisualizerData && immersiveVisualizerSourceElement === audioPlayer) {
+    return true;
+  }
+
+  releaseImmersiveVisualizerAnalyser();
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const captureStream = audioPlayer?.captureStream || audioPlayer?.mozCaptureStream;
+  if (!AudioContextClass || !audioPlayer || typeof captureStream !== "function") {
+    return false;
+  }
+
+  try {
+    immersiveVisualizerStream = captureStream.call(audioPlayer);
+    if (!immersiveVisualizerStream?.getAudioTracks?.().length) {
+      releaseImmersiveVisualizerAnalyser();
+      return false;
+    }
+
+    immersiveVisualizerAudioContext = new AudioContextClass();
+    immersiveVisualizerSource = immersiveVisualizerAudioContext.createMediaStreamSource(immersiveVisualizerStream);
+    immersiveVisualizerAnalyser = immersiveVisualizerAudioContext.createAnalyser();
+    immersiveVisualizerAnalyser.fftSize = 2048;
+    immersiveVisualizerAnalyser.smoothingTimeConstant = 0.58;
+    immersiveVisualizerSource.connect(immersiveVisualizerAnalyser);
+    immersiveVisualizerData = new Uint8Array(immersiveVisualizerAnalyser.fftSize);
+    immersiveVisualizerSourceElement = audioPlayer;
+    return true;
+  } catch (error) {
+    releaseImmersiveVisualizerAnalyser();
+    return false;
+  }
+}
+
+function releaseImmersiveVisualizerAnalyser() {
+  try {
+    immersiveVisualizerSource?.disconnect?.();
+  } catch {
+    // Nothing to release.
+  }
+
+  try {
+    immersiveVisualizerAudioContext?.close?.();
+  } catch {
+    // Closing is best-effort; playback must not depend on the analyser.
+  }
+
   immersiveVisualizerAudioContext = null;
   immersiveVisualizerSource = null;
   immersiveVisualizerAnalyser = null;
   immersiveVisualizerData = null;
-  return false;
+  immersiveVisualizerStream = null;
+  immersiveVisualizerSourceElement = null;
 }
 
 function syncImmersiveVisualizer() {
@@ -19714,8 +19799,15 @@ function startImmersiveVisualizer() {
     return;
   }
 
-  ensureImmersiveVisualizerAnalyser();
+  const hasAnalyser = ensureImmersiveVisualizerAnalyser();
+  if (hasAnalyser && immersiveVisualizerAudioContext?.state === "suspended") {
+    immersiveVisualizerAudioContext.resume?.().catch(() => {
+      releaseImmersiveVisualizerAnalyser();
+    });
+  }
+
   document.body.classList.toggle("is-immersive-visualizer-live", true);
+  document.body.classList.toggle("is-immersive-visualizer-sampled", hasAnalyser);
   if (!immersiveVisualizerFrame) {
     immersiveVisualizerFrame = requestAnimationFrame(updateImmersiveVisualizerFrame);
   }
@@ -19728,6 +19820,7 @@ function stopImmersiveVisualizer() {
   }
 
   document.body.classList.remove("is-immersive-visualizer-live");
+  document.body.classList.remove("is-immersive-visualizer-sampled");
   renderImmersiveWaveform(getImmersiveWaveformFallbackLevels(72, getMonotonicNowMs() / 1000, { idle: true }), 0.18);
   immersiveVisualizerLevels = [];
 }
@@ -19743,10 +19836,18 @@ function updateImmersiveVisualizerFrame() {
   }
 
   let hasLiveData = false;
-  if (immersiveVisualizerAnalyser && immersiveVisualizerData) {
-    immersiveVisualizerAnalyser.getByteTimeDomainData(immersiveVisualizerData);
-    hasLiveData = immersiveVisualizerData.some((value) => Math.abs(value - 128) > 1);
+  if (immersiveVisualizerAudioContext?.state === "suspended") {
+    immersiveVisualizerAudioContext.resume?.().catch(() => {
+      releaseImmersiveVisualizerAnalyser();
+    });
   }
+
+  if (immersiveVisualizerAnalyser && immersiveVisualizerData && immersiveVisualizerAudioContext?.state !== "suspended") {
+    immersiveVisualizerAnalyser.getByteTimeDomainData(immersiveVisualizerData);
+    hasLiveData = immersiveVisualizerData.some((value) => Math.abs(value - 128) > 2);
+  }
+
+  document.body.classList.toggle("is-immersive-visualizer-sampled", hasLiveData);
 
   const pointCount = 72;
   if (immersiveVisualizerLevels.length !== pointCount) {
@@ -19832,17 +19933,28 @@ function getImmersiveVisualizerAnalyserLevel(index, pointCount, time = getAudioC
 
   const position = index / Math.max(1, pointCount - 1);
   const binCount = immersiveVisualizerData.length;
-  const travelOffset = Math.floor((time * 38) % binCount);
-  const sampleIndex = (Math.floor(position * (binCount - 1)) + travelOffset) % binCount;
-  const previous = immersiveVisualizerData[(sampleIndex + binCount - 2) % binCount] || 128;
-  const current = immersiveVisualizerData[sampleIndex] || 128;
-  const next = immersiveVisualizerData[(sampleIndex + 2) % binCount] || 128;
-  const centered = (((previous * 0.18) + (current * 0.64) + (next * 0.18)) - 128) / 128;
+  const windowSize = Math.max(12, Math.floor(binCount / (pointCount * 1.8)));
+  const travelOffset = Math.floor((time * 52) % binCount);
+  const centerIndex = (Math.floor(position * (binCount - 1)) + travelOffset) % binCount;
+  let sumSquares = 0;
+  let signedSum = 0;
+  let peak = 0;
+
+  for (let offset = 0; offset < windowSize; offset += 1) {
+    const sampleIndex = (centerIndex + offset - Math.floor(windowSize / 2) + binCount) % binCount;
+    const value = ((immersiveVisualizerData[sampleIndex] || 128) - 128) / 128;
+    sumSquares += value * value;
+    signedSum += value;
+    peak = Math.max(peak, Math.abs(value));
+  }
+
+  const rms = Math.sqrt(sumSquares / windowSize);
+  const polarity = signedSum >= 0 ? 1 : -1;
   const edgeFade = Math.sin(position * Math.PI);
   const fallbackMotion = getImmersiveVisualizerFallbackLevel(index, pointCount, time) * 0.22;
-  const shaped = Math.sign(centered) * Math.pow(Math.abs(centered), 0.72);
+  const shaped = polarity * Math.pow((rms * 0.72) + (peak * 0.36), 0.7);
 
-  return clamp((shaped * (0.62 + (edgeFade * 0.42))) + fallbackMotion, -1, 1);
+  return clamp((shaped * (0.82 + (edgeFade * 0.5))) + fallbackMotion, -1, 1);
 }
 
 function getImmersiveVisualizerFallbackLevel(index, pointCount, time = getAudioCurrentTimeSeconds(), options = {}) {
