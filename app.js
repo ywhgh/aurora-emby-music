@@ -124,6 +124,7 @@ const LYRIC_WORD_ESTIMATED_DURATION_SECONDS = 0.48;
 const LYRIC_WORD_CHARACTER_ESTIMATED_DURATION_SECONDS = 0.2;
 const LYRIC_TIMED_WORD_MIN_DURATION_SECONDS = 0.16;
 const LYRIC_TIMED_WORD_MAX_DURATION_SECONDS = 3.2;
+const LYRIC_TIMED_WORD_MIN_STEP_SECONDS = 0.08;
 const LYRIC_PROGRESS_RESUME_LEAD_MS = 220;
 const LYRIC_PROGRESS_IDLE_MIN_DELAY_MS = 300;
 const LYRIC_CLOCK_RESYNC_THRESHOLD_SECONDS = 0.08;
@@ -1964,6 +1965,25 @@ function runLyricProgressScenario() {
   const enhancedLateWordProgress = collectBrowserSmokeLyricState();
   updateLyricsHighlight(2.1, true);
   const enhancedTailWordProgress = collectBrowserSmokeLyricState();
+  const repeatedTimestampTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-repeated-timestamp-lyric-track",
+    name: "Browser Smoke Repeated Timestamp Lyric Track",
+    durationSeconds: 10,
+    lyricsText: [
+      "[00:00.00]<0.00>一<0.00>二<0.00>三<0.24>四",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  state.currentTrack = repeatedTimestampTrack;
+  state.queue = [repeatedTimestampTrack];
+  state.tracks = [repeatedTimestampTrack];
+  state.filteredTracks = [repeatedTimestampTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(repeatedTimestampTrack);
+  setPlayerEnabled(true);
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.1, true);
+  const repeatedTimestampProgress = collectBrowserSmokeLyricState();
   const relativeEnhancedTrack = createBrowserSmokeTrack({
     id: "browser-smoke-relative-enhanced-lyric-track",
     name: "Browser Smoke Relative Enhanced Lyric Track",
@@ -2113,6 +2133,7 @@ function runLyricProgressScenario() {
     enhancedMidWordProgress,
     enhancedLateWordProgress,
     enhancedTailWordProgress,
+    repeatedTimestampProgress,
     relativeEnhancedProgress,
     bilingualEnhancedProgress,
     bilingualSurfaceProgress,
@@ -7973,6 +7994,15 @@ function appendLyricWordParts(container, parts, group) {
   group.hasUsableTimedWords = group.timings.length === group.words.length
     && group.timings.length > 0
     && areTimedLyricWordTimingsUsable(group.timings);
+  if (group.hasUsableTimedWords) {
+    group.timings = normalizeTimedLyricWordTimings(group.timings);
+    group.words.forEach((word, index) => {
+      const normalizedTime = group.timings[index];
+      if (Number.isFinite(normalizedTime)) {
+        word.dataset.wordTime = String(normalizedTime);
+      }
+    });
+  }
 }
 
 function createLyricWordGroup(line, text, options = {}) {
@@ -10320,7 +10350,7 @@ function areTimedLyricWordTimingsUsable(timings) {
   let previous = -Infinity;
 
   for (const time of timings) {
-    if (!Number.isFinite(time) || time < previous) {
+    if (!Number.isFinite(time) || time + 0.001 < previous) {
       return false;
     }
 
@@ -10328,6 +10358,35 @@ function areTimedLyricWordTimingsUsable(timings) {
   }
 
   return true;
+}
+
+function normalizeTimedLyricWordTimings(timings) {
+  let previous = -Infinity;
+  let changed = false;
+  const normalized = (timings || []).map((time) => {
+    const numericTime = Number(time);
+
+    if (!Number.isFinite(numericTime)) {
+      return NaN;
+    }
+
+    if (!Number.isFinite(previous)) {
+      previous = numericTime;
+      return numericTime;
+    }
+
+    const minAllowedTime = previous + LYRIC_TIMED_WORD_MIN_STEP_SECONDS;
+    if (numericTime < minAllowedTime) {
+      changed = true;
+      previous = minAllowedTime;
+      return minAllowedTime;
+    }
+
+    previous = numericTime;
+    return numericTime;
+  });
+
+  return changed ? normalized : timings;
 }
 
 function findTimedLyricWordIndex(timings, lyricSeconds) {
@@ -19630,30 +19689,13 @@ function getImmersiveWaveformParts() {
 }
 
 function ensureImmersiveVisualizerAnalyser() {
-  if (immersiveVisualizerAnalyser && immersiveVisualizerData) {
-    return true;
-  }
-
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass || !audioPlayer) {
-    return false;
-  }
-
-  try {
-    immersiveVisualizerAudioContext = immersiveVisualizerAudioContext || new AudioContextClass();
-    immersiveVisualizerSource = immersiveVisualizerSource || immersiveVisualizerAudioContext.createMediaElementSource(audioPlayer);
-    immersiveVisualizerAnalyser = immersiveVisualizerAudioContext.createAnalyser();
-    immersiveVisualizerAnalyser.fftSize = 1024;
-    immersiveVisualizerAnalyser.smoothingTimeConstant = 0.72;
-    immersiveVisualizerSource.connect(immersiveVisualizerAnalyser);
-    immersiveVisualizerAnalyser.connect(immersiveVisualizerAudioContext.destination);
-    immersiveVisualizerData = new Uint8Array(immersiveVisualizerAnalyser.fftSize);
-    return true;
-  } catch (error) {
-    immersiveVisualizerAnalyser = null;
-    immersiveVisualizerData = null;
-    return false;
-  }
+  // Emergency stability fix: never route the shared <audio> element through
+  // Web Audio here. A suspended AudioContext can mute MediaElementSource output.
+  immersiveVisualizerAudioContext = null;
+  immersiveVisualizerSource = null;
+  immersiveVisualizerAnalyser = null;
+  immersiveVisualizerData = null;
+  return false;
 }
 
 function syncImmersiveVisualizer() {
@@ -19672,11 +19714,8 @@ function startImmersiveVisualizer() {
     return;
   }
 
-  if (ensureImmersiveVisualizerAnalyser() && immersiveVisualizerAudioContext?.state === "suspended") {
-    immersiveVisualizerAudioContext.resume?.().catch(() => {});
-  }
-
-  document.body.classList.toggle("is-immersive-visualizer-live", Boolean(immersiveVisualizerAnalyser));
+  ensureImmersiveVisualizerAnalyser();
+  document.body.classList.toggle("is-immersive-visualizer-live", true);
   if (!immersiveVisualizerFrame) {
     immersiveVisualizerFrame = requestAnimationFrame(updateImmersiveVisualizerFrame);
   }
