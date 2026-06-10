@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.147" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.147" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.147" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.148" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.148" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.148" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.147</span>
+            <span id="loginVersion">v0.93.148</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1494,19 +1494,36 @@
                 <button id="immersiveMobileStageToggle" class="immersive-mobile-stage-toggle" type="button" aria-label="显示歌词" aria-pressed="false">
                   <span class="immersive-mobile-cover-stack" aria-hidden="true">
                     <span class="immersive-mobile-cover-proxy cover-a"></span>
-                    <span class="audio-visualizer large immersive-visualizer">
-                      <span style="--level: 0.38; --delay: 0s"></span>
-                      <span style="--level: 0.72; --delay: -0.24s"></span>
-                      <span style="--level: 0.5; --delay: -0.48s"></span>
-                      <span style="--level: 0.92; --delay: -0.12s"></span>
-                      <span style="--level: 0.58; --delay: -0.66s"></span>
-                      <span style="--level: 0.82; --delay: -0.84s"></span>
-                      <span style="--level: 0.46; --delay: -0.34s"></span>
-                      <span style="--level: 0.76; --delay: -0.58s"></span>
-                      <span style="--level: 0.54; --delay: -1s"></span>
-                      <span style="--level: 0.88; --delay: -0.42s"></span>
-                      <span style="--level: 0.48; --delay: -0.78s"></span>
-                      <span style="--level: 0.66; --delay: -1.12s"></span>
+                    <span class="immersive-mobile-track-copy">
+                      <span id="immersiveMobileDeckTitle">等待选择音乐</span>
+                      <span id="immersiveMobileDeckSubtitle">Emby Music Web</span>
+                    </span>
+                    <span class="immersive-waveform" aria-hidden="true">
+                      <svg class="immersive-waveform-svg" viewBox="0 0 360 108" preserveAspectRatio="none" focusable="false">
+                        <defs>
+                          <linearGradient id="immersiveWaveLineGradient" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
+                            <stop offset="16%" stop-color="rgba(255,244,229,0.72)"></stop>
+                            <stop offset="48%" stop-color="rgba(255,252,246,0.98)"></stop>
+                            <stop offset="78%" stop-color="rgba(255,232,197,0.72)"></stop>
+                            <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                          </linearGradient>
+                          <linearGradient id="immersiveWaveFillGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="rgba(255,246,235,0.18)"></stop>
+                            <stop offset="56%" stop-color="rgba(255,232,197,0.07)"></stop>
+                            <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                          </linearGradient>
+                          <linearGradient id="immersiveWaveRunnerGradient" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
+                            <stop offset="48%" stop-color="rgba(255,255,255,0.96)"></stop>
+                            <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                          </linearGradient>
+                        </defs>
+                        <path class="immersive-waveform-fill" d="M0 54 L360 54 L360 108 L0 108 Z"></path>
+                        <path class="immersive-waveform-aura" d="M0 54 L360 54" pathLength="100"></path>
+                        <path class="immersive-waveform-line" d="M0 54 L360 54" pathLength="100"></path>
+                        <path class="immersive-waveform-runner" d="M0 54 L360 54" pathLength="100"></path>
+                      </svg>
                     </span>
                   </span>
                 </button>
@@ -1659,6 +1676,51 @@
                     </svg>
                     <span class="sr-only">播放队列</span>
                     <span id="immersiveQueueCount" class="immersive-queue-badge">0</span>
+                  </button>
+                </div>
+
+                <div class="immersive-mobile-tool-row" aria-label="沉浸播放工具">
+                  <button id="immersiveMobileFavoriteButton" class="immersive-mobile-tool-button favorite-button" type="button" disabled aria-label="收藏" title="收藏">
+                    <svg class="line-icon favorite-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 1 0-7.2 7.2l1 1L12 21l7.2-7 1-1a5.1 5.1 0 0 0 0-7.2Z"></path>
+                    </svg>
+                    <span class="sr-only">收藏</span>
+                  </button>
+                  <button id="immersiveMobileZenButton" class="immersive-mobile-tool-button immersive-zen-button" type="button" aria-label="开启纯享无干扰模式" title="开启纯享无干扰模式" aria-pressed="false">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 4H5a1 1 0 0 0-1 1v3"></path>
+                      <path d="M16 4h3a1 1 0 0 1 1 1v3"></path>
+                      <path d="M8 20H5a1 1 0 0 1-1-1v-3"></path>
+                      <path d="M16 20h3a1 1 0 0 0 1-1v-3"></path>
+                      <path d="M9 12h6"></path>
+                    </svg>
+                    <span class="sr-only">开启纯享无干扰模式</span>
+                  </button>
+                  <button id="immersiveMobileQualityButton" class="immersive-mobile-tool-button" type="button" aria-label="音质" title="音质">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 14v-4"></path>
+                      <path d="M8 18V6"></path>
+                      <path d="M12 21V3"></path>
+                      <path d="M16 18V6"></path>
+                      <path d="M20 14v-4"></path>
+                    </svg>
+                    <span class="sr-only">音质</span>
+                  </button>
+                  <button id="immersiveMobileDownloadButton" class="immersive-mobile-tool-button" type="button" disabled aria-label="下载当前音乐" title="下载当前音乐">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 3v12"></path>
+                      <path d="m7 10 5 5 5-5"></path>
+                      <path d="M5 21h14"></path>
+                    </svg>
+                    <span class="sr-only">下载当前音乐</span>
+                  </button>
+                  <button id="immersiveMobileMoreButton" class="immersive-mobile-tool-button" type="button" aria-label="更多沉浸播放操作" title="更多沉浸播放操作">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.5"></circle>
+                      <circle cx="12" cy="12" r="1.5"></circle>
+                      <circle cx="19" cy="12" r="1.5"></circle>
+                    </svg>
+                    <span class="sr-only">更多沉浸播放操作</span>
                   </button>
                 </div>
               </footer>
@@ -2537,7 +2599,7 @@
 
     <script>
       (() => {
-        const version = "0.93.147";
+        const version = "0.93.148";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2915,13 +2977,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.147" defer></script>
-    <script src="./src/format.js?v=0.93.147" defer></script>
-    <script src="./src/lyrics.js?v=0.93.147" defer></script>
-    <script src="./src/emby-api.js?v=0.93.147" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.147" defer></script>
-    <script src="./src/storage.js?v=0.93.147" defer></script>
-    <script src="./app.js?v=0.93.147" defer></script>
+    <script src="./src/config.js?v=0.93.148" defer></script>
+    <script src="./src/format.js?v=0.93.148" defer></script>
+    <script src="./src/lyrics.js?v=0.93.148" defer></script>
+    <script src="./src/emby-api.js?v=0.93.148" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.148" defer></script>
+    <script src="./src/storage.js?v=0.93.148" defer></script>
+    <script src="./app.js?v=0.93.148" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>

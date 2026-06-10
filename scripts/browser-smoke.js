@@ -822,7 +822,12 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert(mobileImmersiveLayout.before?.visualizerBarCount >= 12, `${label} mobile immersive should render visualizer bars: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.waveformVisible === true, `${label} mobile immersive waveform should be visible: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.waveformPathCount >= 3, `${label} mobile immersive should render waveform paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.waveformHasCurvePath === true, `${label} mobile immersive waveform should use smooth curve paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.width || 0) >= 320, `${label} mobile immersive waveform is too narrow: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.height || 0) >= 70, `${label} mobile immersive waveform is too short: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.oldVisualizerBarCount === 0, `${label} mobile immersive should not keep old bar visualizer DOM: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.lyricVisible === true, `${label} mobile immersive lyrics should show after tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.coverVisible === false, `${label} mobile immersive cover should hide after lyric tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
