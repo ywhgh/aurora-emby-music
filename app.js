@@ -2109,6 +2109,7 @@ function runLyricProgressScenario() {
   const bilingualSyntheticOriginalProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   const bilingualDenseWordPerformance = runBrowserSmokeBilingualDenseLyricPerformanceScenario();
+  const lyricJitterProtection = runBrowserSmokeLyricJitterProtectionScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
     id: "browser-smoke-end-scroll-lyric-track",
@@ -2162,6 +2163,7 @@ function runLyricProgressScenario() {
     bilingualSyntheticOriginalProgress,
     denseWordPerformance,
     bilingualDenseWordPerformance,
+    lyricJitterProtection,
     endScrollLayout,
     topLyricShard,
     immersiveIconButtons,
@@ -2675,6 +2677,72 @@ function runBrowserSmokeBilingualDenseLyricPerformanceScenario() {
     progressFormattedWriteCount,
     hotPathFrameCount,
     fullHighlightFrameCount,
+  };
+}
+
+function runBrowserSmokeLyricJitterProtectionScenario() {
+  const track = createBrowserSmokeTrack({
+    id: "browser-smoke-lyric-jitter-track",
+    name: "Browser Smoke Lyric Jitter Track",
+    durationSeconds: 8,
+    lyricsText: [
+      "[00:00.00]<0.00>一 <0.50>二 <1.00>三 <1.50>四",
+      "[00:04.00]下一句",
+    ].join("\n"),
+  });
+  const collectImmersiveProgress = () => (
+    collectBrowserSmokeLyricState().wordGroups?.[0]?.wordProgress || []
+  );
+  const collectNowPlayingFocusProgress = () => (
+    collectBrowserSmokeLyricSurfaceState().focus?.groups?.[0]?.wordProgress || []
+  );
+
+  state.lyricOffsetSeconds = 0;
+  state.currentTrack = track;
+  state.queue = [track];
+  state.tracks = [track];
+  state.filteredTracks = [track];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(track);
+  setPlayerEnabled(true);
+
+  switchView("immersivePlayer", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.55, true);
+
+  const jitterTimes = [0.6, 0.7, 0.66, 0.78, 0.74, 0.92];
+  const immersiveSecondWordProgressSequence = jitterTimes.map((seconds) => {
+    updateActiveImmersiveLyricWordProgressFrame(seconds);
+    return collectImmersiveProgress()[1] || 0;
+  });
+
+  const boundaryTimes = [0.95, 1.05, 0.98, 1.12];
+  const boundaryProgressSequence = boundaryTimes.map((seconds) => {
+    updateActiveImmersiveLyricWordProgressFrame(seconds);
+    return collectImmersiveProgress();
+  });
+  const boundarySecondWordProgressSequence = boundaryProgressSequence.map((progress) => progress[1] || 0);
+  const boundaryThirdWordProgressSequence = boundaryProgressSequence.map((progress) => progress[2] || 0);
+
+  updateLyricsHighlight(0.2, true);
+  const resetAfterForceRefreshProgress = collectImmersiveProgress();
+
+  switchView("nowPlaying", { updateHash: false, resetScroll: true });
+  updateLyricsHighlight(0.55, true);
+  const nowPlayingTimes = [0.6, 0.7, 0.66, 0.78, 0.74, 0.92];
+  const nowPlayingSecondWordProgressSequence = nowPlayingTimes.map((seconds) => {
+    updateActiveLyricWordProgressFrame(seconds);
+    return collectNowPlayingFocusProgress()[1] || 0;
+  });
+
+  return {
+    jitterTimes,
+    immersiveSecondWordProgressSequence,
+    boundaryTimes,
+    boundarySecondWordProgressSequence,
+    boundaryThirdWordProgressSequence,
+    resetAfterForceRefreshProgress,
+    nowPlayingTimes,
+    nowPlayingSecondWordProgressSequence,
   };
 }
 
@@ -8919,6 +8987,7 @@ function updateInlineLyricProgress(activeIndex, currentSeconds, options = {}) {
       start,
       lyricSeconds,
       nextEntry,
+      monotonic: options.monotonic,
     });
   });
 }
@@ -8930,7 +8999,9 @@ function updateLyricProgressGroup(group, options) {
   }
 
   if (group.hasUsableTimedWords) {
-    updateTimedLyricWordProgress(-1, words, options.lyricSeconds, options.nextEntry, group);
+    updateTimedLyricWordProgress(-1, words, options.lyricSeconds, options.nextEntry, group, {
+      monotonic: options.monotonic,
+    });
     return;
   }
 
@@ -8941,7 +9012,9 @@ function updateLyricProgressGroup(group, options) {
   const lineRatio = end > options.start
     ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
     : 1;
-  updateLyricWordProgressWindowForGroup(group, lineRatio * words.length);
+  updateLyricWordProgressWindowForGroup(group, lineRatio * words.length, {
+    monotonic: options.monotonic,
+  });
 }
 
 function resetLyricWordGroups(groups) {
@@ -10291,6 +10364,7 @@ function updateActiveLyricWordProgressFrame(currentSeconds) {
   updateInlineLyricProgress(activeIndex, currentSeconds, {
     list: isNowPlayingLyricsVisible(),
     focus: isNowPlayingLyricsVisible(),
+    monotonic: true,
   });
   if (isImmersiveLyricsVisible()) {
     return updateActiveImmersiveLyricWordProgressFrame(currentSeconds);
@@ -10312,7 +10386,7 @@ function updateActiveImmersiveLyricWordProgressFrame(currentSeconds) {
     return false;
   }
 
-  updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds);
+  updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds, { monotonic: true });
   syncLyricProgressLoop();
   return true;
 }
@@ -10331,7 +10405,7 @@ function isCurrentLyricLineActiveAtTime(activeIndex, currentSeconds) {
   return currentEntry.time <= targetSeconds && (!nextEntry || nextEntry.time > targetSeconds);
 }
 
-function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds) {
+function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds, options = {}) {
   resetInactiveImmersiveWords(activeIndex);
 
   if (!activeItem) {
@@ -10359,6 +10433,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
   if (!Number.isFinite(start)) {
     updateLyricProgressGroupsByLineRatio(groups, words.length, {
       useCachedWindow: groups.length <= 1,
+      monotonic: options.monotonic,
     });
     return;
   }
@@ -10369,13 +10444,16 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
       start,
       lyricSeconds,
       nextEntry,
+      monotonic: options.monotonic,
     });
     scheduleLyricProgressResumeFromGroupState(progressState, lyricSeconds, nextEntry);
     return;
   }
 
   if (hasTimedLyricWords(activeIndex, words)) {
-    updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry);
+    updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry, null, {
+      monotonic: options.monotonic,
+    });
     return;
   }
 
@@ -10387,7 +10465,7 @@ function updateImmersiveLineWordProgress(activeItem, activeIndex, currentSeconds
     ? clamp((lyricSeconds - start) / (end - start), 0, 1)
     : 1;
   const litWords = lineRatio * words.length;
-  updateLyricWordProgressWindow(words, litWords);
+  updateLyricWordProgressWindow(words, litWords, { monotonic: options.monotonic });
   scheduleLyricProgressResumeIfIdle(lineRatio, lyricSeconds, nextEntry);
 }
 
@@ -10414,7 +10492,9 @@ function updateLyricProgressGroups(activeIndex, groups, options) {
     }
 
     if (hasTimedLyricWords(activeIndex, words, group)) {
-      const timedState = updateTimedLyricWordProgress(activeIndex, words, options.lyricSeconds, options.nextEntry, group);
+      const timedState = updateTimedLyricWordProgress(activeIndex, words, options.lyricSeconds, options.nextEntry, group, {
+        monotonic: options.monotonic,
+      });
       return mergeLyricProgressGroupState(stateSummary, timedState);
     }
 
@@ -10425,7 +10505,9 @@ function updateLyricProgressGroups(activeIndex, groups, options) {
     const lineRatio = end > options.start
       ? clamp((options.lyricSeconds - options.start) / (end - options.start), 0, 1)
       : 1;
-    updateLyricWordProgressWindowForGroup(group, lineRatio * words.length);
+    updateLyricWordProgressWindowForGroup(group, lineRatio * words.length, {
+      monotonic: options.monotonic,
+    });
     return mergeLyricProgressGroupState(stateSummary, {
       ratio: lineRatio,
       complete: lineRatio >= 1,
@@ -10448,9 +10530,9 @@ function updateLyricProgressGroupsByLineRatio(groups, litWords, options = {}) {
     }
 
     if (options.useCachedWindow && groups.length <= 1) {
-      updateLyricWordProgressWindow(words, litWords);
+      updateLyricWordProgressWindow(words, litWords, { monotonic: options.monotonic });
     } else {
-      updateLyricWordProgressWindowForGroup(group, words.length);
+      updateLyricWordProgressWindowForGroup(group, words.length, { monotonic: options.monotonic });
     }
   });
 }
@@ -10470,13 +10552,13 @@ function hasTimedLyricWords(activeIndex, words, group = null) {
     && (immersiveLyricWordTimings[activeIndex] || []).length === words.length;
 }
 
-function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry, group = null) {
+function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntry, group = null, options = {}) {
   const timings = group?.timings || getTimedLyricWordTimings(activeIndex, words);
   const endTimings = group?.endTimings || getTimedLyricWordEndTimings(activeIndex, words);
   const activeWordIndex = findTimedLyricWordIndex(timings, lyricSeconds);
 
   if (activeWordIndex < 0) {
-    updateLyricWordProgressByGroup(words, 0, group);
+    updateLyricWordProgressByGroup(words, 0, group, { monotonic: options.monotonic });
     return { ratio: 0, complete: false };
   }
 
@@ -10498,7 +10580,7 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
   const activeWordProgress = getTimedLyricWordProgress(lyricSeconds, start, end);
   const litWords = activeWordIndex + (activeWordProgress / 100);
 
-  updateLyricWordProgressByGroup(words, litWords, group);
+  updateLyricWordProgressByGroup(words, litWords, group, { monotonic: options.monotonic });
   const isComplete = activeWordIndex >= words.length - 1 && activeWordProgress >= 100;
   if (!group) {
     scheduleTimedLyricProgressResumeIfIdle(isComplete, lyricSeconds, nextEntry);
@@ -10509,13 +10591,13 @@ function updateTimedLyricWordProgress(activeIndex, words, lyricSeconds, nextEntr
   };
 }
 
-function updateLyricWordProgressByGroup(words, litWords, group = null) {
+function updateLyricWordProgressByGroup(words, litWords, group = null, options = {}) {
   if (group) {
-    updateLyricWordProgressWindowForGroup(group, litWords);
+    updateLyricWordProgressWindowForGroup(group, litWords, { monotonic: options.monotonic });
     return;
   }
 
-  updateLyricWordProgressWindow(words, litWords);
+  updateLyricWordProgressWindow(words, litWords, { monotonic: options.monotonic });
 }
 
 function getTimedLyricWordTimings(activeIndex, words) {
@@ -10813,24 +10895,24 @@ function resumeLyricProgressAfterIdle() {
   syncLyricProgressLoop();
 }
 
-function updateLyricWordProgressWindow(words, litWords) {
+function updateLyricWordProgressWindow(words, litWords, options = {}) {
   const cache = {
     progressFullWordCount: lyricProgressFullWordCount,
     progressPartialWordIndex: lyricProgressPartialWordIndex,
   };
-  updateLyricWordProgressWindowCached(words, litWords, cache);
+  updateLyricWordProgressWindowCached(words, litWords, cache, options);
   lyricProgressFullWordCount = cache.progressFullWordCount;
   lyricProgressPartialWordIndex = cache.progressPartialWordIndex;
 }
 
-function updateLyricWordProgressWindowForGroup(group, litWords) {
+function updateLyricWordProgressWindowForGroup(group, litWords, options = {}) {
   const words = group?.words || [];
   if (!words.length) {
     resetLyricProgressGroupWindow(group);
     return;
   }
 
-  updateLyricWordProgressWindowCached(words, litWords, group);
+  updateLyricWordProgressWindowCached(words, litWords, group, options);
 }
 
 function resetLyricProgressGroupWindow(group) {
@@ -10842,7 +10924,7 @@ function resetLyricProgressGroupWindow(group) {
   group.progressPartialWordIndex = -1;
 }
 
-function updateLyricWordProgressWindowCached(words, litWords, cache) {
+function updateLyricWordProgressWindowCached(words, litWords, cache, options = {}) {
   const nextFullWordCount = Math.min(words.length, Math.max(0, Math.floor(litWords)));
   const nextPartialWordIndex = nextFullWordCount < words.length ? nextFullWordCount : -1;
   const nextPartialProgress = nextPartialWordIndex >= 0
@@ -10860,7 +10942,7 @@ function updateLyricWordProgressWindowCached(words, litWords, cache) {
       const progress = index < nextFullWordCount
         ? 100
         : (index === nextPartialWordIndex ? nextPartialProgress : 0);
-      setLyricWordProgress(word, progress);
+      setLyricWordProgress(word, progress, options);
     });
     cache.progressFullWordCount = nextFullWordCount;
     cache.progressPartialWordIndex = nextPartialWordIndex;
@@ -10869,23 +10951,23 @@ function updateLyricWordProgressWindowCached(words, litWords, cache) {
 
   if (nextFullWordCount > previousFullWordCount) {
     for (let index = previousFullWordCount; index < nextFullWordCount; index += 1) {
-      setLyricWordProgress(words[index], 100);
+      setLyricWordProgress(words[index], 100, options);
     }
   } else if (nextFullWordCount < previousFullWordCount) {
     for (let index = nextFullWordCount; index < previousFullWordCount; index += 1) {
       if (index !== nextPartialWordIndex) {
-        setLyricWordProgress(words[index], 0);
+        setLyricWordProgress(words[index], 0, options);
       }
     }
   }
 
   if (previousPartialWordIndex >= 0 && previousPartialWordIndex !== nextPartialWordIndex) {
     const previousProgress = previousPartialWordIndex < nextFullWordCount ? 100 : 0;
-    setLyricWordProgress(words[previousPartialWordIndex], previousProgress);
+    setLyricWordProgress(words[previousPartialWordIndex], previousProgress, options);
   }
 
   if (nextPartialWordIndex >= 0) {
-    setLyricWordProgress(words[nextPartialWordIndex], nextPartialProgress);
+    setLyricWordProgress(words[nextPartialWordIndex], nextPartialProgress, options);
   }
 
   cache.progressFullWordCount = nextFullWordCount;
@@ -10937,13 +11019,17 @@ function resetInactiveImmersiveWords(activeIndex) {
   }
 }
 
-function setLyricWordProgress(word, percent) {
+function setLyricWordProgress(word, percent, options = {}) {
   if (!word) {
     return;
   }
 
-  const normalizedPercent = normalizeLyricWordProgressPercent(percent);
   const lastPercent = Number.isFinite(word._lyricProgress) ? word._lyricProgress : -1;
+  let normalizedPercent = normalizeLyricWordProgressPercent(percent);
+
+  if (options.monotonic && lastPercent >= 0 && normalizedPercent < lastPercent) {
+    normalizedPercent = lastPercent;
+  }
 
   if (Math.abs(lastPercent - normalizedPercent) < LYRIC_PROGRESS_EPSILON) {
     return;

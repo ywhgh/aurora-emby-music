@@ -439,7 +439,7 @@ function checkLyrics() {
   assert(app.includes("immersiveLyricTimedWordUsable"), "Enhanced LRC timed-word usability should be cached at render time");
   assert(app.includes("function findTimedLyricWordIndex"), "Enhanced LRC word progress should locate the current word by timing search");
   assert(app.includes("function getTimedLyricWordProgress"), "Enhanced LRC word progress should calculate the current word fill from exact timestamps");
-  assert(app.includes("updateLyricWordProgressWindow(words, litWords)"), "Enhanced LRC word progress should reuse the changed-word update window");
+  assert(app.includes("updateLyricWordProgressWindow(words, litWords"), "Enhanced LRC word progress should reuse the changed-word update window");
   const timedLyricProgressStart = app.indexOf("function updateTimedLyricWordProgress");
   const timedLyricProgressEnd = app.indexOf("function getTimedLyricWordTimings", timedLyricProgressStart);
   const timedLyricProgressFunction = timedLyricProgressStart >= 0 && timedLyricProgressEnd > timedLyricProgressStart

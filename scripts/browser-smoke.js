@@ -621,6 +621,7 @@ function checkPageState(check, page) {
   const bilingualSyntheticOriginalProgress = lyricProgress.bilingualSyntheticOriginalProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const bilingualDenseWordPerformance = lyricProgress.bilingualDenseWordPerformance || {};
+  const lyricJitterProtection = lyricProgress.lyricJitterProtection || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
   const immersiveIconButtons = lyricProgress.immersiveIconButtons || {};
@@ -632,6 +633,9 @@ function checkPageState(check, page) {
   const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
+  const isNonDecreasing = (values) => Array.isArray(values)
+    && values.length > 1
+    && values.every((value, index) => index === 0 || Number(value) + 0.001 >= Number(values[index - 1]));
   const hasSolidFill = (value) => value && !/^(?:none|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\))$/i.test(value);
 
   assert(page.title === "Emby Music Web", `${label} expected title Emby Music Web, got ${page.title || "-"}`);
@@ -797,6 +801,11 @@ function checkPageState(check, page) {
   assert(bilingualDenseWordPerformance.progressFormattedWriteCount === bilingualDenseWordPerformance.progressWriteCount, `${label} bilingual dense lyric should write normalized CSS progress values: ${JSON.stringify(bilingualDenseWordPerformance)}`);
   assert(bilingualDenseWordPerformance.hotPathFrameCount > bilingualDenseWordPerformance.fullHighlightFrameCount, `${label} bilingual dense lyric should use the direct RAF hot path: ${JSON.stringify(bilingualDenseWordPerformance)}`);
   assert(bilingualDenseWordPerformance.averageUpdateMs < 5, `${label} bilingual dense lyric progress average update is too slow: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(isNonDecreasing(lyricJitterProtection.immersiveSecondWordProgressSequence), `${label} immersive lyric progress should not regress during playback clock jitter: ${JSON.stringify(lyricJitterProtection)}`);
+  assert(isNonDecreasing(lyricJitterProtection.boundarySecondWordProgressSequence), `${label} immersive lyric full-word boundary should not flash backward during jitter: ${JSON.stringify(lyricJitterProtection)}`);
+  assert(isNonDecreasing(lyricJitterProtection.boundaryThirdWordProgressSequence), `${label} immersive lyric next word should not lose progress after a small backward jitter: ${JSON.stringify(lyricJitterProtection)}`);
+  assert(isNonDecreasing(lyricJitterProtection.nowPlayingSecondWordProgressSequence), `${label} now-playing lyric progress should not regress during playback clock jitter: ${JSON.stringify(lyricJitterProtection)}`);
+  assert((lyricJitterProtection.resetAfterForceRefreshProgress?.[1] || 0) === 0, `${label} forced lyric refresh should still allow progress to move back after seek/offset changes: ${JSON.stringify(lyricJitterProtection)}`);
   assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
   assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
   assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);
