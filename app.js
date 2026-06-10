@@ -2793,6 +2793,30 @@ function collectBrowserSmokeMobileImmersiveState() {
       });
     }
   };
+  const getPlayButtonLoadingStyle = () => {
+    if (!immersivePlayButton) {
+      return {};
+    }
+
+    const hadBufferingClass = document.body.classList.contains("is-playback-buffering");
+    document.body.classList.add("is-playback-buffering");
+    const pseudoStyle = window.getComputedStyle(immersivePlayButton, "::before");
+    const loadingStyle = {
+      animationName: pseudoStyle.animationName || "",
+      backgroundImage: pseudoStyle.backgroundImage || "",
+      borderRadius: pseudoStyle.borderRadius || "",
+      maskImage: pseudoStyle.maskImage || pseudoStyle.webkitMaskImage || "",
+      width: pseudoStyle.width || "",
+      height: pseudoStyle.height || "",
+    };
+
+    if (!hadBufferingClass) {
+      document.body.classList.remove("is-playback-buffering");
+    }
+
+    return loadingStyle;
+  };
+  const playButtonLoadingStyle = getPlayButtonLoadingStyle();
   const before = {
     view: shell?.getAttribute("data-mobile-view") || "",
     coverVisible: isVisibleElement(coverToggle),
@@ -2814,6 +2838,11 @@ function collectBrowserSmokeMobileImmersiveState() {
     topRevealVisible: isVisibleElement(immersiveTopRevealButton),
     playButtonBackground: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).backgroundColor : "",
     playButtonTapHighlight: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).webkitTapHighlightColor : "",
+    playButtonLoadingAnimationName: playButtonLoadingStyle.animationName || "",
+    playButtonLoadingBackgroundImage: playButtonLoadingStyle.backgroundImage || "",
+    playButtonLoadingBorderRadius: playButtonLoadingStyle.borderRadius || "",
+    playButtonLoadingMaskImage: playButtonLoadingStyle.maskImage || "",
+    playButtonLoadingSize: `${playButtonLoadingStyle.width || ""} ${playButtonLoadingStyle.height || ""}`.trim(),
     controlDeckGapPx: parseFloat(window.getComputedStyle(immersivePlayerPanel?.querySelector(".immersive-control-deck") || document.body).rowGap) || 0,
     modeIconCount: immersiveModeButton?.querySelectorAll(".player-mode-icon").length || 0,
     visibleModeIconCount: [...(immersiveModeButton?.querySelectorAll(".player-mode-icon") || [])]

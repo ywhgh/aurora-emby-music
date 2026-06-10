@@ -23,7 +23,12 @@ const CHROME_PATHS = [
 ].filter(Boolean);
 const CHECKS = [
   { name: "desktop", width: 1366, height: 900 },
-  ...(CHECK_MOBILE_VIEWPORT ? [{ name: "mobile", width: 390, height: 844 }] : []),
+  ...(CHECK_MOBILE_VIEWPORT
+    ? [
+      { name: "mobile", width: 390, height: 844 },
+      { name: "mobile-narrow", width: 360, height: 780 },
+    ]
+    : []),
 ];
 
 const errors = [];
@@ -834,7 +839,7 @@ function checkPageState(check, page) {
   assert(audioQualityOptions.exists === true && audioQualityOptions.opened === true, `${label} audio quality modal should open from immersive controls: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.optionCount > 0, `${label} audio quality modal should render quality choices: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.closedByOutside === true, `${label} audio quality modal should close on outside click: ${JSON.stringify(audioQualityOptions)}`);
-  if (check.name === "mobile") {
+  if (check.name.startsWith("mobile")) {
     assert(mobileImmersiveLayout.before?.view === "cover", `${label} mobile immersive should default to cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
@@ -850,6 +855,9 @@ function checkPageState(check, page) {
     assert(Math.abs((mobileImmersiveLayout.before?.trackCopyRect?.centerX || 0) - (mobileImmersiveLayout.before?.viewportCenterX || 0)) <= 6, `${label} mobile immersive track copy should be centered: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(Math.abs((mobileImmersiveLayout.before?.waveformRect?.centerX || 0) - (mobileImmersiveLayout.before?.viewportCenterX || 0)) <= 6, `${label} mobile immersive waveform should be centered: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(mobileImmersiveLayout.before?.playButtonBackground || ""), `${label} mobile immersive play button should not keep a colored background: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(mobileImmersiveLayout.before?.playButtonTapHighlight || ""), `${label} mobile immersive play button tap highlight should be transparent: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.playButtonLoadingAnimationName === "playbackLoadingOrbit", `${label} mobile immersive play loading should use orbit animation: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(/(?:conic-gradient|radial-gradient)/i.test(mobileImmersiveLayout.before?.playButtonLoadingBackgroundImage || ""), `${label} mobile immersive play loading should use ring gradient: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert((mobileImmersiveLayout.before?.controlDeckGapPx || 0) >= 14, `${label} mobile immersive control deck vertical gap should be roomy: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.oldVisualizerBarCount === 0, `${label} mobile immersive should not keep old bar visualizer DOM: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);

@@ -8841,6 +8841,16 @@ body.action-sheet-open .content {
   }
 }
 
+@keyframes playbackLoadingOrbit {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes hubPillShimmer {
   0%,
   56% {
@@ -11517,16 +11527,18 @@ body.video-window-hidden .video-restore-button {
 
 .is-playback-buffering .play-button::before {
   --play-loading-color: currentColor;
-  width: 1.18rem;
-  height: 1.1rem;
+  width: 1.28rem;
+  height: 1.28rem;
   border: 0;
-  border-radius: 0;
+  border-radius: 50%;
   background:
-    linear-gradient(var(--play-loading-color) 0 0) 0 50% / 3px 7px no-repeat,
-    linear-gradient(var(--play-loading-color) 0 0) 50% 50% / 3px 15px no-repeat,
-    linear-gradient(var(--play-loading-color) 0 0) 100% 50% / 3px 10px no-repeat;
-  animation: playbackLoadingWave 0.78s cubic-bezier(0.25, 1, 0.5, 1) infinite;
-  transform: none;
+    radial-gradient(circle, rgba(255, 255, 255, 0.18) 0 36%, transparent 38%),
+    conic-gradient(from 24deg, transparent 0 42deg, var(--play-loading-color) 112deg, transparent 226deg 360deg);
+  filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.34));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: playbackLoadingOrbit 0.82s linear infinite;
+  transform: rotate(0deg);
 }
 
 .is-playback-buffering .playerbar {
@@ -12152,7 +12164,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .content::before,
   .content::after,
   .audio-visualizer span,
-  .immersive-waveform-runner {
+  .immersive-waveform-runner,
+  .is-playback-buffering .play-button::before {
     animation: none !important;
     transition: none !important;
   }
@@ -15326,7 +15339,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     align-items: center !important;
     justify-content: center !important;
     justify-items: center !important;
-    padding: 0.34rem 0 0.72rem !important;
+    padding: 0.58rem 0 0.94rem !important;
   }
 
   .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-stage-toggle {
@@ -15341,6 +15354,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     place-items: center !important;
     margin: 0 auto !important;
     transform: none !important;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
+    accent-color: transparent;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-cover-stack,
@@ -15353,6 +15371,33 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     transform: translateX(0) !important;
   }
 
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-cover-stack {
+    width: min(100%, 26rem) !important;
+    max-width: calc(100vw - 1.92rem) !important;
+    place-items: center !important;
+    gap: 1.26rem !important;
+    text-align: center;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-cover-proxy {
+    width: min(68vw, 18.4rem, 33dvh) !important;
+    height: min(68vw, 18.4rem, 33dvh) !important;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-track-copy {
+    width: min(100%, 24rem) !important;
+    max-width: calc(100vw - 1.92rem) !important;
+    gap: 0.62rem !important;
+    place-items: center !important;
+    text-align: center;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-waveform {
+    width: min(100%, 28rem) !important;
+    max-width: calc(100vw - 1.92rem) !important;
+    margin-top: 0.72rem !important;
+  }
+
   .immersive-player-shell .immersive-control-row .immersive-play-core.play-button,
   .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):hover,
   .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):focus,
@@ -15362,38 +15407,65 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     background: transparent !important;
     box-shadow: none !important;
     outline: 0 !important;
+    accent-color: transparent;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):active {
-    transform: scale(0.88);
+    filter: brightness(1.14);
+    transform: scale(0.9);
   }
 
   .is-playback-buffering .immersive-player-shell .immersive-control-row .immersive-play-core.play-button::before {
     --play-loading-color: var(--immersive-play-glyph);
-    width: 1.18rem !important;
-    height: 1.1rem !important;
+    width: 1.28rem !important;
+    height: 1.28rem !important;
     border: 0 !important;
-    border-radius: 0 !important;
+    border-radius: 50% !important;
     background:
-      linear-gradient(var(--play-loading-color) 0 0) 0 50% / 3px 7px no-repeat,
-      linear-gradient(var(--play-loading-color) 0 0) 50% 50% / 3px 15px no-repeat,
-      linear-gradient(var(--play-loading-color) 0 0) 100% 50% / 3px 10px no-repeat !important;
-    animation: playbackLoadingWave 0.78s cubic-bezier(0.25, 1, 0.5, 1) infinite !important;
-    transform: none !important;
+      radial-gradient(circle, rgba(255, 246, 235, 0.2) 0 36%, transparent 38%),
+      conic-gradient(from 24deg, transparent 0 42deg, var(--play-loading-color) 112deg, transparent 226deg 360deg) !important;
+    filter: drop-shadow(0 0 8px rgba(255, 246, 235, 0.38));
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+    animation: playbackLoadingOrbit 0.82s linear infinite !important;
+    transform: rotate(0deg) !important;
   }
 
   .immersive-control-deck {
-    gap: 1rem !important;
-    padding-bottom: 0.18rem;
+    gap: 1.22rem !important;
+    padding-bottom: 0.32rem;
   }
 
   .immersive-progress {
-    min-height: 1.82rem;
+    min-height: 2.06rem;
   }
 
   .immersive-player-shell .immersive-control-row,
   .immersive-mobile-tool-row {
-    row-gap: 0.95rem;
+    row-gap: 1.12rem;
+  }
+
+  .immersive-player-shell :where(
+    .immersive-round-button,
+    .immersive-control-button,
+    .immersive-mobile-tool-button
+  ) {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
+    accent-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .immersive-player-shell :where(
+    .immersive-round-button,
+    .immersive-control-button,
+    .immersive-mobile-tool-button
+  ):not(:disabled):active {
+    background: transparent !important;
+    box-shadow: none !important;
+    filter: brightness(1.12);
   }
 }
 
@@ -15437,11 +15509,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-waveform {
-    width: min(88vw, 22rem) !important;
+    width: min(100%, 22rem) !important;
     height: 4.35rem !important;
   }
 
   .immersive-control-deck {
-    gap: 0.78rem !important;
+    gap: 1.02rem !important;
   }
 }
