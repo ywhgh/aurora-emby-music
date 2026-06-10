@@ -368,6 +368,7 @@ const ACTION_ICON_PATHS = {
   shield: '<path d="M12 3 19 6v5c0 4.5-2.8 8.2-7 10-4.2-1.8-7-5.5-7-10V6l7-3Z"></path><path d="m9 12 2 2 4-4"></path>',
   wave: '<path d="M4 12h2.4l1.8-4 3.6 8 2.4-5 1.2 1H20"></path>',
   video: '<path d="M4.5 7.5A2.5 2.5 0 0 1 7 5h8a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 15 19H7a2.5 2.5 0 0 1-2.5-2.5v-9Z"></path><path d="m17.5 10 3-2v8l-3-2"></path>',
+  download: '<path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path>',
   spark: '<path d="M12 3l1.6 5.1L19 10l-5.4 1.9L12 17l-1.6-5.1L5 10l5.4-1.9L12 3Z"></path>',
 };
 
@@ -726,6 +727,10 @@ const audioQualityCurrent = document.querySelector("#audioQualityCurrent");
 const audioQualityMethodSummary = document.querySelector("#audioQualityMethodSummary");
 const audioQualityList = document.querySelector("#audioQualityList");
 const audioQualityTestButton = document.querySelector("#audioQualityTestButton");
+const downloadOptionsModal = document.querySelector("#downloadOptionsModal");
+const downloadOptionsClose = document.querySelector("#downloadOptionsClose");
+const downloadOptionsSubtitle = document.querySelector("#downloadOptionsSubtitle");
+const downloadOptionsList = document.querySelector("#downloadOptionsList");
 const playerLyricsButton = document.querySelector("#playerLyricsButton");
 const playerModeProxyButton = document.querySelector("[data-player-mode-proxy]");
 const desktopImmersiveButton = document.querySelector("#desktopImmersiveButton");
@@ -759,6 +764,7 @@ const immersiveMobileCoverProxy = document.querySelector(".immersive-mobile-cove
 const immersiveMobileTitle = document.querySelector("#immersiveMobileTitle");
 const immersiveMobileDeckTitle = document.querySelector("#immersiveMobileDeckTitle");
 const immersiveMobileDeckSubtitle = document.querySelector("#immersiveMobileDeckSubtitle");
+const immersiveMobileDeckQuality = document.querySelector("#immersiveMobileDeckQuality");
 const immersiveTitle = document.querySelector("#immersiveTitle");
 const immersiveArtist = document.querySelector("#immersiveArtist");
 const immersiveAlbum = document.querySelector("#immersiveAlbum");
@@ -773,6 +779,7 @@ const immersiveProgressFill = document.querySelector("#immersiveProgressFill");
 const immersiveCurrentTime = document.querySelector("#immersiveCurrentTime");
 const immersiveDurationTime = document.querySelector("#immersiveDurationTime");
 const immersivePlayerPanel = document.querySelector("#immersivePlayerPanel");
+const immersiveTopRevealButton = document.querySelector("#immersiveTopRevealButton");
 const immersiveBackgroundButton = document.querySelector("#immersiveBackgroundButton");
 const immersiveFullscreenButton = document.querySelector("#immersiveFullscreenButton");
 const immersiveCloseButton = document.querySelector("#immersiveCloseButton");
@@ -813,6 +820,7 @@ let floatingVideoHideButton = null;
 let statusDismissTimer = null;
 let noticeDismissTimer = null;
 let audioQualityCloseTimer = 0;
+let downloadOptionsCloseTimer = 0;
 let trackFluidFrame = 0;
 let trackFluidPhase = 0;
 let trackFluidWidth = 50;
@@ -1029,6 +1037,7 @@ const state = {
   isMovingPlaylistTrack: false,
   isImmersiveQueueOpen: false,
   mobileImmersiveView: "cover",
+  immersiveTopActionsCollapsed: false,
   immersiveBackgroundMode: "original",
   immersiveReturnView: "home",
   videoFloatingMode: "hidden",
@@ -1318,6 +1327,8 @@ function init() {
   audioQualityClose.addEventListener("click", closeAudioQualityModal);
   audioQualityTestButton.addEventListener("click", () => testCurrentPlaybackChain());
   document.addEventListener("click", handleAudioQualityDocumentClick);
+  downloadOptionsClose?.addEventListener("click", closeDownloadOptionsModal);
+  document.addEventListener("click", handleDownloadOptionsDocumentClick);
   sourceBridgeModalClose?.addEventListener("click", closeSourceBridgeModal);
   document.addEventListener("click", handleSourceBridgeDocumentClick);
   initSourceBridgeModalInteractions();
@@ -1339,11 +1350,15 @@ function init() {
   immersiveQueueClearPlayedButton.addEventListener("click", clearPlayedQueueTracks);
   immersiveQueueClearButton.addEventListener("click", clearQueue);
   immersiveBackgroundButton?.addEventListener("click", cycleImmersiveBackgroundMode);
+  immersiveTopRevealButton?.addEventListener("click", () => setImmersiveTopActionsCollapsed(false));
   immersiveQualityButton?.addEventListener("click", (event) => {
     event.stopPropagation();
     openAudioQualityModal();
   });
-  immersiveDownloadButton?.addEventListener("click", downloadCurrentTrack);
+  immersiveDownloadButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openDownloadOptionsModal();
+  });
   immersiveMoreButton?.addEventListener("click", openImmersiveMoreActions);
   immersiveMobileFavoriteButton?.addEventListener("click", () => toggleFavorite(state.currentTrack));
   immersiveMobileZenButton?.addEventListener("click", toggleImmersiveZenMode);
@@ -1351,7 +1366,10 @@ function init() {
     event.stopPropagation();
     openAudioQualityModal();
   });
-  immersiveMobileDownloadButton?.addEventListener("click", downloadCurrentTrack);
+  immersiveMobileDownloadButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openDownloadOptionsModal();
+  });
   immersiveMobileMoreButton?.addEventListener("click", openImmersiveMoreActions);
   immersiveFullscreenButton.addEventListener("click", toggleImmersiveFullscreen);
   immersiveCloseButton.addEventListener("click", closeImmersivePlayer);
@@ -2745,6 +2763,36 @@ function collectBrowserSmokeMobileImmersiveState() {
     const rect = element.getBoundingClientRect();
     return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
   };
+  const resetDownloadOptionsSmokeModal = () => {
+    if (downloadOptionsCloseTimer) {
+      window.clearTimeout(downloadOptionsCloseTimer);
+      downloadOptionsCloseTimer = 0;
+    }
+    if (downloadOptionsModal) {
+      downloadOptionsModal.hidden = true;
+      downloadOptionsModal.classList.remove("is-open", "is-closing");
+      requestAnimationFrame(() => {
+        if (downloadOptionsModal.hidden) {
+          downloadOptionsModal.classList.remove("is-open", "is-closing");
+        }
+      });
+    }
+  };
+  const resetAudioQualitySmokeModal = () => {
+    if (audioQualityCloseTimer) {
+      window.clearTimeout(audioQualityCloseTimer);
+      audioQualityCloseTimer = 0;
+    }
+    if (audioQualityModal) {
+      audioQualityModal.hidden = true;
+      audioQualityModal.classList.remove("is-open", "is-closing");
+      requestAnimationFrame(() => {
+        if (audioQualityModal.hidden) {
+          audioQualityModal.classList.remove("is-open", "is-closing");
+        }
+      });
+    }
+  };
   const before = {
     view: shell?.getAttribute("data-mobile-view") || "",
     coverVisible: isVisibleElement(coverToggle),
@@ -2761,6 +2809,12 @@ function collectBrowserSmokeMobileImmersiveState() {
     waveformHasCurvePath: /C/.test(coverToggle?.querySelector(".immersive-waveform-line")?.getAttribute("d") || ""),
     oldVisualizerBarCount: coverToggle?.querySelectorAll(".immersive-visualizer span").length || 0,
     titleText: immersiveMobileTitle?.textContent?.trim() || "",
+    qualityText: immersiveMobileDeckQuality?.textContent?.trim() || "",
+    topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
+    topRevealVisible: isVisibleElement(immersiveTopRevealButton),
+    playButtonBackground: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).backgroundColor : "",
+    playButtonTapHighlight: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).webkitTapHighlightColor : "",
+    controlDeckGapPx: parseFloat(window.getComputedStyle(immersivePlayerPanel?.querySelector(".immersive-control-deck") || document.body).rowGap) || 0,
     modeIconCount: immersiveModeButton?.querySelectorAll(".player-mode-icon").length || 0,
     visibleModeIconCount: [...(immersiveModeButton?.querySelectorAll(".player-mode-icon") || [])]
       .filter((icon) => window.getComputedStyle(icon).display !== "none").length,
@@ -2773,6 +2827,17 @@ function collectBrowserSmokeMobileImmersiveState() {
     coverVisible: isVisibleElement(coverToggle),
     lyricVisible: isVisibleElement(lyricFocus),
     ariaPressed: coverToggle?.getAttribute("aria-pressed") || "",
+    topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
+    topRevealVisible: isVisibleElement(immersiveTopRevealButton),
+  };
+
+  immersiveTopRevealButton?.click();
+  const afterReveal = {
+    topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
+    topRevealVisible: isVisibleElement(immersiveTopRevealButton),
+    backgroundVisible: isVisibleElement(immersiveBackgroundButton),
+    fullscreenVisible: isVisibleElement(immersiveFullscreenButton),
+    closeVisible: isVisibleElement(immersiveCloseButton),
   };
 
   immersiveModeButton?.click();
@@ -2784,12 +2849,58 @@ function collectBrowserSmokeMobileImmersiveState() {
   state.playMode = originalPlayMode;
   storage.savePlayMode(state.playMode);
   updatePlayModeButton();
+
+  const originalFavorite = isFavorite(state.currentTrack);
+  if (state.currentTrack?.Id) {
+    setFavoriteState(state.currentTrack.Id, true);
+    renderPlaybackFavoriteButton(immersiveFavoriteButton, state.currentTrack);
+    renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, state.currentTrack);
+  }
+  const mobileFavoriteIcon = immersiveMobileFavoriteButton?.querySelector(".favorite-line-icon");
+  const desktopFavoriteIcon = immersiveFavoriteButton?.querySelector(".favorite-line-icon");
+  const favoriteState = {
+    mobileActive: immersiveMobileFavoriteButton?.classList.contains("active") || false,
+    desktopActive: immersiveFavoriteButton?.classList.contains("active") || false,
+    mobileFill: mobileFavoriteIcon ? window.getComputedStyle(mobileFavoriteIcon).fill : "",
+    desktopFill: desktopFavoriteIcon ? window.getComputedStyle(desktopFavoriteIcon).fill : "",
+  };
+  if (state.currentTrack?.Id) {
+    setFavoriteState(state.currentTrack.Id, originalFavorite);
+    renderPlaybackFavoriteButton(immersiveFavoriteButton, state.currentTrack);
+    renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, state.currentTrack);
+  }
+
+  openDownloadOptionsModal();
+  const downloadOptions = {
+    exists: Boolean(downloadOptionsModal),
+    opened: Boolean(downloadOptionsModal && !downloadOptionsModal.hidden),
+    optionCount: downloadOptionsList?.querySelectorAll(".download-option").length || 0,
+    subtitle: downloadOptionsSubtitle?.textContent?.trim() || "",
+  };
+  document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  downloadOptions.closedByOutside = Boolean(downloadOptionsModal?.classList.contains("is-closing") || downloadOptionsModal?.hidden);
+  resetDownloadOptionsSmokeModal();
+
+  openAudioQualityModal();
+  const audioQualityOptions = {
+    exists: Boolean(audioQualityModal),
+    opened: Boolean(audioQualityModal && !audioQualityModal.hidden),
+    optionCount: audioQualityList?.querySelectorAll(".audio-quality-option").length || 0,
+    subtitle: audioQualitySubtitle?.textContent?.trim() || "",
+  };
+  document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  audioQualityOptions.closedByOutside = Boolean(audioQualityModal?.classList.contains("is-closing") || audioQualityModal?.hidden);
+  resetAudioQualitySmokeModal();
   setMobileImmersiveStageView("cover");
 
   return {
     before,
     afterToggle,
+    afterReveal,
     afterModeClick,
+    favoriteState,
+    downloadOptions,
+    audioQualityOptions,
   };
 }
 
@@ -7722,7 +7833,11 @@ function renderPlaybackFavoriteButton(button, track) {
   const isActive = isFavorite(track);
 
   button.disabled = !track;
-  if (button.classList.contains("icon-favorite-button") || button.classList.contains("immersive-mobile-tool-button")) {
+  if (
+    button.classList.contains("icon-favorite-button")
+    || button.classList.contains("immersive-mobile-tool-button")
+    || button.classList.contains("immersive-control-button")
+  ) {
     button.classList.toggle("active", isActive);
     const label = button.querySelector(".sr-only");
     if (label) {
@@ -7757,11 +7872,23 @@ function setMobileImmersiveStageView(view = "cover") {
   shell?.setAttribute("data-mobile-view", nextView);
   immersiveMobileStageToggle?.setAttribute("aria-pressed", nextView === "lyrics" ? "true" : "false");
   immersiveMobileStageToggle?.setAttribute("aria-label", nextView === "lyrics" ? "显示封面和音乐律动" : "显示歌词");
+  setImmersiveTopActionsCollapsed(nextView === "lyrics");
   if (nextView === "lyrics") {
     updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
     requestAnimationFrame(() => {
       updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
     });
+  }
+}
+
+function setImmersiveTopActionsCollapsed(collapsed) {
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  const shouldCollapse = Boolean(collapsed && state.mobileImmersiveView === "lyrics");
+
+  state.immersiveTopActionsCollapsed = shouldCollapse;
+  shell?.classList.toggle("is-top-actions-collapsed", shouldCollapse);
+  if (immersiveTopRevealButton) {
+    immersiveTopRevealButton.hidden = !shouldCollapse;
   }
 }
 
@@ -7809,6 +7936,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
     if (immersiveMobileDeckSubtitle) {
       immersiveMobileDeckSubtitle.textContent = "Emby Music Web";
     }
+    renderImmersiveMobileDeckQuality(null);
     immersiveArtist.textContent = "Emby Music Web";
     immersiveAlbum.textContent = "-";
     immersiveArtist.disabled = true;
@@ -7835,6 +7963,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
       track.Album || "未知专辑",
     ].filter(Boolean).join(" / ");
   }
+  renderImmersiveMobileDeckQuality(track);
   immersiveArtist.textContent = getArtists(track) || "未知艺人";
   immersiveAlbum.textContent = track.Album || "未知专辑";
   immersiveArtist.disabled = !getPrimaryTrackArtist(track);
@@ -7853,6 +7982,31 @@ function renderImmersivePlayer(track = state.currentTrack) {
   renderPlaybackFavoriteButton(immersiveFavoriteButton, track);
   renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, track);
   renderImmersiveLyricFocus();
+}
+
+function renderImmersiveMobileDeckQuality(track = state.currentTrack) {
+  if (!immersiveMobileDeckQuality) {
+    return;
+  }
+
+  if (!track) {
+    immersiveMobileDeckQuality.textContent = "-";
+    immersiveMobileDeckQuality.hidden = true;
+    return;
+  }
+
+  const summary = getTrackQualitySummary(track);
+  const option = isExternalSourceTrack(track)
+    ? getExternalPlaybackQualityOption(track)
+    : getAudioQualityProfile();
+  const label = summary?.shortLabel
+    || (isExternalSourceTrack(track) ? option.shortLabel || option.label : getAudioQualityButtonLabel(option));
+  const detail = summary?.detailLabel
+    || (isExternalSourceTrack(track) ? option.quality : [option.codec, option.bitrateLabel || "原码率"].filter(Boolean).join(" · "));
+
+  immersiveMobileDeckQuality.textContent = `音质 ${label}`;
+  immersiveMobileDeckQuality.title = detail || immersiveMobileDeckQuality.textContent;
+  immersiveMobileDeckQuality.hidden = false;
 }
 
 function renderImmersiveEmptyActions(hasTrack) {
@@ -12559,6 +12713,136 @@ function handleAudioQualityDocumentClick(event) {
   closeAudioQualityModal();
 }
 
+function openDownloadOptionsModal() {
+  if (!state.currentTrack?.Id) {
+    setLibraryStatus("当前没有可下载的音乐。");
+    return;
+  }
+
+  if (downloadOptionsCloseTimer) {
+    clearTimeout(downloadOptionsCloseTimer);
+    downloadOptionsCloseTimer = 0;
+  }
+
+  renderDownloadOptions();
+  downloadOptionsModal?.classList.remove("is-closing");
+  if (downloadOptionsModal) {
+    downloadOptionsModal.hidden = false;
+    requestAnimationFrame(() => {
+      downloadOptionsModal.classList.add("is-open");
+      downloadOptionsClose?.focus();
+    });
+  }
+}
+
+function closeDownloadOptionsModal() {
+  if (!downloadOptionsModal || downloadOptionsModal.hidden || downloadOptionsCloseTimer) {
+    return;
+  }
+
+  downloadOptionsModal.classList.remove("is-open");
+  downloadOptionsModal.classList.add("is-closing");
+  downloadOptionsCloseTimer = window.setTimeout(() => {
+    downloadOptionsModal.hidden = true;
+    downloadOptionsModal.classList.remove("is-closing");
+    downloadOptionsCloseTimer = 0;
+  }, 260);
+}
+
+function handleDownloadOptionsDocumentClick(event) {
+  if (!downloadOptionsModal || downloadOptionsModal.hidden || !(event.target instanceof Element)) {
+    return;
+  }
+
+  if (
+    downloadOptionsModal.querySelector(".download-options-card")?.contains(event.target)
+    || immersiveDownloadButton?.contains(event.target)
+    || immersiveMobileDownloadButton?.contains(event.target)
+  ) {
+    return;
+  }
+
+  closeDownloadOptionsModal();
+}
+
+function renderDownloadOptions() {
+  if (!downloadOptionsList || !downloadOptionsSubtitle) {
+    return;
+  }
+
+  const track = state.currentTrack;
+  downloadOptionsSubtitle.textContent = track?.Name
+    ? `选择 ${track.Name} 的下载音质。`
+    : "选择下载音质后开始下载。";
+  downloadOptionsList.replaceChildren();
+
+  getDownloadQualityOptions(track).forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `download-option ${option.tone || ""}`.trim();
+    button.addEventListener("click", () => {
+      closeDownloadOptionsModal();
+      downloadCurrentTrack(option);
+    });
+
+    const icon = document.createElement("span");
+    icon.className = "download-option-icon";
+    icon.append(createActionIcon(option.icon || "download"));
+
+    const content = document.createElement("span");
+    content.className = "download-option-content";
+
+    const title = document.createElement("strong");
+    title.textContent = option.label;
+    const detail = document.createElement("span");
+    detail.textContent = option.detail;
+    const note = document.createElement("small");
+    note.textContent = option.note;
+
+    content.append(title, detail, note);
+    button.append(icon, content);
+    downloadOptionsList.append(button);
+  });
+}
+
+function getDownloadQualityOptions(track) {
+  if (isExternalSourceTrack(track)) {
+    const current = getExternalPlaybackQualityOption(track);
+    const audioOptions = EXTERNAL_SOURCE_QUALITY_OPTIONS
+      .filter((option) => option.id !== "video" || isVideoTrack(track))
+      .map((option) => ({
+        id: option.id,
+        request: option.request,
+        videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
+        label: option.id === current.id ? `${option.label}（当前）` : option.label,
+        detail: option.quality,
+        note: option.scene,
+        icon: option.icon,
+        tone: getAudioQualityToneClass(option.id),
+      }));
+
+    return audioOptions.length ? audioOptions : [{
+      id: "current",
+      label: "当前源站音质",
+      detail: getTrackQualitySummary(track)?.detailLabel || "源站返回格式",
+      note: "使用当前音乐桥返回的可下载地址。",
+      icon: "download",
+      tone: "tone-high",
+    }];
+  }
+
+  const currentProfile = getAudioQualityProfile();
+  return AUDIO_QUALITY_PROFILES.map((profile) => ({
+    id: profile.id,
+    profile,
+    label: profile.id === currentProfile.id ? `${profile.label}（当前）` : profile.label,
+    detail: [profile.codec, profile.bitrateLabel || "原码率", getEffectiveTranscodeMethodLabel(profile)].filter(Boolean).join(" · "),
+    note: getAudioQualitySceneText(profile),
+    icon: getAudioQualityMethodIcon(getAudioQualityMethodGroupId(profile)),
+    tone: getAudioQualityToneClass(getAudioQualityMethodGroupId(profile)),
+  }));
+}
+
 function renderAudioQualityOptions() {
   if (isExternalSourceSession()) {
     renderExternalSourceQualityOptions();
@@ -15875,6 +16159,11 @@ async function toggleFavorite(item) {
   applyFilters();
   renderLibrary();
 
+  if (isExternalSourceSession()) {
+    setLibraryStatus(nextValue ? "已收藏。" : "已取消收藏。");
+    return;
+  }
+
   try {
     await setFavoriteOnServer(item.Id, nextValue);
     setLibraryStatus(nextValue ? "已收藏。" : "已取消收藏。");
@@ -16169,7 +16458,7 @@ async function playTrack(track, queue, options = {}) {
     });
 }
 
-async function downloadCurrentTrack() {
+async function downloadCurrentTrack(options = {}) {
   const track = state.currentTrack;
 
   if (!track?.Id) {
@@ -16187,8 +16476,9 @@ async function downloadCurrentTrack() {
   }
 
   try {
-    setLibraryStatus(`正在准备下载：${track.Name || "当前音乐"}...`);
-    const source = await resolveTrackDownloadSource(track);
+    const qualityLabel = options.label ? `（${String(options.label).replace(/（当前）/g, "")}）` : "";
+    setLibraryStatus(`正在准备下载${qualityLabel}：${track.Name || "当前音乐"}...`);
+    const source = await resolveTrackDownloadSource(track, options);
     if (!source) {
       throw new Error("没有获取到可下载的播放源");
     }
@@ -16198,7 +16488,7 @@ async function downloadCurrentTrack() {
   } catch (error) {
     showNotice(`下载失败：${readableError(error)}`, {
       type: "error",
-      actions: [{ label: "重试下载", handler: downloadCurrentTrack }],
+      actions: [{ label: "重试下载", handler: () => downloadCurrentTrack(options) }],
     });
   } finally {
     if (immersiveDownloadButton) {
@@ -16210,11 +16500,12 @@ async function downloadCurrentTrack() {
   }
 }
 
-async function resolveTrackDownloadSource(track) {
+async function resolveTrackDownloadSource(track, options = {}) {
   if (isExternalSourceTrack(track)) {
+    const option = options.request ? options : getExternalPlaybackQualityOption(track);
     const media = await externalSourceApi.fetchMediaSource(getExternalTrackApiUrl(track), track, {
-      quality: getExternalPlaybackQuality(track),
-      videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
+      quality: option.request || getExternalPlaybackQuality(track),
+      videoQuality: option.videoQuality || (isVideoTrack(track) ? getExternalSourceVideoQuality() : ""),
       forceResolve: false,
     });
     applyExternalMediaMetadata(track, media, { qualityState: "resolved" });
@@ -16223,13 +16514,20 @@ async function resolveTrackDownloadSource(track) {
   }
 
   const currentSource = state.currentTrack?.Id === track.Id ? (audioPlayer.currentSrc || audioPlayer.src || "") : "";
-  if (currentSource && !/\.m3u8(?:[?#].*)?$/i.test(currentSource)) {
+  const requestedProfile = options.profile || null;
+  const currentProfile = getAudioQualityProfile();
+  if (!requestedProfile && currentSource && !/\.m3u8(?:[?#].*)?$/i.test(currentSource)) {
     return currentSource;
   }
 
   const playSessionId = ensurePlaybackSessionId(track);
   const mediaSourceId = getMediaSourceId(track);
-  return getAudioStreamUrl(track, "direct", playSessionId, mediaSourceId);
+  if (requestedProfile) {
+    const mode = requestedProfile.mode === "direct" ? "direct" : "universal";
+    return embyApi.getAudioStreamUrl(state.session, track, mode, requestedProfile, playSessionId, mediaSourceId);
+  }
+
+  return getAudioStreamUrl(track, currentProfile.mode === "direct" ? "direct" : "universal", playSessionId, mediaSourceId);
 }
 
 function triggerBrowserDownload(url, filename) {
@@ -17943,6 +18241,7 @@ function renderAudioQualityButton() {
     mobilePlayerQualityButton.title = audioQualityButton.title;
     setIconButtonLabel(immersiveQualityButton, audioQualityButton.title);
     setIconButtonLabel(immersiveMobileQualityButton, audioQualityButton.title);
+    renderImmersiveMobileDeckQuality(state.currentTrack);
     renderHomeStartPanel();
     return;
   }
@@ -17956,6 +18255,7 @@ function renderAudioQualityButton() {
   mobilePlayerQualityButton.title = audioQualityButton.title;
   setIconButtonLabel(immersiveQualityButton, audioQualityButton.title);
   setIconButtonLabel(immersiveMobileQualityButton, audioQualityButton.title);
+  renderImmersiveMobileDeckQuality(state.currentTrack);
   renderHomeStartPanel();
 }
 

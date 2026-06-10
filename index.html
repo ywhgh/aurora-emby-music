@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.150" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.150" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.150" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.151" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.151" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.151" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.150</span>
+            <span id="loginVersion">v0.93.151</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1275,10 +1275,10 @@
                 <div class="now-playing-actions">
                   <button id="nowModeButton" class="mode-button playback-mode-chip now-icon-button" type="button" aria-label="播放模式" data-mode="order">
                     <svg class="line-icon player-mode-icon mode-order" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 7h12"></path>
-                      <path d="m13 4 3 3-3 3"></path>
-                      <path d="M4 17h12"></path>
-                      <path d="m13 14 3 3-3 3"></path>
+                      <path d="M4 6h11"></path>
+                      <path d="M4 12h8"></path>
+                      <path d="M4 18h8"></path>
+                      <path d="m15 15 5 3-5 3v-6Z"></path>
                     </svg>
                     <svg class="line-icon player-mode-icon mode-shuffle" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 7h3.5a4 4 0 0 1 3.1 1.45l2.8 3.1A4 4 0 0 0 16.5 13H20"></path>
@@ -1365,6 +1365,10 @@
                   <span id="immersiveMobileTitle">等待选择音乐</span>
                 </div>
                 <div class="immersive-top-actions">
+                  <button id="immersiveTopRevealButton" class="immersive-round-button immersive-top-reveal-button" type="button" aria-label="显示顶部按钮" title="显示顶部按钮" hidden>
+                    <span class="immersive-top-reveal-dot" aria-hidden="true"></span>
+                    <span class="sr-only">显示顶部按钮</span>
+                  </button>
                   <div class="lyric-offset-controls immersive-lyric-offset-controls" aria-label="歌词同步校准">
                     <button id="immersiveLyricOffsetSlowerButton" type="button" data-lyric-offset-adjust="earlier" aria-label="歌词慢了，提前 0.1 秒" title="歌词慢了，提前 0.1 秒">
                       <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1497,6 +1501,7 @@
                     <span class="immersive-mobile-track-copy">
                       <span id="immersiveMobileDeckTitle">等待选择音乐</span>
                       <span id="immersiveMobileDeckSubtitle">Emby Music Web</span>
+                      <span id="immersiveMobileDeckQuality" class="immersive-mobile-track-quality">-</span>
                     </span>
                     <span class="immersive-waveform" aria-hidden="true">
                       <svg class="immersive-waveform-svg" viewBox="0 0 360 108" preserveAspectRatio="none" focusable="false">
@@ -1606,10 +1611,10 @@
                 <div class="immersive-control-row">
                   <button id="immersiveModeButton" class="mode-button playback-mode-chip immersive-control-button" type="button" aria-label="播放模式：顺序" title="播放模式：顺序" data-mode="order">
                     <svg class="line-icon player-mode-icon mode-order" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 7h12"></path>
-                      <path d="m13 4 3 3-3 3"></path>
-                      <path d="M4 17h12"></path>
-                      <path d="m13 14 3 3-3 3"></path>
+                      <path d="M4 6h11"></path>
+                      <path d="M4 12h8"></path>
+                      <path d="M4 18h8"></path>
+                      <path d="m15 15 5 3-5 3v-6Z"></path>
                     </svg>
                     <svg class="line-icon player-mode-icon mode-shuffle" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 7h3.5a4 4 0 0 1 3.1 1.45l2.8 3.1A4 4 0 0 0 16.5 13H20"></path>
@@ -2107,6 +2112,24 @@
               </div>
             </section>
           </div>
+          <div id="downloadOptionsModal" class="modal-backdrop download-options-modal" hidden>
+            <section class="modal-card download-options-card" role="dialog" aria-modal="true" aria-labelledby="downloadOptionsTitle">
+              <div class="download-options-heading">
+                <div>
+                  <p class="kicker">下载</p>
+                  <h3 id="downloadOptionsTitle">下载当前音乐</h3>
+                  <p id="downloadOptionsSubtitle" class="modal-subtitle">选择下载音质后开始下载。</p>
+                </div>
+                <button id="downloadOptionsClose" class="audio-quality-close-button" type="button" aria-label="关闭下载选项">
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12"></path>
+                    <path d="M18 6 6 18"></path>
+                  </svg>
+                </button>
+              </div>
+              <div id="downloadOptionsList" class="download-options-list" aria-label="下载音质选项"></div>
+            </section>
+          </div>
           <div id="sourceBridgeModal" class="modal-backdrop" hidden>
             <section class="modal-card source-bridge-modal-card" role="dialog" aria-modal="true" aria-labelledby="sourceBridgeModalTitle" aria-describedby="sourceBridgeModalHint">
               <div class="source-bridge-modal-heading">
@@ -2369,10 +2392,10 @@
           <div class="player-controls">
             <button id="playModeButton" class="player-line-button mode-button" type="button" aria-label="播放模式" data-mode="order">
               <svg class="line-icon player-mode-icon mode-order" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 7h12"></path>
-                <path d="m13 4 3 3-3 3"></path>
-                <path d="M4 17h12"></path>
-                <path d="m13 14 3 3-3 3"></path>
+                <path d="M4 6h11"></path>
+                <path d="M4 12h8"></path>
+                <path d="M4 18h8"></path>
+                <path d="m15 15 5 3-5 3v-6Z"></path>
               </svg>
               <svg class="line-icon player-mode-icon mode-shuffle" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 7h3.5a4 4 0 0 1 3.1 1.45l2.8 3.1A4 4 0 0 0 16.5 13H20"></path>
@@ -2599,7 +2622,7 @@
 
     <script>
       (() => {
-        const version = "0.93.150";
+        const version = "0.93.151";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -2977,13 +3000,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.150" defer></script>
-    <script src="./src/format.js?v=0.93.150" defer></script>
-    <script src="./src/lyrics.js?v=0.93.150" defer></script>
-    <script src="./src/emby-api.js?v=0.93.150" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.150" defer></script>
-    <script src="./src/storage.js?v=0.93.150" defer></script>
-    <script src="./app.js?v=0.93.150" defer></script>
+    <script src="./src/config.js?v=0.93.151" defer></script>
+    <script src="./src/format.js?v=0.93.151" defer></script>
+    <script src="./src/lyrics.js?v=0.93.151" defer></script>
+    <script src="./src/emby-api.js?v=0.93.151" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.151" defer></script>
+    <script src="./src/storage.js?v=0.93.151" defer></script>
+    <script src="./app.js?v=0.93.151" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>

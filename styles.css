@@ -5566,6 +5566,11 @@ body.topbar-lyric-active .top-tabs:focus-within .top-lyric-focus {
   color: var(--red);
 }
 
+.favorite-button.active .favorite-line-icon,
+.favorite-button.active .favorite-line-icon path {
+  fill: currentColor;
+}
+
 .track-actions {
   display: flex;
   position: relative;
@@ -7411,6 +7416,37 @@ body.action-sheet-open .content {
   transform: scale(0.96);
 }
 
+#downloadOptionsModal {
+  opacity: 0;
+  transition: opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#downloadOptionsModal.is-open {
+  opacity: 1;
+}
+
+#downloadOptionsModal.is-closing {
+  opacity: 0;
+}
+
+#downloadOptionsModal .download-options-card {
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 0.26s cubic-bezier(0.25, 1, 0.5, 1),
+    transform 0.26s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#downloadOptionsModal.is-open .download-options-card {
+  opacity: 1;
+  transform: scale(1);
+}
+
+#downloadOptionsModal.is-closing .download-options-card {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
 .audio-quality-card {
   width: min(54rem, calc(100vw - 2rem));
   max-height: min(88vh, 50rem);
@@ -7424,6 +7460,101 @@ body.action-sheet-open .content {
   box-shadow:
     0 24px 54px rgba(15, 23, 42, 0.055),
     0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.download-options-card {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: min(82vh, 38rem);
+  display: grid;
+  gap: 1.1rem;
+  overflow: hidden;
+  padding: 1.45rem;
+  border: 1px solid rgba(17, 24, 39, 0.055);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow:
+    0 24px 54px rgba(15, 23, 42, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.download-options-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.download-options-list {
+  display: grid;
+  gap: 0.62rem;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.download-option {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.78rem;
+  width: 100%;
+  padding: 0.72rem;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+}
+
+.download-option:hover,
+.download-option:focus-visible {
+  border-color: rgba(var(--quality-tone-rgb, 75, 85, 99), 0.18);
+  background: rgba(var(--quality-tone-rgb, 75, 85, 99), 0.025);
+}
+
+.download-option-icon {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(var(--quality-tone-rgb, 75, 85, 99), 0.08);
+  color: var(--quality-tone, #4b5563);
+}
+
+.download-option-icon .line-icon {
+  width: 1.18rem;
+  height: 1.18rem;
+}
+
+.download-option-content {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.download-option-content strong,
+.download-option-content span,
+.download-option-content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-option-content strong {
+  color: #111827;
+  font-size: 0.95rem;
+  line-height: 1.18;
+}
+
+.download-option-content span {
+  color: #4b5563;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.download-option-content small {
+  color: #6b7280;
+  font-size: 0.74rem;
+  line-height: 1.3;
 }
 
 .audio-quality-modal-heading {
@@ -7917,31 +8048,36 @@ body.action-sheet-open .content {
 }
 
 .audio-quality-method-item.tone-high,
-.audio-quality-option.tone-high {
+.audio-quality-option.tone-high,
+.download-option.tone-high {
   --quality-tone: #4b5563;
   --quality-tone-rgb: 75, 85, 99;
 }
 
 .audio-quality-method-item.tone-standard,
-.audio-quality-option.tone-standard {
+.audio-quality-option.tone-standard,
+.download-option.tone-standard {
   --quality-tone: #2563eb;
   --quality-tone-rgb: 37, 99, 235;
 }
 
 .audio-quality-method-item.tone-lossless,
-.audio-quality-option.tone-lossless {
+.audio-quality-option.tone-lossless,
+.download-option.tone-lossless {
   --quality-tone: #dc2626;
   --quality-tone-rgb: 220, 38, 38;
 }
 
 .audio-quality-method-item.tone-low,
-.audio-quality-option.tone-low {
+.audio-quality-option.tone-low,
+.download-option.tone-low {
   --quality-tone: #ea580c;
   --quality-tone-rgb: 234, 88, 12;
 }
 
 .audio-quality-method-item.tone-video,
-.audio-quality-option.tone-video {
+.audio-quality-option.tone-video,
+.download-option.tone-video {
   --quality-tone: #9333ea;
   --quality-tone-rgb: 147, 51, 234;
 }
@@ -8684,6 +8820,24 @@ body.action-sheet-open .content {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes playbackLoadingWave {
+  0%,
+  100% {
+    background-size: 3px 7px, 3px 15px, 3px 10px;
+    opacity: 0.72;
+  }
+
+  36% {
+    background-size: 3px 15px, 3px 8px, 3px 16px;
+    opacity: 1;
+  }
+
+  68% {
+    background-size: 3px 10px, 3px 16px, 3px 7px;
+    opacity: 0.9;
   }
 }
 
@@ -9441,7 +9595,7 @@ body.action-sheet-open .content {
 
 .immersive-player-shell {
   --immersive-icon-size: 22px;
-  --immersive-icon-stroke: 1.85;
+  --immersive-icon-stroke: 2.25;
   --immersive-lyric-active: rgba(255, 244, 229, 0.98);
   --immersive-lyric-primary: rgba(255, 244, 229, 0.28);
   --immersive-lyric-original: rgba(255, 244, 229, 0.42);
@@ -9455,7 +9609,7 @@ body.action-sheet-open .content {
   --immersive-lyric-active-bg-tail: rgba(255, 255, 255, 0);
   --immersive-control-color: rgba(255, 244, 229, 0.64);
   --immersive-control-active: rgba(255, 244, 229, 0.94);
-  --immersive-control-fill: rgba(255, 244, 229, 0.14);
+  --immersive-control-fill: rgba(255, 244, 229, 0.94);
   --immersive-progress-rail: rgba(255, 244, 229, 0.16);
   --immersive-play-surface: rgba(255, 244, 229, 0.16);
   --immersive-play-glyph: rgba(255, 244, 229, 0.94);
@@ -10070,6 +10224,10 @@ body.action-sheet-open .content {
 
 .immersive-control-button .line-icon {
   color: currentColor;
+}
+
+#immersiveTopRevealButton {
+  display: none;
 }
 
 .immersive-control-button .action-icon-wrap {
@@ -11330,7 +11488,13 @@ body.video-window-hidden .video-restore-button {
 }
 
 .play-button {
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
   background: linear-gradient(135deg, var(--now-accent), var(--now-accent-deep)) !important;
+}
+
+.play-button:focus:not(:focus-visible) {
+  outline: 0;
 }
 
 .play-button::before {
@@ -11352,12 +11516,16 @@ body.video-window-hidden .video-restore-button {
 }
 
 .is-playback-buffering .play-button::before {
-  width: 1.12rem;
-  height: 1.12rem;
-  border: 0.16rem solid rgba(255, 255, 255, 0.46);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.82s linear infinite;
+  --play-loading-color: currentColor;
+  width: 1.18rem;
+  height: 1.1rem;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--play-loading-color) 0 0) 0 50% / 3px 7px no-repeat,
+    linear-gradient(var(--play-loading-color) 0 0) 50% 50% / 3px 15px no-repeat,
+    linear-gradient(var(--play-loading-color) 0 0) 100% 50% / 3px 10px no-repeat;
+  animation: playbackLoadingWave 0.78s cubic-bezier(0.25, 1, 0.5, 1) infinite;
   transform: none;
 }
 
@@ -14751,6 +14919,38 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     gap: 0.38rem;
   }
 
+  #immersiveTopRevealButton {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  #immersiveTopRevealButton[hidden] {
+    display: none !important;
+  }
+
+  .immersive-top-reveal-button:not([hidden]) {
+    display: grid !important;
+  }
+
+  .immersive-top-reveal-dot {
+    display: block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 2px solid rgba(255, 244, 229, 0.82);
+    border-radius: 50%;
+    box-shadow: 0 0 12px rgba(255, 244, 229, 0.18);
+  }
+
+  .immersive-player-shell.is-top-actions-collapsed .immersive-top-actions {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .immersive-player-shell.is-top-actions-collapsed #immersiveBackgroundButton,
+  .immersive-player-shell.is-top-actions-collapsed #immersiveFullscreenButton,
+  .immersive-player-shell.is-top-actions-collapsed #immersiveCloseButton {
+    display: none !important;
+  }
+
   .immersive-top-actions .immersive-lyric-offset-controls,
   #immersiveQualityButton,
   #immersiveDownloadButton,
@@ -14840,7 +15040,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     justify-self: center;
     width: min(68vw, 18.4rem, 33dvh);
     height: min(68vw, 18.4rem, 33dvh);
-    overflow: visible;
+    overflow: hidden;
     border-radius: 20px;
     box-shadow:
       0 18px 58px rgba(0, 0, 0, 0.38),
@@ -14864,6 +15064,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-mobile-cover-proxy img {
     overflow: hidden;
     border-radius: inherit;
+    object-fit: cover;
+    transform: scale(1.08);
+    transform-origin: center;
   }
 
   .immersive-lyric-focus {
@@ -14903,6 +15106,16 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     font-size: clamp(0.88rem, 3.8vw, 1.06rem);
     font-weight: 680;
     line-height: 1.26;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .immersive-mobile-track-quality {
+    overflow: hidden;
+    color: rgba(255, 246, 235, 0.56);
+    font-size: clamp(0.72rem, 3vw, 0.86rem);
+    font-weight: 720;
+    line-height: 1.2;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -15095,6 +15308,93 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     font-size: 0 !important;
     line-height: 1 !important;
   }
+
+  .immersive-player-shell {
+    width: 100vw;
+    width: 100dvw;
+    max-width: 100vw;
+    max-width: 100dvw;
+    box-sizing: border-box;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-stage {
+    display: grid !important;
+    width: 100% !important;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    justify-items: center !important;
+    padding: 0.34rem 0 0.72rem !important;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-stage-toggle {
+    display: grid !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    justify-self: center !important;
+    align-self: center !important;
+    justify-content: center !important;
+    justify-items: center !important;
+    place-items: center !important;
+    margin: 0 auto !important;
+    transform: none !important;
+  }
+
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-cover-stack,
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-cover-proxy,
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-track-copy,
+  .immersive-player-shell[data-mobile-view="cover"] .immersive-waveform {
+    justify-self: center !important;
+    margin-right: auto !important;
+    margin-left: auto !important;
+    transform: translateX(0) !important;
+  }
+
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button,
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):hover,
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):focus,
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):focus-visible,
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):active {
+    -webkit-tap-highlight-color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+  }
+
+  .immersive-player-shell .immersive-control-row .immersive-play-core.play-button:not(:disabled):active {
+    transform: scale(0.88);
+  }
+
+  .is-playback-buffering .immersive-player-shell .immersive-control-row .immersive-play-core.play-button::before {
+    --play-loading-color: var(--immersive-play-glyph);
+    width: 1.18rem !important;
+    height: 1.1rem !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background:
+      linear-gradient(var(--play-loading-color) 0 0) 0 50% / 3px 7px no-repeat,
+      linear-gradient(var(--play-loading-color) 0 0) 50% 50% / 3px 15px no-repeat,
+      linear-gradient(var(--play-loading-color) 0 0) 100% 50% / 3px 10px no-repeat !important;
+    animation: playbackLoadingWave 0.78s cubic-bezier(0.25, 1, 0.5, 1) infinite !important;
+    transform: none !important;
+  }
+
+  .immersive-control-deck {
+    gap: 1rem !important;
+    padding-bottom: 0.18rem;
+  }
+
+  .immersive-progress {
+    min-height: 1.82rem;
+  }
+
+  .immersive-player-shell .immersive-control-row,
+  .immersive-mobile-tool-row {
+    row-gap: 0.95rem;
+  }
 }
 
 @media (max-width: 380px) {
@@ -15142,6 +15442,6 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-control-deck {
-    gap: 0.46rem;
+    gap: 0.78rem !important;
   }
 }
