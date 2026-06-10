@@ -8101,7 +8101,7 @@ function renderImmersiveMobileDeckQuality(track = state.currentTrack) {
   const detail = summary?.detailLabel
     || (isExternalSourceTrack(track) ? option.quality : [option.codec, option.bitrateLabel || "原码率"].filter(Boolean).join(" · "));
 
-  immersiveMobileDeckQuality.textContent = `音质 ${label}`;
+  immersiveMobileDeckQuality.textContent = label;
   immersiveMobileDeckQuality.title = detail || immersiveMobileDeckQuality.textContent;
   immersiveMobileDeckQuality.hidden = false;
 }

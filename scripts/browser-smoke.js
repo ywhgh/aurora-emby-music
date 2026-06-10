@@ -659,7 +659,7 @@ function checkPageState(check, page) {
     assert(page.hasPlayerBar, `${label} missing player bar`);
     assert(page.playerbarVisible, `${label} player bar is not visible`);
     assert((page.playerbarRect?.height || 0) >= 48, `${label} player bar height is too small: ${page.playerbarRect?.height || 0}`);
-    if (check.name === "mobile") {
+    if (check.name.startsWith("mobile")) {
       assert(page.mobileBottomNavVisible, `${label} mobile bottom navigation is not visible`);
       assert((page.mobileBottomNavRect?.height || 0) >= 44, `${label} mobile bottom navigation height is too small: ${page.mobileBottomNavRect?.height || 0}`);
     } else {
@@ -854,7 +854,8 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.topTitleVisible === false, `${label} mobile immersive should not show the top title: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert(/^音质\s+/.test(mobileImmersiveLayout.before?.qualityText || ""), `${label} mobile immersive should show quality under track meta: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.qualityText || "").trim().length > 0, `${label} mobile immersive should show quality under track meta: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(!/^音质\s*/.test(mobileImmersiveLayout.before?.qualityText || ""), `${label} mobile immersive quality text should not repeat the quality label prefix: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformVisible === true, `${label} mobile immersive waveform should be visible: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformPathCount >= 3, `${label} mobile immersive should render waveform paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformHasCurvePath === true, `${label} mobile immersive waveform should use smooth curve paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
