@@ -593,7 +593,15 @@ function checkLyrics() {
   assert(app.includes("IMMERSIVE_PLAYER_STYLE_KEY"), "Player style settings should be persisted");
   assert(app.includes("label: \"播放器样式\""), "Immersive more actions should include player style settings");
   assert(app.includes("data-visualizer-style"), "Player style modal should include visualizer style choices");
+  assert(index.includes("id=\"immersiveMobileCurrentLyric\""), "Mobile immersive cover should expose a current lyric slot above the visualizer");
+  assert(app.includes("function renderImmersiveMobileCurrentLyric"), "Mobile immersive current lyric should be rendered from the active lyric line");
+  assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
+  assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");
+  assert(css.includes("body.immersive-player-open .audio-quality-card") && css.includes("background-color: rgba(8, 8, 10, 0.9)"), "Immersive modal cards should use the warm dark glass style");
   assert(css.includes("immersiveFullscreenIconPulse"), "Fullscreen icon should animate when toggled");
+  assert(browserSmoke.includes("top-left corner"), "Browser smoke should verify mobile fullscreen is in the top-left corner");
+  assert(/#immersiveFullscreenButton\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?justify-self:\s*start;/.test(css), "Mobile immersive fullscreen button should be placed in the top-left grid cell");
+  assert(/#immersiveMobileFullscreenButton\.immersive-mobile-tool-button\s*\{[\s\S]*?display:\s*none !important;/.test(css), "Mobile immersive fullscreen button should not remain in the lower tool row");
   assert(css.includes("is-page-entering") && css.includes("is-page-exiting"), "Immersive page should animate on enter and exit");
   assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");

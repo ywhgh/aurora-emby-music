@@ -807,6 +807,7 @@ const immersiveMobileArtist = document.querySelector("#immersiveMobileArtist");
 const immersiveMobileDeckTitle = document.querySelector("#immersiveMobileDeckTitle");
 const immersiveMobileDeckSubtitle = document.querySelector("#immersiveMobileDeckSubtitle");
 const immersiveMobileDeckQuality = document.querySelector("#immersiveMobileDeckQuality");
+const immersiveMobileCurrentLyric = document.querySelector("#immersiveMobileCurrentLyric");
 const immersiveTitle = document.querySelector("#immersiveTitle");
 const immersiveArtist = document.querySelector("#immersiveArtist");
 const immersiveAlbum = document.querySelector("#immersiveAlbum");
@@ -2960,6 +2961,21 @@ function collectBrowserSmokeMobileImmersiveState() {
     const rect = element.getBoundingClientRect();
     return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
   };
+  const getImmersiveModalLayerState = (modal, cardSelector) => {
+    const card = modal?.querySelector?.(cardSelector);
+    const modalStyle = modal ? window.getComputedStyle(modal) : null;
+    const cardStyle = card ? window.getComputedStyle(card) : null;
+    const panelStyle = immersivePlayerPanel ? window.getComputedStyle(immersivePlayerPanel) : null;
+
+    return {
+      visible: isVisibleElement(modal),
+      zIndex: Number.parseInt(modalStyle?.zIndex || "0", 10) || 0,
+      panelZIndex: Number.parseInt(panelStyle?.zIndex || "0", 10) || 0,
+      cardBackgroundColor: cardStyle?.backgroundColor || "",
+      cardColor: cardStyle?.color || "",
+      backdropFilter: modalStyle?.backdropFilter || modalStyle?.webkitBackdropFilter || "",
+    };
+  };
   const resetDownloadOptionsSmokeModal = () => {
     if (downloadOptionsCloseTimer) {
       window.clearTimeout(downloadOptionsCloseTimer);
@@ -3026,6 +3042,8 @@ function collectBrowserSmokeMobileImmersiveState() {
     coverRect: getRect(coverToggle?.querySelector(".immersive-mobile-cover-proxy")),
     trackCopyRect: getRect(coverToggle?.querySelector(".immersive-mobile-track-copy")),
     topTitleVisible: isVisibleElement(immersiveMobileTitle),
+    currentLyricVisible: isVisibleElement(immersiveMobileCurrentLyric),
+    currentLyricText: immersiveMobileCurrentLyric?.textContent?.trim() || "",
     viewportCenterX: Math.round(window.innerWidth / 2),
     waveformPathCount: coverToggle?.querySelectorAll(".immersive-waveform-line, .immersive-waveform-fill, .immersive-waveform-runner").length || 0,
     waveformLinePath: coverToggle?.querySelector(".immersive-waveform-line")?.getAttribute("d") || "",
@@ -3036,8 +3054,10 @@ function collectBrowserSmokeMobileImmersiveState() {
     topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
     topRevealVisible: isVisibleElement(immersiveTopRevealButton),
     closeVisible: isVisibleElement(immersiveCloseButton),
+    topFullscreenVisible: isVisibleElement(immersiveFullscreenButton),
+    topFullscreenRect: getRect(immersiveFullscreenButton),
     mobileFullscreenVisible: isVisibleElement(immersiveMobileFullscreenButton),
-    mobileFullscreenTitle: immersiveMobileFullscreenButton?.getAttribute("title") || "",
+    topFullscreenTitle: immersiveFullscreenButton?.getAttribute("title") || "",
     playButtonBackground: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).backgroundColor : "",
     playButtonTapHighlight: immersivePlayButton ? window.getComputedStyle(immersivePlayButton).webkitTapHighlightColor : "",
     playButtonLoadingAnimationName: playButtonLoadingStyle.animationName || "",
@@ -3063,11 +3083,14 @@ function collectBrowserSmokeMobileImmersiveState() {
     topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
     topRevealVisible: isVisibleElement(immersiveTopRevealButton),
     topTitleVisible: isVisibleElement(immersiveMobileTitle),
+    currentLyricVisible: isVisibleElement(immersiveMobileCurrentLyric),
     topTitleText: immersiveMobileTitle?.textContent?.trim() || "",
     topArtistText: immersiveMobileArtist?.textContent?.trim() || "",
     closeVisible: isVisibleElement(immersiveCloseButton),
+    topFullscreenVisible: isVisibleElement(immersiveFullscreenButton),
+    topFullscreenRect: getRect(immersiveFullscreenButton),
     mobileFullscreenVisible: isVisibleElement(immersiveMobileFullscreenButton),
-    mobileFullscreenTitle: immersiveMobileFullscreenButton?.getAttribute("title") || "",
+    topFullscreenTitle: immersiveFullscreenButton?.getAttribute("title") || "",
   };
 
   immersiveTopRevealButton?.click();
@@ -3077,6 +3100,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     backgroundVisible: isVisibleElement(immersiveBackgroundButton),
     fullscreenVisible: isVisibleElement(immersiveFullscreenButton),
     closeVisible: isVisibleElement(immersiveCloseButton),
+    topFullscreenRect: getRect(immersiveFullscreenButton),
     mobileFullscreenVisible: isVisibleElement(immersiveMobileFullscreenButton),
   };
 
@@ -3121,6 +3145,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     triggerId: downloadTrigger?.id || "",
     optionCount: downloadOptionsList?.querySelectorAll(".download-option").length || 0,
     subtitle: downloadOptionsSubtitle?.textContent?.trim() || "",
+    layer: getImmersiveModalLayerState(downloadOptionsModal, ".download-options-card"),
   };
   document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   downloadOptions.closedByOutside = Boolean(downloadOptionsModal?.classList.contains("is-closing") || downloadOptionsModal?.hidden);
@@ -3137,6 +3162,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     triggerId: qualityTrigger?.id || "",
     optionCount: audioQualityList?.querySelectorAll(".audio-quality-option").length || 0,
     subtitle: audioQualitySubtitle?.textContent?.trim() || "",
+    layer: getImmersiveModalLayerState(audioQualityModal, ".audio-quality-card"),
   };
   document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   audioQualityOptions.closedByOutside = Boolean(audioQualityModal?.classList.contains("is-closing") || audioQualityModal?.hidden);
@@ -3150,6 +3176,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     openedByClick: Boolean(trackActionSheet && !trackActionSheet.hidden),
     triggerId: moreTrigger?.id || "",
     labels: [...trackActionSheetList.querySelectorAll(".action-sheet-copy strong")].map((item) => item.textContent?.trim() || ""),
+    layer: getImmersiveModalLayerState(trackActionSheet, ".action-sheet-card"),
   };
   const playerStyleItem = [...trackActionSheetList.querySelectorAll("button")]
     .find((button) => /播放器样式/.test(button.textContent || ""));
@@ -3157,6 +3184,7 @@ function collectBrowserSmokeMobileImmersiveState() {
   moreActionSheet.playerStyleOpened = Boolean(playerStyleModal && !playerStyleModal.hidden);
   moreActionSheet.playerThemeChoiceCount = playerStyleModal?.querySelectorAll("[data-player-theme]").length || 0;
   moreActionSheet.visualizerStyleChoiceCount = playerStyleModal?.querySelectorAll("[data-visualizer-style]").length || 0;
+  moreActionSheet.playerStyleLayer = getImmersiveModalLayerState(playerStyleModal, ".player-style-card");
   closePlayerStyleModal();
   if (playerStyleCloseTimer) {
     window.clearTimeout(playerStyleCloseTimer);
@@ -3173,6 +3201,7 @@ function collectBrowserSmokeMobileImmersiveState() {
   moreActionSheet.lyricSettingsOpened = Boolean(lyricSettingsModal && !lyricSettingsModal.hidden);
   moreActionSheet.lyricSettingsAutoScrollChecked = Boolean(lyricAutoScrollToggle?.checked);
   moreActionSheet.lyricSettingsAutoImmersiveChecked = Boolean(lyricAutoImmersiveToggle?.checked);
+  moreActionSheet.lyricSettingsLayer = getImmersiveModalLayerState(lyricSettingsModal, ".lyric-settings-card");
   closeLyricSettingsModal();
   if (lyricSettingsCloseTimer) {
     window.clearTimeout(lyricSettingsCloseTimer);
@@ -8365,6 +8394,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
     renderImmersivePlaybackMeta(null);
     renderPlaybackFavoriteButton(immersiveFavoriteButton, null);
     renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, null);
+    renderImmersiveMobileCurrentLyric(null);
     renderImmersiveLyricFocus();
     return;
   }
@@ -8404,6 +8434,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
   renderImmersivePlaybackMeta(track);
   renderPlaybackFavoriteButton(immersiveFavoriteButton, track);
   renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, track);
+  renderImmersiveMobileCurrentLyric(getCurrentTopLyricLine());
   renderImmersiveLyricFocus();
 }
 
@@ -9760,6 +9791,7 @@ function renderNowLyricFocus() {
     nowLyricFocus.disabled = true;
     nowLyricFocus.classList.remove("synced");
     renderTopLyricFocus(null);
+    renderImmersiveMobileCurrentLyric(null);
     return;
   }
 
@@ -9770,6 +9802,7 @@ function renderNowLyricFocus() {
     nowLyricFocus.disabled = true;
     nowLyricFocus.classList.remove("synced");
     renderTopLyricFocus(null);
+    renderImmersiveMobileCurrentLyric(null);
     return;
   }
 
@@ -9787,6 +9820,45 @@ function renderNowLyricFocus() {
   nowLyricFocus.disabled = !state.isLyricSynced;
   nowLyricFocus.classList.toggle("synced", state.isLyricSynced);
   renderTopLyricFocus(currentLine);
+  renderImmersiveMobileCurrentLyric(currentLine);
+}
+
+function renderImmersiveMobileCurrentLyric(line) {
+  if (!immersiveMobileCurrentLyric) {
+    return;
+  }
+
+  const text = getImmersiveMobileCurrentLyricText(line);
+  const previousText = immersiveMobileCurrentLyric.textContent || "";
+  immersiveMobileCurrentLyric.hidden = !text;
+
+  if (!text) {
+    immersiveMobileCurrentLyric.textContent = "";
+    immersiveMobileCurrentLyric.removeAttribute("title");
+    immersiveMobileCurrentLyric.classList.remove("is-changing");
+    return;
+  }
+
+  immersiveMobileCurrentLyric.title = text;
+  if (previousText === text) {
+    return;
+  }
+
+  immersiveMobileCurrentLyric.textContent = text;
+  immersiveMobileCurrentLyric.classList.remove("is-changing");
+  void immersiveMobileCurrentLyric.offsetWidth;
+  immersiveMobileCurrentLyric.classList.add("is-changing");
+  window.setTimeout(() => {
+    immersiveMobileCurrentLyric.classList.remove("is-changing");
+  }, 360);
+}
+
+function getImmersiveMobileCurrentLyricText(line) {
+  if (!state.currentTrack || !line) {
+    return "";
+  }
+
+  return String(line.originalText || line.text || "").replace(/\s+/g, " ").trim();
 }
 
 function renderNowLyricFocusLine(line) {

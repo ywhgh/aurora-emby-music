@@ -662,6 +662,11 @@ function checkPageState(check, page) {
     && values.length > 1
     && values.every((value, index) => index === 0 || Number(value) + 0.001 >= Number(values[index - 1]));
   const hasSolidFill = (value) => value && !/^(?:none|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\))$/i.test(value);
+  const isWarmDarkCard = (layer) => /rgba?\(\s*(?:[0-2]?\d|3[0-5])\s*,\s*(?:[0-2]?\d|3[0-5])\s*,\s*(?:[0-2]?\d|3[0-5])(?:\s*,|\s*\))/i.test(layer?.cardBackgroundColor || "");
+  const isAboveImmersivePanel = (layer) => Boolean(layer)
+    && layer.visible === true
+    && Number(layer.zIndex || 0) > Number(layer.panelZIndex || 0)
+    && /blur/i.test(layer.backdropFilter || "");
 
   assert(page.title === "Emby Music Web", `${label} expected title Emby Music Web, got ${page.title || "-"}`);
   assert(["interactive", "complete"].includes(page.readyState), `${label} document did not become interactive`);
@@ -890,18 +895,28 @@ function checkPageState(check, page) {
   assert(downloadOptions.exists === true && downloadOptions.opened === true, `${label} download options modal should open from immersive controls: ${JSON.stringify(downloadOptions)}`);
   assert(downloadOptions.openedByClick === true, `${label} download options modal should open from a real immersive button click: ${JSON.stringify(downloadOptions)}`);
   assert(downloadOptions.optionCount > 0, `${label} download options modal should render quality choices: ${JSON.stringify(downloadOptions)}`);
+  assert(isAboveImmersivePanel(downloadOptions.layer), `${label} download options modal should render above the immersive player layer: ${JSON.stringify(downloadOptions)}`);
+  assert(isWarmDarkCard(downloadOptions.layer), `${label} download options modal should use the immersive warm dark card style: ${JSON.stringify(downloadOptions)}`);
   assert(downloadOptions.closedByOutside === true, `${label} download options modal should close on outside click: ${JSON.stringify(downloadOptions)}`);
   assert(audioQualityOptions.exists === true && audioQualityOptions.opened === true, `${label} audio quality modal should open from immersive controls: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.openedByClick === true, `${label} audio quality modal should open from a real immersive button click: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.optionCount > 0, `${label} audio quality modal should render quality choices: ${JSON.stringify(audioQualityOptions)}`);
+  assert(isAboveImmersivePanel(audioQualityOptions.layer), `${label} audio quality modal should render above the immersive player layer: ${JSON.stringify(audioQualityOptions)}`);
+  assert(isWarmDarkCard(audioQualityOptions.layer), `${label} audio quality modal should use the immersive warm dark card style: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.closedByOutside === true, `${label} audio quality modal should close on outside click: ${JSON.stringify(audioQualityOptions)}`);
   assert(moreActionSheet.openedByClick === true, `${label} immersive more action sheet should open from a real button click: ${JSON.stringify(moreActionSheet)}`);
+  assert(isAboveImmersivePanel(moreActionSheet.layer), `${label} immersive more sheet should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(isWarmDarkCard(moreActionSheet.layer), `${label} immersive more sheet should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("播放器样式"), `${label} immersive more action sheet should include player style settings: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerStyleOpened === true, `${label} player style modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerThemeChoiceCount >= 3, `${label} player style modal should render theme choices: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.visualizerStyleChoiceCount >= 3, `${label} player style modal should render visualizer choices: ${JSON.stringify(moreActionSheet)}`);
+  assert(isAboveImmersivePanel(moreActionSheet.playerStyleLayer), `${label} player style modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(isWarmDarkCard(moreActionSheet.playerStyleLayer), `${label} player style modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("歌词设置"), `${label} immersive more action sheet should include lyric settings: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsOpened === true, `${label} lyric settings modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
+  assert(isAboveImmersivePanel(moreActionSheet.lyricSettingsLayer), `${label} lyric settings modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(isWarmDarkCard(moreActionSheet.lyricSettingsLayer), `${label} lyric settings modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoScrollChecked === true, `${label} lyric auto-scroll setting should default on: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoImmersiveChecked === false, `${label} lyric auto immersive setting should default off: ${JSON.stringify(moreActionSheet)}`);
   if (check.name.startsWith("mobile")) {
@@ -910,7 +925,11 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.topTitleVisible === false, `${label} mobile immersive should not show the top title: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert(mobileImmersiveLayout.before?.mobileFullscreenVisible === true, `${label} mobile immersive should expose the fullscreen icon in the lower tool row: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.currentLyricVisible === true, `${label} mobile immersive cover should show the current lyric above the visualizer: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.currentLyricText || "").trim().length > 0, `${label} mobile immersive current lyric should have text: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.topFullscreenVisible === true, `${label} mobile immersive should expose the fullscreen icon in the top-left corner: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.topFullscreenRect?.left || 999) <= 28, `${label} mobile immersive fullscreen icon should be placed at the left edge of the topbar: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.mobileFullscreenVisible === false, `${label} mobile immersive should not keep the fullscreen icon in the lower tool row: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert((mobileImmersiveLayout.before?.qualityText || "").trim().length > 0, `${label} mobile immersive should show quality under track meta: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(!/^音质\s*/.test(mobileImmersiveLayout.before?.qualityText || ""), `${label} mobile immersive quality text should not repeat the quality label prefix: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformVisible === true, `${label} mobile immersive waveform should be visible: ${JSON.stringify(mobileImmersiveLayout.before)}`);
@@ -937,9 +956,11 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.afterToggle?.closeVisible === true, `${label} mobile immersive lyric view should keep the top-right exit button visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topTitleVisible === true, `${label} mobile immersive lyric view should dock title and artist into the top area: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert((mobileImmersiveLayout.afterToggle?.topArtistText || "").trim().length > 0, `${label} mobile immersive lyric top area should show artist without album text: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
-    assert(mobileImmersiveLayout.afterToggle?.mobileFullscreenVisible === true, `${label} mobile immersive lyric lower-left fullscreen icon should remain visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.topFullscreenVisible === true, `${label} mobile immersive lyric view should keep fullscreen in the top-left corner: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert((mobileImmersiveLayout.afterToggle?.topFullscreenRect?.left || 999) <= 28, `${label} mobile immersive lyric fullscreen icon should stay on the left edge of the topbar: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.mobileFullscreenVisible === false, `${label} mobile immersive lyric view should not show a lower-row fullscreen icon: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterReveal?.topActionsCollapsed === false, `${label} mobile immersive reveal dot should restore top actions: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
-    assert(mobileImmersiveLayout.afterReveal?.backgroundVisible === false && mobileImmersiveLayout.afterReveal?.fullscreenVisible === false && mobileImmersiveLayout.afterReveal?.closeVisible === true, `${label} mobile immersive top actions should keep skin/fullscreen out of the topbar and keep exit visible: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
+    assert(mobileImmersiveLayout.afterReveal?.backgroundVisible === false && mobileImmersiveLayout.afterReveal?.fullscreenVisible === true && mobileImmersiveLayout.afterReveal?.closeVisible === true, `${label} mobile immersive top actions should keep fullscreen at top-left, skin out of the topbar, and exit visible: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
   }
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
