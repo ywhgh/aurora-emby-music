@@ -802,6 +802,7 @@ const immersiveBackdrop = document.querySelector("#immersiveBackdrop");
 const immersiveCover = document.querySelector("#immersiveCover");
 const immersiveMobileStageToggle = document.querySelector("#immersiveMobileStageToggle");
 const immersiveMobileCoverProxy = document.querySelector(".immersive-mobile-cover-proxy");
+const immersiveMobileTitleGroup = document.querySelector(".immersive-mobile-title");
 const immersiveMobileTitle = document.querySelector("#immersiveMobileTitle");
 const immersiveMobileArtist = document.querySelector("#immersiveMobileArtist");
 const immersiveMobileDeckTitle = document.querySelector("#immersiveMobileDeckTitle");
@@ -1501,7 +1502,8 @@ function init() {
   immersivePlayLibraryButton.addEventListener("click", playLibraryFromImmersive);
   immersiveOpenLibraryButton.addEventListener("click", () => switchView("library"));
   immersiveMobileStageToggle?.addEventListener("click", toggleMobileImmersiveStageView);
-  immersiveLyricList?.addEventListener("click", handleImmersiveLyricBlankClick);
+  immersivePlayerPanel?.addEventListener("click", handleImmersiveLyricReturnClick, true);
+  immersiveMobileTitleGroup?.addEventListener("keydown", handleImmersiveMobileTitleKeydown);
   muteButton.addEventListener("click", toggleMute);
   volumeSlider.addEventListener("input", handleVolumeInput);
   progressTrack.addEventListener("click", seekFromProgress);
@@ -3097,6 +3099,18 @@ function collectBrowserSmokeMobileImmersiveState() {
     topFullscreenTitle: immersiveFullscreenButton?.getAttribute("title") || "",
   };
 
+  immersiveMobileTitleGroup?.click();
+  const afterTitleReturn = {
+    view: shell?.getAttribute("data-mobile-view") || "",
+    coverVisible: isVisibleElement(coverToggle),
+    lyricVisible: isVisibleElement(lyricFocus),
+    topTitleVisible: isVisibleElement(immersiveMobileTitle),
+    topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
+    titleRole: immersiveMobileTitleGroup?.getAttribute("role") || "",
+    titleTabIndex: immersiveMobileTitleGroup?.getAttribute("tabindex") || "",
+  };
+
+  setMobileImmersiveStageView("lyrics", { animate: false });
   immersiveTopRevealButton?.click();
   const afterReveal = {
     topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
@@ -3221,6 +3235,7 @@ function collectBrowserSmokeMobileImmersiveState() {
   return {
     before,
     afterToggle,
+    afterTitleReturn,
     afterReveal,
     afterModeClick,
     favoriteState,
@@ -8346,10 +8361,54 @@ function maybeAutoShowImmersiveLyrics(options = {}) {
   return true;
 }
 
-function handleImmersiveLyricBlankClick(event) {
-  if (event.target === immersiveLyricList) {
-    setMobileImmersiveStageView("cover");
+function isMobileImmersiveLyricsViewActive() {
+  const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  const isMobileViewport = window.matchMedia?.("(max-width: 620px)")?.matches ?? window.innerWidth <= 620;
+
+  return Boolean(
+    isMobileViewport
+    && state.mobileImmersiveView === "lyrics"
+    && shell?.getAttribute("data-mobile-view") === "lyrics"
+  );
+}
+
+function returnMobileImmersiveLyricsToCover(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  setMobileImmersiveStageView("cover", { animate: true });
+}
+
+function handleImmersiveLyricReturnClick(event) {
+  if (!isMobileImmersiveLyricsViewActive() || !(event.target instanceof Element)) {
+    return;
   }
+
+  const titleHit = event.target.closest(".immersive-mobile-title");
+  if (titleHit) {
+    returnMobileImmersiveLyricsToCover(event);
+    return;
+  }
+
+  const clickedInsideLyricFocus = event.target.closest(".immersive-lyric-focus");
+  const clickedInsideStage = event.target.closest(".immersive-stage");
+  if (
+    (clickedInsideLyricFocus || clickedInsideStage)
+    && !event.target.closest(".lyric-line, button, a, input, select, textarea, .modal-backdrop, .immersive-queue-drawer")
+  ) {
+    returnMobileImmersiveLyricsToCover(event);
+  }
+}
+
+function handleImmersiveMobileTitleKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+
+  if (!isMobileImmersiveLyricsViewActive()) {
+    return;
+  }
+
+  returnMobileImmersiveLyricsToCover(event);
 }
 
 function syncImmersiveMobileCover(imageUrl, track) {
