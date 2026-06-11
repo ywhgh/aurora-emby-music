@@ -598,10 +598,16 @@ function checkLyrics() {
   assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
   assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");
   assert(css.includes("body.immersive-player-open .audio-quality-card") && css.includes("background-color: rgba(8, 8, 10, 0.9)"), "Immersive modal cards should use the warm dark glass style");
+  assert(css.includes("--quality-tone: #fff4e5"), "Immersive modal quality states should be normalized to warm white instead of colored quality tones");
+  assert(!getCssRule(css, ".immersive-cover {").includes("var(--now-accent)"), "Immersive desktop cover fallback should not use the red global accent");
+  assert(!getCssRule(css, "  .immersive-mobile-cover-proxy {").includes("var(--now-accent)"), "Immersive mobile cover fallback should not use the red global accent");
+  assert(!getCssRule(css, ".immersive-lyric-offset-controls .lyric-offset-value {").includes("236, 65, 65"), "Immersive lyric offset value should not use a red background");
   assert(css.includes("immersiveFullscreenIconPulse"), "Fullscreen icon should animate when toggled");
   assert(browserSmoke.includes("top-left corner"), "Browser smoke should verify mobile fullscreen is in the top-left corner");
   assert(/#immersiveFullscreenButton\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?justify-self:\s*start;/.test(css), "Mobile immersive fullscreen button should be placed in the top-left grid cell");
   assert(/#immersiveMobileFullscreenButton\.immersive-mobile-tool-button\s*\{[\s\S]*?display:\s*none !important;/.test(css), "Mobile immersive fullscreen button should not remain in the lower tool row");
+  assert(/\.immersive-mobile-title \{[\s\S]*?top:\s*0;[\s\S]*?align-content:\s*start;/.test(css), "Mobile immersive lyric title should align to the top edge of the toolbar buttons");
+  assert(/#immersiveMobileTitle \{[\s\S]*?font-size:\s*clamp\(1rem,\s*4\.45vw,\s*1\.24rem\);/.test(css), "Mobile immersive lyric song title should use the larger top typography");
   assert(css.includes("is-page-entering") && css.includes("is-page-exiting"), "Immersive page should animate on enter and exit");
   assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
