@@ -302,6 +302,27 @@ function createSearchAbortSmokeScript() {
   })()`;
 }
 
+function createImmersiveVisualizerSmokeScript() {
+  return `(() => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runImmersiveVisualizerScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...hooks.runImmersiveVisualizerScenario(),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
+
 function createExternalSourceReentrySmokeScript() {
   return `(async () => {
     const hooks = window.EmbyMusicBrowserSmoke;
@@ -580,6 +601,7 @@ async function runBrowserCheck(cdp, check) {
         return {
           ...pageState,
           lyricProgress: ${createLyricProgressSmokeScript()},
+          immersiveVisualizer: ${createImmersiveVisualizerSmokeScript()},
           externalSourceReentry: await ${createExternalSourceReentrySmokeScript()},
           searchAbort: ${createSearchAbortSmokeScript()},
         };
@@ -618,6 +640,7 @@ function checkPageState(check, page) {
   const bilingualEnhancedProgress = lyricProgress.bilingualEnhancedProgress || {};
   const bilingualSyntheticTranslationProgress = lyricProgress.bilingualSyntheticTranslationProgress || {};
   const bilingualSyntheticSpacedTranslationProgress = lyricProgress.bilingualSyntheticSpacedTranslationProgress || {};
+  const bilingualSyntheticWeightedTranslationProgress = lyricProgress.bilingualSyntheticWeightedTranslationProgress || {};
   const bilingualSyntheticOriginalProgress = lyricProgress.bilingualSyntheticOriginalProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const bilingualDenseWordPerformance = lyricProgress.bilingualDenseWordPerformance || {};
@@ -629,6 +652,8 @@ function checkPageState(check, page) {
   const favoriteState = mobileImmersiveLayout.favoriteState || {};
   const downloadOptions = mobileImmersiveLayout.downloadOptions || {};
   const audioQualityOptions = mobileImmersiveLayout.audioQualityOptions || {};
+  const moreActionSheet = mobileImmersiveLayout.moreActionSheet || {};
+  const immersiveVisualizer = page.immersiveVisualizer || {};
   const externalSourceReentry = page.externalSourceReentry || {};
   const searchAbort = page.searchAbort || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
@@ -691,6 +716,15 @@ function checkPageState(check, page) {
   assert(!searchAbort.error, `${label} search abort smoke failed: ${searchAbort.error || "-"}`);
   assert(searchAbort.abortedImmediately === true, `${label} search should abort stale in-flight requests immediately: ${JSON.stringify(searchAbort)}`);
   assert(searchAbort.timerScheduled === true, `${label} search abort smoke should still schedule the next debounced search: ${JSON.stringify(searchAbort)}`);
+  assert(immersiveVisualizer.hasHook, `${label} missing immersive visualizer smoke hook`);
+  assert(!immersiveVisualizer.error, `${label} immersive visualizer smoke failed: ${immersiveVisualizer.error || "-"}`);
+  assert(immersiveVisualizer.hasWaveform === true, `${label} immersive visualizer should find waveform DOM: ${JSON.stringify(immersiveVisualizer)}`);
+  assert(immersiveVisualizer.silentStatsLive === false, `${label} silent analyser data should not be treated as live music: ${JSON.stringify(immersiveVisualizer)}`);
+  assert(immersiveVisualizer.activeStatsLive === true, `${label} active analyser data should be detected as live music: ${JSON.stringify(immersiveVisualizer)}`);
+  assert((immersiveVisualizer.activeEnergy || 0) > 0.45, `${label} active analyser energy should be strong enough to drive visible motion: ${JSON.stringify(immersiveVisualizer)}`);
+  assert((immersiveVisualizer.loudPeak || 0) > (immersiveVisualizer.quietPeak || 0) * 1.35, `${label} loud visualizer waveform should move more than quiet input: ${JSON.stringify(immersiveVisualizer)}`);
+  assert((immersiveVisualizer.loudGlow || 0) > (immersiveVisualizer.quietGlow || 0), `${label} visualizer glow should follow music energy: ${JSON.stringify(immersiveVisualizer)}`);
+  assert(immersiveVisualizer.pathChanged === true, `${label} visualizer path should change with analyser energy: ${JSON.stringify(immersiveVisualizer)}`);
   assert(externalSourceReentry.hasHook, `${label} missing browser-smoke external source re-entry hook`);
   assert(!externalSourceReentry.error, `${label} external source re-entry smoke failed: ${externalSourceReentry.error || "-"}`);
   assert(externalSourceReentry.loadedFromLegacyQueue === true, `${label} external source queue should restore from legacy bridge storage: ${JSON.stringify(externalSourceReentry)}`);
@@ -767,6 +801,17 @@ function checkPageState(check, page) {
   assert(/good night/.test(bilingualSyntheticSpacedTranslationProgress.activeLineText || ""), `${label} synthetic translated spaced words should preserve spaces: ${bilingualSyntheticSpacedTranslationProgress.activeLineText || "-"}`);
   assert(bilingualSyntheticSpacedTranslationProgress.wordGroups?.[1]?.wordCount === 2, `${label} synthetic translated spaced words should keep two timed English words: ${JSON.stringify(bilingualSyntheticSpacedTranslationProgress.wordGroups)}`);
   assert(bilingualSyntheticSpacedTranslationProgress.wordGroups?.[1]?.timed === true, `${label} synthetic translated spaced words should be timed: ${JSON.stringify(bilingualSyntheticSpacedTranslationProgress.wordGroups)}`);
+  const weightedSyntheticGroup = (bilingualSyntheticWeightedTranslationProgress.wordGroups || [])
+    .find((group) => group.wordText?.[0] === "a" && group.wordText?.[1] === "synchronization");
+  assert(/a synchronization/.test(bilingualSyntheticWeightedTranslationProgress.activeLineText || ""), `${label} synthetic weighted translation should preserve long translated words: ${bilingualSyntheticWeightedTranslationProgress.activeLineText || "-"}`);
+  assert(Boolean(weightedSyntheticGroup), `${label} weighted synthetic translation should expose the short and long translated words: ${JSON.stringify(bilingualSyntheticWeightedTranslationProgress.wordGroups)}`);
+  assert(weightedSyntheticGroup?.wordProgress?.[0] === 100, `${label} weighted synthetic short word should complete early instead of using equal split timing: ${JSON.stringify(bilingualSyntheticWeightedTranslationProgress.wordGroups)}`);
+  assert(weightedSyntheticGroup?.wordProgress?.[1] > 0 && weightedSyntheticGroup?.wordProgress?.[1] < 100, `${label} weighted synthetic long word should carry the remaining sung duration: ${JSON.stringify(bilingualSyntheticWeightedTranslationProgress.wordGroups)}`);
+  assert(
+    (weightedSyntheticGroup?.wordEndTimings?.[0] || 0) < 0.5
+      && (weightedSyntheticGroup?.wordEndTimings?.[1] || 0) > 2,
+    `${label} weighted synthetic translation should allocate more time to the longer translated word: ${JSON.stringify(bilingualSyntheticWeightedTranslationProgress.wordGroups)}`
+  );
   assert(/Hello world/.test(bilingualSyntheticOriginalProgress.activeLineText || ""), `${label} synthetic original spaced words should preserve spaces: ${bilingualSyntheticOriginalProgress.activeLineText || "-"}`);
   assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.wordCount === 2, `${label} original line without own timing should synthesize two English timed words from translated timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
   assert(bilingualSyntheticOriginalProgress.wordGroups?.[0]?.timed === true && bilingualSyntheticOriginalProgress.wordGroups?.[1]?.timed === true, `${label} bilingual original/translated groups should both be timed when only translation has timing: ${JSON.stringify(bilingualSyntheticOriginalProgress.wordGroups)}`);
@@ -843,17 +888,29 @@ function checkPageState(check, page) {
   assert(favoriteState.mobileActive === true && favoriteState.desktopActive === true, `${label} immersive favorite buttons should render active state: ${JSON.stringify(favoriteState)}`);
   assert(hasSolidFill(favoriteState.mobileFill) && hasSolidFill(favoriteState.desktopFill), `${label} active favorite icons should use a solid fill: ${JSON.stringify(favoriteState)}`);
   assert(downloadOptions.exists === true && downloadOptions.opened === true, `${label} download options modal should open from immersive controls: ${JSON.stringify(downloadOptions)}`);
+  assert(downloadOptions.openedByClick === true, `${label} download options modal should open from a real immersive button click: ${JSON.stringify(downloadOptions)}`);
   assert(downloadOptions.optionCount > 0, `${label} download options modal should render quality choices: ${JSON.stringify(downloadOptions)}`);
   assert(downloadOptions.closedByOutside === true, `${label} download options modal should close on outside click: ${JSON.stringify(downloadOptions)}`);
   assert(audioQualityOptions.exists === true && audioQualityOptions.opened === true, `${label} audio quality modal should open from immersive controls: ${JSON.stringify(audioQualityOptions)}`);
+  assert(audioQualityOptions.openedByClick === true, `${label} audio quality modal should open from a real immersive button click: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.optionCount > 0, `${label} audio quality modal should render quality choices: ${JSON.stringify(audioQualityOptions)}`);
   assert(audioQualityOptions.closedByOutside === true, `${label} audio quality modal should close on outside click: ${JSON.stringify(audioQualityOptions)}`);
+  assert(moreActionSheet.openedByClick === true, `${label} immersive more action sheet should open from a real button click: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.labels?.includes("播放器样式"), `${label} immersive more action sheet should include player style settings: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerStyleOpened === true, `${label} player style modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerThemeChoiceCount >= 3, `${label} player style modal should render theme choices: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.visualizerStyleChoiceCount >= 3, `${label} player style modal should render visualizer choices: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.labels?.includes("歌词设置"), `${label} immersive more action sheet should include lyric settings: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsOpened === true, `${label} lyric settings modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsAutoScrollChecked === true, `${label} lyric auto-scroll setting should default on: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsAutoImmersiveChecked === false, `${label} lyric auto immersive setting should default off: ${JSON.stringify(moreActionSheet)}`);
   if (check.name.startsWith("mobile")) {
     assert(mobileImmersiveLayout.before?.view === "cover", `${label} mobile immersive should default to cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.topTitleVisible === false, `${label} mobile immersive should not show the top title: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.mobileFullscreenVisible === true, `${label} mobile immersive should expose the fullscreen icon in the lower tool row: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert((mobileImmersiveLayout.before?.qualityText || "").trim().length > 0, `${label} mobile immersive should show quality under track meta: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(!/^音质\s*/.test(mobileImmersiveLayout.before?.qualityText || ""), `${label} mobile immersive quality text should not repeat the quality label prefix: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformVisible === true, `${label} mobile immersive waveform should be visible: ${JSON.stringify(mobileImmersiveLayout.before)}`);
@@ -867,7 +924,9 @@ function checkPageState(check, page) {
     assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(mobileImmersiveLayout.before?.playButtonBackground || ""), `${label} mobile immersive play button should not keep a colored background: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(mobileImmersiveLayout.before?.playButtonTapHighlight || ""), `${label} mobile immersive play button tap highlight should be transparent: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.playButtonLoadingAnimationName === "playbackLoadingOrbit", `${label} mobile immersive play loading should use orbit animation: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.playButtonLoadingAnimationDuration !== "0s", `${label} mobile immersive play loading animation should keep a non-zero duration: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(/(?:conic-gradient|radial-gradient)/i.test(mobileImmersiveLayout.before?.playButtonLoadingBackgroundImage || ""), `${label} mobile immersive play loading should use ring gradient: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(!/rotate\(0deg\)/i.test(mobileImmersiveLayout.before?.playButtonLoadingTransform || ""), `${label} mobile immersive play loading should not be locked to a static rotate transform: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert((mobileImmersiveLayout.before?.controlDeckGapPx || 0) >= 14, `${label} mobile immersive control deck vertical gap should be roomy: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.oldVisualizerBarCount === 0, `${label} mobile immersive should not keep old bar visualizer DOM: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
@@ -875,8 +934,12 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.afterToggle?.coverVisible === false, `${label} mobile immersive cover should hide after lyric tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topActionsCollapsed === true, `${label} mobile immersive lyric view should collapse top actions: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topRevealVisible === true, `${label} mobile immersive lyric view should show the reveal dot: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.closeVisible === true, `${label} mobile immersive lyric view should keep the top-right exit button visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.topTitleVisible === true, `${label} mobile immersive lyric view should dock title and artist into the top area: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert((mobileImmersiveLayout.afterToggle?.topArtistText || "").trim().length > 0, `${label} mobile immersive lyric top area should show artist without album text: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.mobileFullscreenVisible === true, `${label} mobile immersive lyric lower-left fullscreen icon should remain visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterReveal?.topActionsCollapsed === false, `${label} mobile immersive reveal dot should restore top actions: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
-    assert(mobileImmersiveLayout.afterReveal?.backgroundVisible === true && mobileImmersiveLayout.afterReveal?.fullscreenVisible === true && mobileImmersiveLayout.afterReveal?.closeVisible === true, `${label} mobile immersive top actions should be visible after reveal: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
+    assert(mobileImmersiveLayout.afterReveal?.backgroundVisible === false && mobileImmersiveLayout.afterReveal?.fullscreenVisible === false && mobileImmersiveLayout.afterReveal?.closeVisible === true, `${label} mobile immersive top actions should keep skin/fullscreen out of the topbar and keep exit visible: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
   }
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }

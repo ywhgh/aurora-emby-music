@@ -377,6 +377,11 @@ function checkLyrics() {
   assert(app.includes("function getLyricProgressIdleResumeDelayMs"), "Lyric word progress should calculate idle resume delays");
   assert(/const end = getLyricWordProgressEndSeconds\(start, nextEntry, words\.length, \{[\s\S]*?line: currentLine,[\s\S]*?text: currentLine\?\.originalText \|\| currentLine\?\.text,[\s\S]*?\}\);[\s\S]*?const lineRatio = end > start/.test(app), "Immersive word progress should use sung line end timing");
   assert(/scheduleLyricProgressResumeIfIdle\(lineRatio, lyricSeconds, nextEntry\);/.test(app), "Lyric word progress should idle after a line is fully highlighted");
+  assert(app.includes("getByteFrequencyData"), "Immersive music visualizer should sample frequency data, not only a time-driven fallback");
+  assert(app.includes("function getImmersiveVisualizerAudioStats"), "Immersive music visualizer should derive RMS/peak/frequency energy from captured audio");
+  assert(app.includes("function getImmersiveVisualizerReactiveLevels"), "Immersive music visualizer should render audio-reactive waveform levels");
+  assert(app.includes("createMediaStreamSource(immersiveVisualizerStream)"), "Immersive music visualizer should keep the safe captureStream MediaStreamSource path");
+  assert(!app.includes("createMediaElementSource(audioPlayer)"), "Immersive music visualizer must not use MediaElementSource on the shared audio element");
   assert(/function updateLyricProgressFrame\(\) \{[\s\S]*?const currentSeconds = getLyricPlaybackTimeSeconds\(\);[\s\S]*?updateActiveLyricWordProgressFrame\(currentSeconds\)[\s\S]*?updateLyricsHighlight\(currentSeconds\);/.test(app), "RAF lyric progress should use the smooth lyric playback clock with an active lyric hot path");
   assert(app.includes("function updateActiveLyricWordProgressFrame"), "Visible lyric surfaces should share a direct RAF hot path");
   assert(app.includes("function updateActiveImmersiveLyricWordProgressFrame"), "Immersive word lyrics should have a direct RAF hot path");
@@ -576,6 +581,24 @@ function checkLyrics() {
   assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
   assert(browserSmoke.includes("bilingualSurfaceProgress"), "Browser smoke should verify original and translated word groups across lyric surfaces");
   assert(browserSmoke.includes("bilingualDenseWordPerformance"), "Browser smoke should verify dense bilingual word lyric performance");
+  assert(app.includes("function getSyntheticLyricWordWeights"), "Synthetic bilingual lyric timing should weight translated words instead of equal-splitting every line");
+  assert(app.includes("bilingualSyntheticWeightedTranslationProgress"), "Browser smoke hooks should expose weighted synthetic translation progress");
+  assert(browserSmoke.includes("weighted synthetic long word should carry the remaining sung duration"), "Browser smoke should verify weighted synthetic translation timing");
+  assert(browserSmoke.includes("createImmersiveVisualizerSmokeScript"), "Browser smoke should include an immersive visualizer energy scenario");
+  assert(browserSmoke.includes("active analyser data should be detected as live music"), "Browser smoke should verify audio-reactive visualizer analyser data");
+  assert(index.includes("id=\"lyricSettingsModal\""), "Immersive more menu should expose a dedicated lyric settings modal");
+  assert(index.includes("id=\"playerStyleModal\""), "Immersive more menu should expose a dedicated player style modal");
+  assert(app.includes("function openLyricSettingsModal"), "Lyric settings modal should be wired in the app");
+  assert(app.includes("function openPlayerStyleModal"), "Player style modal should be wired in the app");
+  assert(app.includes("IMMERSIVE_PLAYER_STYLE_KEY"), "Player style settings should be persisted");
+  assert(app.includes("label: \"播放器样式\""), "Immersive more actions should include player style settings");
+  assert(app.includes("data-visualizer-style"), "Player style modal should include visualizer style choices");
+  assert(css.includes("immersiveFullscreenIconPulse"), "Fullscreen icon should animate when toggled");
+  assert(css.includes("is-page-entering") && css.includes("is-page-exiting"), "Immersive page should animate on enter and exit");
+  assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
+  assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
+  assert(app.includes("autoImmersiveLyrics: false"), "Auto immersive lyrics should default off");
+  assert(browserSmoke.includes("open from a real immersive button click") || browserSmoke.includes("open from a real button click"), "Browser smoke should click immersive buttons instead of only calling modal open helpers");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
   assert(browserSmoke.includes("createExternalSourceReentrySmokeScript"), "Browser smoke should include a real external source re-entry playback scenario");
@@ -1342,6 +1365,7 @@ function checkAppFunctionReferences() {
   assert(css.includes(".is-audio-playing .tonearm-arm"), "Smart playback hub tonearm should react to playing state");
   assert(css.includes("transform: rotate(20deg)"), "Smart playback hub tonearm should drop near the album art while playing");
   assert(!css.includes(".home-start-spindle"), "Smart playback hub should not keep old spindle styles");
+  assert(!/is-playback-buffering[\s\S]*?immersive-play-core\.play-button::before[\s\S]*?transform:\s*rotate\(0deg\)\s*!important/.test(css), "Mobile immersive loading spinner should not lock the orbit animation with an important transform");
 
   assert(app.includes("homeStartArtButton?.addEventListener(\"click\", openMobileImmersivePlayer)"), "Smart playback hub artwork should open immersive playback");
   assert(app.includes("homeStartFavoriteButton?.addEventListener(\"click\", () => toggleFavorite(state.currentTrack))"), "Smart playback hub favorite action should reuse current track favorite logic");

@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.154" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.154" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.154" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.155" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.155" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.155" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.154</span>
+            <span id="loginVersion">v0.93.155</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1363,6 +1363,7 @@
                 <span class="immersive-top-caption">沉浸播放</span>
                 <div class="immersive-mobile-title" aria-hidden="true">
                   <span id="immersiveMobileTitle">等待选择音乐</span>
+                  <span id="immersiveMobileArtist">Emby Music Web</span>
                 </div>
                 <div class="immersive-top-actions">
                   <button id="immersiveTopRevealButton" class="immersive-round-button immersive-top-reveal-button" type="button" aria-label="显示顶部按钮" title="显示顶部按钮" hidden>
@@ -1429,12 +1430,18 @@
                     </svg>
                     <span class="sr-only">更多沉浸播放操作</span>
                   </button>
-                  <button id="immersiveFullscreenButton" class="immersive-round-button" type="button" aria-label="切换全屏" title="切换全屏">
-                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <button id="immersiveFullscreenButton" class="immersive-round-button immersive-fullscreen-button" type="button" aria-label="切换全屏" title="切换全屏" data-fullscreen="false">
+                    <svg class="line-icon fullscreen-icon fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
                       <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
                       <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
                       <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+                    </svg>
+                    <svg class="line-icon fullscreen-icon fullscreen-exit-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3v4a2 2 0 0 1-2 2H3"></path>
+                      <path d="M15 3v4a2 2 0 0 0 2 2h4"></path>
+                      <path d="M9 21v-4a2 2 0 0 0-2-2H3"></path>
+                      <path d="M15 21v-4a2 2 0 0 1 2-2h4"></path>
                     </svg>
                     <span class="sr-only">切换全屏</span>
                   </button>
@@ -1685,6 +1692,21 @@
                 </div>
 
                 <div class="immersive-mobile-tool-row" aria-label="沉浸播放工具">
+                  <button id="immersiveMobileFullscreenButton" class="immersive-mobile-tool-button immersive-fullscreen-button" type="button" aria-label="进入全屏" title="进入全屏" data-fullscreen="false">
+                    <svg class="line-icon fullscreen-icon fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+                      <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+                      <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+                      <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+                    </svg>
+                    <svg class="line-icon fullscreen-icon fullscreen-exit-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M9 3v4a2 2 0 0 1-2 2H3"></path>
+                      <path d="M15 3v4a2 2 0 0 0 2 2h4"></path>
+                      <path d="M9 21v-4a2 2 0 0 0-2-2H3"></path>
+                      <path d="M15 21v-4a2 2 0 0 1 2-2h4"></path>
+                    </svg>
+                    <span class="sr-only">进入全屏</span>
+                  </button>
                   <button id="immersiveMobileFavoriteButton" class="immersive-mobile-tool-button favorite-button" type="button" disabled aria-label="收藏" title="收藏">
                     <svg class="line-icon favorite-line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 1 0-7.2 7.2l1 1L12 21l7.2-7 1-1a5.1 5.1 0 0 0 0-7.2Z"></path>
@@ -2128,6 +2150,146 @@
                 </button>
               </div>
               <div id="downloadOptionsList" class="download-options-list" aria-label="下载音质选项"></div>
+            </section>
+          </div>
+          <div id="lyricSettingsModal" class="modal-backdrop lyric-settings-modal" hidden>
+            <section class="modal-card lyric-settings-card" role="dialog" aria-modal="true" aria-labelledby="lyricSettingsTitle" aria-describedby="lyricSettingsSubtitle">
+              <div class="download-options-heading">
+                <div>
+                  <p class="kicker">歌词</p>
+                  <h3 id="lyricSettingsTitle">歌词设置</h3>
+                  <p id="lyricSettingsSubtitle" class="modal-subtitle">调整沉浸式歌词的阅读、同步和自动展示方式。</p>
+                </div>
+                <button id="lyricSettingsClose" class="audio-quality-close-button" type="button" aria-label="关闭歌词设置">
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12"></path>
+                    <path d="M18 6 6 18"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="lyric-settings-stack">
+                <label class="lyric-settings-row lyric-settings-range">
+                  <span>
+                    <strong>歌词字体大小</strong>
+                    <small id="lyricFontSizeValue">标准</small>
+                  </span>
+                  <input id="lyricFontSizeRange" type="range" min="85" max="125" step="5" value="100" aria-label="歌词字体大小" />
+                </label>
+                <label class="lyric-settings-row">
+                  <span>
+                    <strong>歌词字体</strong>
+                    <small>只影响沉浸式歌词</small>
+                  </span>
+                  <select id="lyricFontFamilySelect" aria-label="歌词字体">
+                    <option value="system">系统默认</option>
+                    <option value="rounded">柔和圆体</option>
+                    <option value="serif">温润衬线</option>
+                    <option value="mono">等宽歌词</option>
+                  </select>
+                </label>
+                <div class="lyric-settings-row lyric-settings-offset">
+                  <span>
+                    <strong>歌词时间调整</strong>
+                    <small>当前 <em data-lyric-offset-value>+0.18s</em></small>
+                  </span>
+                  <div class="lyric-settings-offset-actions">
+                    <button type="button" data-lyric-offset-adjust="earlier">慢了</button>
+                    <button type="button" data-lyric-offset-adjust="later">快了</button>
+                    <button type="button" data-lyric-offset-reset>重置</button>
+                  </div>
+                </div>
+                <label class="lyric-settings-toggle">
+                  <span>
+                    <strong>歌词跟随播放进度滚动</strong>
+                    <small>默认开启，播放时自动定位当前行。</small>
+                  </span>
+                  <input id="lyricAutoScrollToggle" type="checkbox" checked />
+                </label>
+                <label class="lyric-settings-toggle">
+                  <span>
+                    <strong>自动展示沉浸式歌词</strong>
+                    <small>默认关闭。开启后进入沉浸播放时自动切到歌词页。</small>
+                  </span>
+                  <input id="lyricAutoImmersiveToggle" type="checkbox" />
+                </label>
+              </div>
+            </section>
+          </div>
+          <div id="playerStyleModal" class="modal-backdrop player-style-modal" hidden>
+            <section class="modal-card player-style-card" role="dialog" aria-modal="true" aria-labelledby="playerStyleTitle" aria-describedby="playerStyleSubtitle">
+              <div class="download-options-heading">
+                <div>
+                  <p class="kicker">样式</p>
+                  <h3 id="playerStyleTitle">播放器样式</h3>
+                  <p id="playerStyleSubtitle" class="modal-subtitle">调整沉浸式播放器主题和音乐可视化样式。</p>
+                </div>
+                <button id="playerStyleClose" class="audio-quality-close-button" type="button" aria-label="关闭播放器样式">
+                  <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12"></path>
+                    <path d="M18 6 6 18"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="player-style-stack">
+                <section class="player-style-section" aria-labelledby="playerThemeTitle">
+                  <div class="player-style-section-heading">
+                    <strong id="playerThemeTitle">播放器主题</strong>
+                    <small>控制封面背景、舞台光和整体皮肤。</small>
+                  </div>
+                  <div class="player-style-choice-grid" role="group" aria-label="播放器主题">
+                    <button class="player-style-choice" type="button" data-player-theme="original" aria-pressed="true">
+                      <span class="player-style-swatch theme-original" aria-hidden="true"></span>
+                      <span>
+                        <strong>原始封面</strong>
+                        <small>保留当前封面氛围</small>
+                      </span>
+                    </button>
+                    <button class="player-style-choice" type="button" data-player-theme="fluid" aria-pressed="false">
+                      <span class="player-style-swatch theme-fluid" aria-hidden="true"></span>
+                      <span>
+                        <strong>流体光雾</strong>
+                        <small>柔和的封面色扩散</small>
+                      </span>
+                    </button>
+                    <button class="player-style-choice" type="button" data-player-theme="stage" aria-pressed="false">
+                      <span class="player-style-swatch theme-stage" aria-hidden="true"></span>
+                      <span>
+                        <strong>舞台暖光</strong>
+                        <small>更强的顶部聚光感</small>
+                      </span>
+                    </button>
+                  </div>
+                </section>
+                <section class="player-style-section" aria-labelledby="visualizerStyleTitle">
+                  <div class="player-style-section-heading">
+                    <strong id="visualizerStyleTitle">可视化音乐样式</strong>
+                    <small>只影响专辑下方跟随音乐律动的波形。</small>
+                  </div>
+                  <div class="player-style-choice-grid" role="group" aria-label="可视化音乐样式">
+                    <button class="player-style-choice" type="button" data-visualizer-style="wave" aria-pressed="true">
+                      <span class="player-style-swatch visualizer-wave" aria-hidden="true"></span>
+                      <span>
+                        <strong>暖白长波</strong>
+                        <small>当前默认的连续波形</small>
+                      </span>
+                    </button>
+                    <button class="player-style-choice" type="button" data-visualizer-style="ribbon" aria-pressed="false">
+                      <span class="player-style-swatch visualizer-ribbon" aria-hidden="true"></span>
+                      <span>
+                        <strong>柔光丝带</strong>
+                        <small>更宽、更柔的声波光带</small>
+                      </span>
+                    </button>
+                    <button class="player-style-choice" type="button" data-visualizer-style="pulse" aria-pressed="false">
+                      <span class="player-style-swatch visualizer-pulse" aria-hidden="true"></span>
+                      <span>
+                        <strong>低频脉冲</strong>
+                        <small>鼓点反馈更明显</small>
+                      </span>
+                    </button>
+                  </div>
+                </section>
+              </div>
             </section>
           </div>
           <div id="sourceBridgeModal" class="modal-backdrop" hidden>
@@ -2622,7 +2784,7 @@
 
     <script>
       (() => {
-        const version = "0.93.154";
+        const version = "0.93.155";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -3000,13 +3162,13 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.154" defer></script>
-    <script src="./src/format.js?v=0.93.154" defer></script>
-    <script src="./src/lyrics.js?v=0.93.154" defer></script>
-    <script src="./src/emby-api.js?v=0.93.154" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.154" defer></script>
-    <script src="./src/storage.js?v=0.93.154" defer></script>
-    <script src="./app.js?v=0.93.154" defer></script>
+    <script src="./src/config.js?v=0.93.155" defer></script>
+    <script src="./src/format.js?v=0.93.155" defer></script>
+    <script src="./src/lyrics.js?v=0.93.155" defer></script>
+    <script src="./src/emby-api.js?v=0.93.155" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.155" defer></script>
+    <script src="./src/storage.js?v=0.93.155" defer></script>
+    <script src="./app.js?v=0.93.155" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>
