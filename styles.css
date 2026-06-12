@@ -14715,77 +14715,6 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 }
 
-  body.immersive-player-open #playerStyleModal:not([hidden]) {
-    align-items: end;
-    place-items: end stretch;
-    padding: 0 max(0.42rem, env(safe-area-inset-left)) max(0.42rem, env(safe-area-inset-bottom)) max(0.42rem, env(safe-area-inset-right));
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-card {
-    min-height: min(74dvh, 48rem) !important;
-    max-height: min(84dvh, 52rem) !important;
-    display: grid !important;
-    grid-template-rows: auto minmax(0, 1fr) !important;
-    padding: 1.16rem 1rem 1.08rem !important;
-    border-radius: 32px 32px 20px 20px !important;
-  }
-
-  body.immersive-player-open #playerStyleModal .modal-heading {
-    align-items: start;
-    padding: 0.2rem 0.06rem 0.28rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-stack {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 0.2rem 0.02rem 1.1rem;
-    scrollbar-width: none;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-stack::-webkit-scrollbar {
-    display: none;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-section {
-    gap: 0.82rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-section + .player-style-section {
-    margin-top: 0.5rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-section-heading strong {
-    font-size: 1.14rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-section-heading small {
-    font-size: 0.82rem;
-    line-height: 1.42;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-choice {
-    min-height: 5.25rem;
-    grid-template-columns: 3.3rem minmax(0, 1fr);
-    gap: 0.9rem;
-    padding: 0.9rem 3rem 0.9rem 0.9rem;
-    border-radius: 24px;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-choice strong {
-    font-size: 1rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-choice small {
-    font-size: 0.82rem;
-  }
-
-  body.immersive-player-open #playerStyleModal .player-style-swatch {
-    width: 2.6rem;
-    height: 2.6rem;
-    border-radius: 16px;
-  }
-
 @media (max-width: 380px) {
   .track-duration {
     display: none;
@@ -16675,6 +16604,78 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   body.immersive-player-open .player-style-choice-grid {
     grid-template-columns: 1fr;
   }
+  body.immersive-player-open #playerStyleModal:not([hidden]) {
+    align-items: end;
+    place-items: end stretch;
+    padding: 0 max(0.42rem, env(safe-area-inset-left)) max(0.42rem, env(safe-area-inset-bottom)) max(0.42rem, env(safe-area-inset-right));
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-card {
+    min-height: min(74dvh, 48rem) !important;
+    max-height: min(84dvh, 52rem) !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    padding: 1.16rem 1rem 1.08rem !important;
+    border-radius: 32px 32px 20px 20px !important;
+  }
+
+  body.immersive-player-open #playerStyleModal .modal-heading {
+    align-items: start;
+    padding: 0.2rem 0.06rem 0.28rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-stack {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.2rem 0.02rem 1.1rem;
+    scrollbar-width: none;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-stack::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section {
+    gap: 0.82rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section + .player-style-section {
+    margin-top: 0.5rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section-heading strong {
+    font-size: 1.14rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section-heading small {
+    font-size: 0.82rem;
+    line-height: 1.42;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice {
+    min-height: 5.25rem;
+    grid-template-columns: 3.3rem minmax(0, 1fr);
+    gap: 0.9rem;
+    padding: 0.9rem 3rem 0.9rem 0.9rem;
+    border-radius: 24px !important;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice strong {
+    font-size: 1rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice small {
+    font-size: 0.82rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-swatch {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 16px;
+  }
+
+
 }
 
 @media (max-width: 380px) {

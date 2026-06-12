@@ -3271,6 +3271,8 @@ function collectBrowserSmokeMobileImmersiveState() {
   const activeThemeStyle = activePlayerThemeButton ? window.getComputedStyle(activePlayerThemeButton) : null;
   const playerStyleCard = playerStyleModal?.querySelector(".player-style-card");
   const playerStyleCardStyle = playerStyleCard ? window.getComputedStyle(playerStyleCard) : null;
+  const playerStyleStack = playerStyleModal?.querySelector(".player-style-stack");
+  const playerStyleStackStyle = playerStyleStack ? window.getComputedStyle(playerStyleStack) : null;
   moreActionSheet.playerStyleOpened = Boolean(playerStyleModal && !playerStyleModal.hidden);
   moreActionSheet.playerThemeChoiceCount = playerStyleModal?.querySelectorAll("[data-player-theme]").length || 0;
   moreActionSheet.visualizerStyleChoiceCount = playerStyleModal?.querySelectorAll("[data-visualizer-style]").length || 0;
@@ -3282,7 +3284,12 @@ function collectBrowserSmokeMobileImmersiveState() {
   moreActionSheet.playerStyleRibbonPressed = activeVisualizerButton?.getAttribute("aria-pressed") || "";
   moreActionSheet.playerStyleActiveBorderColor = activeThemeStyle?.borderColor || "";
   moreActionSheet.playerStyleCardMaxHeight = playerStyleCardStyle?.maxHeight || "";
+  moreActionSheet.playerStyleCardMinHeight = playerStyleCardStyle?.minHeight || "";
   moreActionSheet.playerStyleCardOverflow = playerStyleCardStyle?.overflow || "";
+  moreActionSheet.playerStyleCardRect = getRect(playerStyleCard);
+  moreActionSheet.playerStyleStackOverflowY = playerStyleStackStyle?.overflowY || "";
+  moreActionSheet.playerStyleStackScrollbarWidth = playerStyleStackStyle?.scrollbarWidth || "";
+  moreActionSheet.viewportHeight = Math.round(window.innerHeight || 0);
   moreActionSheet.playerStyleLayer = getImmersiveModalLayerState(playerStyleModal, ".player-style-card");
   state.immersivePlayerStyle = originalPlayerStyleForSmoke;
   applyImmersivePlayerStyle({ save: true });

@@ -931,6 +931,8 @@ function checkPageState(check, page) {
   assert((moreActionSheet.lyricFontSizeAfterSetting || 0) > (moreActionSheet.lyricFontSizeBeforeSetting || 0) + 1, `${label} lyric font-size setting should immediately resize immersive lyrics: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricFontSizeRangeValue === "125", `${label} lyric font-size range should apply the selected value before restore: ${JSON.stringify(moreActionSheet)}`);
   if (check.name.startsWith("mobile")) {
+    assert((moreActionSheet.playerStyleCardRect?.height || 0) >= (moreActionSheet.viewportHeight || 0) * 0.55, `${label} mobile player style modal should open as a large half-screen sheet: ${JSON.stringify(moreActionSheet)}`);
+    assert(moreActionSheet.playerStyleStackOverflowY === "auto" && moreActionSheet.playerStyleStackScrollbarWidth === "none", `${label} mobile player style modal should keep content scrollable with hidden scrollbars: ${JSON.stringify(moreActionSheet)}`);
     assert(mobileImmersiveLayout.before?.view === "cover", `${label} mobile immersive should default to cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
