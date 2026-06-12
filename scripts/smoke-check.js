@@ -616,7 +616,7 @@ function checkLyrics() {
   assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
   assert(app.includes("autoImmersiveLyrics: false"), "Auto immersive lyrics should default off");
-  assert(app.includes("function refreshLyricLayoutAfterSettingsChange()") && app.includes("requestAnimationFrame(() =>") && app.includes("updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);"), "Lyric font settings should force a second lyric layout refresh after CSS recalculation");
+  assert(app.includes("let lyricSettingsLayoutFrame = 0") && app.includes("function refreshLyricLayoutAfterSettingsChange()") && app.includes("cancelAnimationFrame(lyricSettingsLayoutFrame)") && app.includes("lyricSettingsLayoutFrame = requestAnimationFrame(() =>") && app.includes("updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);"), "Lyric font settings should coalesce layout refreshes and force a second lyric layout refresh after CSS recalculation");
   assert(browserSmoke.includes("open from a real immersive button click") || browserSmoke.includes("open from a real button click"), "Browser smoke should click immersive buttons instead of only calling modal open helpers");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");

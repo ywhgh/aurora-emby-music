@@ -892,6 +892,7 @@ let progressRenderSignature = "";
 let homeStartProgressSignature = "";
 let playerNextPreviewSignature = "";
 let lyricProgressFrame = 0;
+let lyricSettingsLayoutFrame = 0;
 let lyricProgressResumeTimer = 0;
 let lyricProgressActiveIndex = -1;
 let lyricProgressFullWordCount = -1;
@@ -9374,7 +9375,13 @@ function updateLyricSetting(key, value) {
 function refreshLyricLayoutAfterSettingsChange() {
   const syncTime = getVisibleLyricSyncTimeSeconds();
   updateLyricsHighlight(syncTime, true);
-  requestAnimationFrame(() => {
+
+  if (lyricSettingsLayoutFrame) {
+    cancelAnimationFrame(lyricSettingsLayoutFrame);
+  }
+
+  lyricSettingsLayoutFrame = requestAnimationFrame(() => {
+    lyricSettingsLayoutFrame = 0;
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   });
 }
