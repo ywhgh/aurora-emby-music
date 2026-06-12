@@ -632,6 +632,7 @@ function checkPageState(check, page) {
   const lyricProgressAfterResumeRefresh = lyricProgress.afterResumeRefresh || {};
   const lyricLongGapProgress = lyricProgress.longGapProgress || {};
   const lyricLongGapLateProgress = lyricProgress.longGapLateProgress || {};
+  const weightedFallbackProgress = lyricProgress.weightedFallbackProgress || {};
   const enhancedMidWordProgress = lyricProgress.enhancedMidWordProgress || {};
   const enhancedLateWordProgress = lyricProgress.enhancedLateWordProgress || {};
   const enhancedTailWordProgress = lyricProgress.enhancedTailWordProgress || {};
@@ -771,6 +772,9 @@ function checkPageState(check, page) {
   assert(lyricLongGapLateProgress.activeIndex === 0, `${label} long-gap late lyric should stay on the first sung line, got ${lyricLongGapLateProgress.activeIndex}`);
   assert(lyricLongGapLateProgress.wordProgress?.some((progress) => progress > 0 && progress < 100), `${label} long-gap late lyric should still be in progress before the next line: ${JSON.stringify(lyricLongGapLateProgress.wordProgress)}`);
   assert(lyricProgress.longGapIdleResumeDelayMs > 10000, `${label} long-gap lyric should idle the RAF until near the next line, got ${lyricProgress.longGapIdleResumeDelayMs || 0}ms`);
+  assert(weightedFallbackProgress.wordCount === 2, `${label} weighted fallback lyric should render two words: ${JSON.stringify(weightedFallbackProgress)}`);
+  assert(weightedFallbackProgress.wordProgress?.[0] === 100, `${label} weighted fallback short word should finish early instead of crawling equally: ${JSON.stringify(weightedFallbackProgress.wordProgress)}`);
+  assert(weightedFallbackProgress.wordProgress?.[1] > 0 && weightedFallbackProgress.wordProgress?.[1] < 35, `${label} weighted fallback long word should carry most of the sung duration: ${JSON.stringify(weightedFallbackProgress.wordProgress)}`);
   assert(enhancedMidWordProgress.wordProgress?.[0] === 100, `${label} enhanced lyric first word should complete at the second word timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedMidWordProgress.wordProgress?.[1] === 0, `${label} enhanced lyric second word should start from its own timestamp: ${JSON.stringify(enhancedMidWordProgress.wordProgress)}`);
   assert(enhancedLateWordProgress.wordProgress?.[0] === 100 && enhancedLateWordProgress.wordProgress?.[1] === 100, `${label} enhanced lyric first two words should complete by 1.45s: ${JSON.stringify(enhancedLateWordProgress.wordProgress)}`);
@@ -908,6 +912,8 @@ function checkPageState(check, page) {
   assert(isAboveImmersivePanel(moreActionSheet.layer), `${label} immersive more sheet should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.layer), `${label} immersive more sheet should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("播放器样式"), `${label} immersive more action sheet should include player style settings: ${JSON.stringify(moreActionSheet)}`);
+  assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(moreActionSheet.focusedItemTapHighlight || ""), `${label} immersive more focused row should not keep a blue tap highlight: ${JSON.stringify(moreActionSheet)}`);
+  assert(!/rgb\(59, 130, 246\)|rgb\(37, 99, 235\)|#2563eb|#3b82f6/i.test(`${moreActionSheet.focusedItemBackground} ${moreActionSheet.focusedItemOutline} ${moreActionSheet.focusedItemBoxShadow}`), `${label} immersive more focused row should not show a blue click block: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerStyleOpened === true, `${label} player style modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerThemeChoiceCount >= 3, `${label} player style modal should render theme choices: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.visualizerStyleChoiceCount >= 3, `${label} player style modal should render visualizer choices: ${JSON.stringify(moreActionSheet)}`);
@@ -956,7 +962,7 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.afterToggle?.closeVisible === true, `${label} mobile immersive lyric view should keep the top-right exit button visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topTitleVisible === true, `${label} mobile immersive lyric view should dock title and artist into the top area: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert((mobileImmersiveLayout.afterToggle?.topSongFontSizePx || 0) >= 16, `${label} mobile immersive lyric top song title should be larger and readable: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
-    assert(Math.abs((mobileImmersiveLayout.afterToggle?.topTitleRect?.top || 0) - (mobileImmersiveLayout.afterToggle?.topFullscreenRect?.top || 0)) <= 3, `${label} mobile immersive lyric title should align with the top edge of fullscreen/exit buttons: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(Math.abs((mobileImmersiveLayout.afterToggle?.topSongRect?.top || mobileImmersiveLayout.afterToggle?.topTitleRect?.top || 0) - (mobileImmersiveLayout.afterToggle?.topFullscreenRect?.top || 0)) <= 8, `${label} mobile immersive lyric song name should optically align with the fullscreen/exit buttons: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert((mobileImmersiveLayout.afterToggle?.topArtistText || "").trim().length > 0, `${label} mobile immersive lyric top area should show artist without album text: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topFullscreenVisible === true, `${label} mobile immersive lyric view should keep fullscreen in the top-left corner: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert((mobileImmersiveLayout.afterToggle?.topFullscreenRect?.left || 999) <= 28, `${label} mobile immersive lyric fullscreen icon should stay on the left edge of the topbar: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);

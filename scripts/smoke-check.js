@@ -208,7 +208,8 @@ function checkCss() {
   assert(/\.status-grid::-webkit-scrollbar \{[\s\S]*?display:\s*none;/.test(css), "Mobile home stats should hide the horizontal scrollbar");
   assert(/\.status-grid \.info-card \{[\s\S]*?flex:\s*0 0 100%;[\s\S]*?scroll-snap-align:\s*start;/.test(css), "Mobile home stat cards should show one card per row while swiping");
   assert(/\.immersive-main h2 \{[\s\S]*?font-size:\s*1rem;/.test(css), "Mobile immersive title should use compact phone typography");
-  assert(/\.immersive-lyric-list \.lyric-line,\s*\.immersive-lyric-list p \{[\s\S]*?font-size:\s*clamp\(1\.22rem,\s*6\.7vw,\s*2\.05rem\);/.test(css), "Mobile immersive lyrics should use larger lyric typography");
+  assert(/\.immersive-player-shell \{[\s\S]*?--immersive-lyric-base-size:\s*clamp\(1\.22rem,\s*6\.7vw,\s*2\.05rem\);/.test(css), "Mobile immersive lyrics should define a larger base typography token");
+  assert(/\.immersive-lyric-list \.lyric-line,\s*\.immersive-lyric-list p \{[\s\S]*?font-size:\s*calc\(var\(--immersive-lyric-base-size\) \* var\(--immersive-lyric-font-scale\)\);/.test(css), "Mobile immersive lyrics should respect the lyric font-size setting");
   assert(css.includes('.immersive-player-shell[data-mobile-view="cover"] .immersive-lyric-focus'), "Mobile immersive cover view should hide lyric focus");
   assert(/\.immersive-left \{[\s\S]*?display:\s*none;/.test(css), "Mobile immersive should hide the old cover/info column");
   assert(/\.immersive-lyric-offset-controls \.lyric-offset-value \{[\s\S]*?display:\s*none !important;/.test(css), "Mobile immersive should hide the lyric offset numeric value");
@@ -576,6 +577,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("lyricLongGapProgress"), "Browser smoke should verify long-gap lyric word progress");
   assert(browserSmoke.includes("lyricLongGapLateProgress.wordProgress?.some((progress) => progress > 0 && progress < 100)"), "Browser smoke should verify long-gap lyric progress still follows the sung line late in the line");
   assert(browserSmoke.includes("longGapIdleResumeDelayMs"), "Browser smoke should verify long-gap lyric RAF idling");
+  assert(app.includes("function updateWeightedLyricWordProgressWindowForGroup"), "Untimed lyric word progress should use weighted word windows instead of equal-splitting every line");
+  assert(browserSmoke.includes("weightedFallbackProgress"), "Browser smoke should verify weighted fallback word progress for lyrics without per-word timestamps");
   assert(browserSmoke.includes("enhancedLateWordProgress"), "Browser smoke should verify enhanced LRC timed word progress");
   assert(browserSmoke.includes("relativeEnhancedProgress"), "Browser smoke should verify line-relative enhanced LRC timed word progress");
   assert(browserSmoke.includes("denseWordPerformance"), "Browser smoke should verify dense word lyric performance");
@@ -606,7 +609,8 @@ function checkLyrics() {
   assert(browserSmoke.includes("top-left corner"), "Browser smoke should verify mobile fullscreen is in the top-left corner");
   assert(/#immersiveFullscreenButton\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?justify-self:\s*start;/.test(css), "Mobile immersive fullscreen button should be placed in the top-left grid cell");
   assert(/#immersiveMobileFullscreenButton\.immersive-mobile-tool-button\s*\{[\s\S]*?display:\s*none !important;/.test(css), "Mobile immersive fullscreen button should not remain in the lower tool row");
-  assert(/\.immersive-mobile-title \{[\s\S]*?top:\s*0;[\s\S]*?align-content:\s*start;/.test(css), "Mobile immersive lyric title should align to the top edge of the toolbar buttons");
+  assert(/\.immersive-mobile-title \{[\s\S]*?top:\s*0\.22rem;[\s\S]*?align-content:\s*start;/.test(css), "Mobile immersive lyric title should use a small optical offset to align with toolbar buttons");
+  assert(/body\.immersive-player-open \.action-sheet-item:focus,[\s\S]*?body\.immersive-player-open \.action-sheet-item:focus-visible,[\s\S]*?body\.immersive-player-open \.action-sheet-item:active \{[\s\S]*?outline:\s*0 !important;[\s\S]*?box-shadow:\s*none !important;/.test(css), "Immersive action sheet pressed/focused rows should not show a blue click block");
   assert(/#immersiveMobileTitle \{[\s\S]*?font-size:\s*clamp\(1rem,\s*4\.45vw,\s*1\.24rem\);/.test(css), "Mobile immersive lyric song title should use the larger top typography");
   assert(css.includes("is-page-entering") && css.includes("is-page-exiting"), "Immersive page should animate on enter and exit");
   assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
