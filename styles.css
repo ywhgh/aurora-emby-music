@@ -15964,19 +15964,44 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-mobile-current-lyric {
-    display: -webkit-box;
+    display: grid;
     justify-self: center;
     width: min(88vw, 25rem);
     max-width: calc(100vw - 1.92rem);
     overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    grid-auto-rows: min-content;
+    gap: 0.18rem;
     color: rgba(255, 246, 235, 0.86);
     font-size: clamp(0.98rem, 4.2vw, 1.18rem);
     font-weight: 760;
     line-height: 1.34;
     text-align: center;
     text-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  }
+
+  .immersive-mobile-current-lyric span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .immersive-mobile-current-lyric-single {
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal !important;
+  }
+
+  .immersive-mobile-current-lyric-original {
+    color: rgba(255, 246, 235, 0.9);
+  }
+
+  .immersive-mobile-current-lyric-translated {
+    color: rgba(255, 246, 235, 0.68);
+    font-size: 0.88em;
+    font-weight: 700;
   }
 
   .immersive-mobile-current-lyric[hidden] {

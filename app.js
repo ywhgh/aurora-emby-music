@@ -3058,6 +3058,28 @@ function collectBrowserSmokeMobileImmersiveState() {
 
     return loadingStyle;
   };
+  const previousMobileCurrentLyricTrack = state.currentTrack;
+  const previousMobileCurrentLyricTimeline = state.lyricTimeline;
+  const previousMobileCurrentLyricLines = state.lyricLines;
+  const previousMobileCurrentLyricSynced = state.isLyricSynced;
+  const previousMobileCurrentLyricIndex = state.activeLyricIndex;
+  const mobileCurrentLyricTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-mobile-current-bilingual-lyric-track",
+    name: "Browser Smoke Mobile Current Bilingual Lyric Track",
+    lyricsText: [
+      "[00:00.00]Long cover lyric original line",
+      "[00:00.00]封面歌词翻译显示",
+      "[00:04.00]Next line",
+    ].join("\n"),
+  });
+  state.currentTrack = mobileCurrentLyricTrack;
+  state.queue = [mobileCurrentLyricTrack];
+  state.tracks = [mobileCurrentLyricTrack];
+  state.filteredTracks = [mobileCurrentLyricTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(mobileCurrentLyricTrack);
+  updateLyricsHighlight(1, true);
+
   const playButtonLoadingStyle = getPlayButtonLoadingStyle();
   const before = {
     view: shell?.getAttribute("data-mobile-view") || "",
@@ -3071,6 +3093,11 @@ function collectBrowserSmokeMobileImmersiveState() {
     topTitleVisible: isVisibleElement(immersiveMobileTitle),
     currentLyricVisible: isVisibleElement(immersiveMobileCurrentLyric),
     currentLyricText: immersiveMobileCurrentLyric?.textContent?.trim() || "",
+    currentLyricTitle: immersiveMobileCurrentLyric?.getAttribute("title") || "",
+    currentLyricLineCount: immersiveMobileCurrentLyric?.querySelectorAll("span").length || 0,
+    currentLyricOriginalText: immersiveMobileCurrentLyric?.querySelector(".immersive-mobile-current-lyric-original")?.textContent?.trim() || "",
+    currentLyricTranslatedText: immersiveMobileCurrentLyric?.querySelector(".immersive-mobile-current-lyric-translated")?.textContent?.trim() || "",
+    currentLyricBilingual: immersiveMobileCurrentLyric?.classList.contains("is-bilingual") || false,
     viewportCenterX: Math.round(window.innerWidth / 2),
     waveformPathCount: coverToggle?.querySelectorAll(".immersive-waveform-line, .immersive-waveform-fill, .immersive-waveform-runner").length || 0,
     waveformLinePath: coverToggle?.querySelector(".immersive-waveform-line")?.getAttribute("d") || "",
@@ -3279,6 +3306,12 @@ function collectBrowserSmokeMobileImmersiveState() {
   }
   closeTrackActionSheet({ restoreFocus: false });
   setMobileImmersiveStageView("cover");
+  state.currentTrack = previousMobileCurrentLyricTrack;
+  state.lyricTimeline = previousMobileCurrentLyricTimeline;
+  state.lyricLines = previousMobileCurrentLyricLines;
+  state.isLyricSynced = previousMobileCurrentLyricSynced;
+  state.activeLyricIndex = previousMobileCurrentLyricIndex;
+  renderImmersiveMobileCurrentLyric(getCurrentTopLyricLine());
 
   return {
     before,
@@ -9302,6 +9335,11 @@ function loadLyricSettings() {
 }
 
 function saveLyricSettings() {
+  if (lyricSettingsSaveTimer) {
+    clearTimeout(lyricSettingsSaveTimer);
+    lyricSettingsSaveTimer = 0;
+  }
+
   localStorage.setItem(LYRIC_SETTINGS_KEY, JSON.stringify(normalizeLyricSettings(state.lyricSettings)));
 }
 
@@ -9311,7 +9349,6 @@ function scheduleLyricSettingsSave() {
   }
 
   lyricSettingsSaveTimer = window.setTimeout(() => {
-    lyricSettingsSaveTimer = 0;
     saveLyricSettings();
   }, 220);
 }
@@ -10022,23 +10059,32 @@ function renderImmersiveMobileCurrentLyric(line) {
     return;
   }
 
-  const text = getImmersiveMobileCurrentLyricText(line);
-  const previousText = immersiveMobileCurrentLyric.textContent || "";
+  const parts = getImmersiveMobileCurrentLyricParts(line);
+  const text = parts.map((part) => part.text).join("\n");
+  const previousSignature = immersiveMobileCurrentLyric.dataset.signature || "";
   immersiveMobileCurrentLyric.hidden = !text;
 
   if (!text) {
-    immersiveMobileCurrentLyric.textContent = "";
+    immersiveMobileCurrentLyric.replaceChildren();
     immersiveMobileCurrentLyric.removeAttribute("title");
-    immersiveMobileCurrentLyric.classList.remove("is-changing");
+    immersiveMobileCurrentLyric.dataset.signature = "";
+    immersiveMobileCurrentLyric.classList.remove("is-changing", "is-bilingual");
     return;
   }
 
   immersiveMobileCurrentLyric.title = text;
-  if (previousText === text) {
+  immersiveMobileCurrentLyric.classList.toggle("is-bilingual", parts.length > 1);
+  if (previousSignature === text) {
     return;
   }
 
-  immersiveMobileCurrentLyric.textContent = text;
+  immersiveMobileCurrentLyric.dataset.signature = text;
+  immersiveMobileCurrentLyric.replaceChildren(...parts.map((part) => {
+    const span = document.createElement("span");
+    span.className = `immersive-mobile-current-lyric-${part.role}`;
+    span.textContent = part.text;
+    return span;
+  }));
   immersiveMobileCurrentLyric.classList.remove("is-changing");
   void immersiveMobileCurrentLyric.offsetWidth;
   immersiveMobileCurrentLyric.classList.add("is-changing");
@@ -10047,12 +10093,31 @@ function renderImmersiveMobileCurrentLyric(line) {
   }, 360);
 }
 
-function getImmersiveMobileCurrentLyricText(line) {
+function getImmersiveMobileCurrentLyricParts(line) {
   if (!state.currentTrack || !line) {
-    return "";
+    return [];
   }
 
-  return String(line.originalText || line.text || "").replace(/\s+/g, " ").trim();
+  const originalText = normalizeImmersiveMobileCurrentLyricText(line.originalText || "");
+  const translatedText = normalizeImmersiveMobileCurrentLyricText(line.originalText ? line.text : "");
+
+  if (originalText && translatedText) {
+    return [
+      { role: "original", text: originalText },
+      { role: "translated", text: translatedText },
+    ];
+  }
+
+  const singleText = normalizeImmersiveMobileCurrentLyricText(line.originalText || line.text || "");
+  return singleText ? [{ role: "single", text: singleText }] : [];
+}
+
+function getImmersiveMobileCurrentLyricText(line) {
+  return getImmersiveMobileCurrentLyricParts(line).map((part) => part.text).join(" / ");
+}
+
+function normalizeImmersiveMobileCurrentLyricText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
 }
 
 function renderNowLyricFocusLine(line) {

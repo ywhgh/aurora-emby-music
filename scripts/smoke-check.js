@@ -598,7 +598,9 @@ function checkLyrics() {
   assert(app.includes("data-visualizer-style"), "Player style modal should include visualizer style choices");
   assert(index.includes("id=\"immersiveMobileCurrentLyric\""), "Mobile immersive cover should expose a current lyric slot above the visualizer");
   assert(app.includes("function renderImmersiveMobileCurrentLyric"), "Mobile immersive current lyric should be rendered from the active lyric line");
+  assert(app.includes("function getImmersiveMobileCurrentLyricParts") && app.includes("immersive-mobile-current-lyric-translated"), "Mobile immersive cover current lyric should render original and translated lines when available");
   assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
+  assert(css.includes(".immersive-mobile-current-lyric-translated") && css.includes(".immersive-mobile-current-lyric-single"), "Mobile immersive current lyric should style bilingual and single-line states");
   assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");
   assert(css.includes("body.immersive-player-open .audio-quality-card") && css.includes("background-color: rgba(8, 8, 10, 0.9)"), "Immersive modal cards should use the warm dark glass style");
   assert(css.includes("--quality-tone: #fff4e5"), "Immersive modal quality states should be normalized to warm white instead of colored quality tones");
@@ -617,7 +619,7 @@ function checkLyrics() {
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
   assert(app.includes("autoImmersiveLyrics: false"), "Auto immersive lyrics should default off");
   assert(app.includes("let lyricSettingsLayoutFrame = 0") && app.includes("function refreshLyricLayoutAfterSettingsChange()") && app.includes("cancelAnimationFrame(lyricSettingsLayoutFrame)") && app.includes("lyricSettingsLayoutFrame = requestAnimationFrame(() =>") && app.includes("updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);"), "Lyric font settings should coalesce layout refreshes and force a second lyric layout refresh after CSS recalculation");
-  assert(app.includes("let lyricSettingsSaveTimer = 0") && app.includes("function scheduleLyricSettingsSave()") && app.includes('const shouldCoalesceSave = key === "fontScale"') && app.includes("flushLyricSettingsSave();") && app.includes("persistPlaybackPosition({ force: true });"), "Lyric font-size dragging should coalesce localStorage saves and flush before page unload");
+  assert(app.includes("let lyricSettingsSaveTimer = 0") && app.includes("function scheduleLyricSettingsSave()") && app.includes('const shouldCoalesceSave = key === "fontScale"') && app.includes("function saveLyricSettings()") && app.includes("clearTimeout(lyricSettingsSaveTimer);") && app.includes("flushLyricSettingsSave();") && app.includes("persistPlaybackPosition({ force: true });"), "Lyric font-size dragging should coalesce localStorage saves, cancel stale pending writes, and flush before page unload");
   assert(browserSmoke.includes("open from a real immersive button click") || browserSmoke.includes("open from a real button click"), "Browser smoke should click immersive buttons instead of only calling modal open helpers");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");
