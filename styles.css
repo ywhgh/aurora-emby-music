@@ -7244,6 +7244,7 @@ body.action-sheet-open .content {
   width: min(26rem, 100%);
   max-height: calc(100dvh - 2rem);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 1.1rem;
   border: 1px solid rgba(35, 35, 41, 0.08);
   border-radius: 16px;
@@ -7253,6 +7254,11 @@ body.action-sheet-open .content {
   box-shadow:
     0 26px 76px rgba(35, 35, 41, 0.22),
     inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  scrollbar-width: none;
+}
+
+.modal-card::-webkit-scrollbar {
+  display: none;
 }
 
 .modal-heading {
@@ -7576,6 +7582,11 @@ body.action-sheet-open .content {
   gap: 0.72rem;
   overflow: auto;
   padding-right: 0.15rem;
+  scrollbar-width: none;
+}
+
+.lyric-settings-stack::-webkit-scrollbar {
+  display: none;
 }
 
 .lyric-settings-row,
@@ -7671,7 +7682,13 @@ body.action-sheet-open .content {
   display: grid;
   gap: 1rem;
   overflow: auto;
+  overscroll-behavior: contain;
   padding-right: 0.15rem;
+  scrollbar-width: none;
+}
+
+.player-style-stack::-webkit-scrollbar {
+  display: none;
 }
 
 .player-style-section {
@@ -7767,6 +7784,10 @@ body.action-sheet-open .content {
   font-size: 0.62rem;
   font-weight: 900;
   line-height: 1.2;
+}
+
+.player-style-choice[data-current] {
+  padding-bottom: 1.34rem;
 }
 
 .player-style-choice:active {
@@ -16677,7 +16698,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     min-height: 5.25rem;
     grid-template-columns: 3.3rem minmax(0, 1fr);
     gap: 0.9rem;
-    padding: 0.9rem 3rem 0.9rem 0.9rem;
+    padding: 0.9rem 3rem 1.42rem 0.9rem;
     border-radius: 24px !important;
   }
 
