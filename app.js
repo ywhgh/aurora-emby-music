@@ -118,6 +118,7 @@ const QUALITY_FILTER_ORDER = ["lossless", "lossy"];
 const LYRIC_PROGRESS_EPSILON = 0.04;
 const LYRIC_TIMELINE_SEEK_THRESHOLD_SECONDS = 2.5;
 const LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS = 520;
+const LYRIC_USER_SCROLL_SUPPRESS_MS = 3200;
 const LYRIC_WORD_MIN_LINE_DURATION_SECONDS = 1.8;
 const LYRIC_WORD_MAX_LINE_DURATION_SECONDS = 14;
 const LYRIC_WORD_ESTIMATED_DURATION_SECONDS = 0.48;
@@ -904,6 +905,7 @@ let lyricClockStartedAtMs = 0;
 let lyricClockPlaybackRate = 1;
 let lyricClockIsRunning = false;
 let lastLyricAutoScrollAt = 0;
+let lastManualLyricScrollAt = 0;
 let activeLyricListIndex = -1;
 let lyricLineElements = [];
 let lyricLineWordGroups = [];
@@ -1209,6 +1211,7 @@ function init() {
     }
   });
   content.addEventListener("scroll", handleContentScroll);
+  bindLyricManualScrollGuards();
   clearSearchButton.addEventListener("click", clearSearchAndFilters);
   refreshButton.addEventListener("click", () => {
     closeAccountMenu();
@@ -2290,6 +2293,7 @@ function runLyricProgressScenario() {
   const bilingualSyntheticOriginalProgress = collectBrowserSmokeLyricState();
   const denseWordPerformance = runBrowserSmokeDenseLyricPerformanceScenario();
   const bilingualDenseWordPerformance = runBrowserSmokeBilingualDenseLyricPerformanceScenario();
+  const manualScrollGuard = runBrowserSmokeLyricManualScrollGuardScenario();
   const lyricJitterProtection = runBrowserSmokeLyricJitterProtectionScenario();
   state.lyricOffsetSeconds = 0;
   const endScrollTrack = createBrowserSmokeTrack({
@@ -2346,6 +2350,7 @@ function runLyricProgressScenario() {
     bilingualSyntheticOriginalProgress,
     denseWordPerformance,
     bilingualDenseWordPerformance,
+    manualScrollGuard,
     lyricJitterProtection,
     endScrollLayout,
     topLyricShard,
@@ -2609,6 +2614,31 @@ function collectBrowserSmokeLyricSurfaceState(activeIndex = state.activeLyricInd
       groups: collectBrowserSmokeLyricWordGroups(immersiveLyricWordGroups[activeIndex] || []),
     },
   };
+}
+
+function runBrowserSmokeLyricManualScrollGuardScenario() {
+  const previousManualScrollAt = lastManualLyricScrollAt;
+  const previousAutoScrollAt = lastLyricAutoScrollAt;
+
+  try {
+    lastLyricAutoScrollAt = 0;
+    markManualLyricScrollIntent();
+    const suppressedAfterManualIntent = shouldScrollLyricLine(false) === false;
+    const forcedStillAllowed = shouldScrollLyricLine(true) === true;
+    lastManualLyricScrollAt = getMonotonicNowMs() - LYRIC_USER_SCROLL_SUPPRESS_MS - 1;
+    lastLyricAutoScrollAt = 0;
+    const restoredAfterSuppressWindow = shouldScrollLyricLine(false) === true;
+
+    return {
+      suppressMs: LYRIC_USER_SCROLL_SUPPRESS_MS,
+      suppressedAfterManualIntent,
+      forcedStillAllowed,
+      restoredAfterSuppressWindow,
+    };
+  } finally {
+    lastManualLyricScrollAt = previousManualScrollAt;
+    lastLyricAutoScrollAt = previousAutoScrollAt;
+  }
 }
 
 function runBrowserSmokeDenseLyricPerformanceScenario() {
@@ -9905,6 +9935,22 @@ function getElementOffsetWithinContainer(container, element) {
   return elementRect.top - containerRect.top + container.scrollTop;
 }
 
+function bindLyricManualScrollGuards() {
+  [lyricsList, immersiveLyricList].filter(Boolean).forEach((list) => {
+    ["wheel", "touchstart", "pointerdown"].forEach((eventName) => {
+      list.addEventListener(eventName, markManualLyricScrollIntent, { passive: true });
+    });
+  });
+}
+
+function markManualLyricScrollIntent() {
+  lastManualLyricScrollAt = getMonotonicNowMs();
+}
+
+function isLyricAutoScrollSuppressedByUser(nowMs = getMonotonicNowMs()) {
+  return nowMs - lastManualLyricScrollAt < LYRIC_USER_SCROLL_SUPPRESS_MS;
+}
+
 function shouldScrollLyricLine(isForced = false) {
   if (isForced) {
     lastLyricAutoScrollAt = getMonotonicNowMs();
@@ -9916,6 +9962,10 @@ function shouldScrollLyricLine(isForced = false) {
   }
 
   const nowMs = getMonotonicNowMs();
+  if (isLyricAutoScrollSuppressedByUser(nowMs)) {
+    return false;
+  }
+
   if (nowMs - lastLyricAutoScrollAt < LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS) {
     return false;
   }

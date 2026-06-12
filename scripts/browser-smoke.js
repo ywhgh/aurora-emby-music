@@ -645,6 +645,7 @@ function checkPageState(check, page) {
   const bilingualSyntheticOriginalProgress = lyricProgress.bilingualSyntheticOriginalProgress || {};
   const denseWordPerformance = lyricProgress.denseWordPerformance || {};
   const bilingualDenseWordPerformance = lyricProgress.bilingualDenseWordPerformance || {};
+  const manualScrollGuard = lyricProgress.manualScrollGuard || {};
   const lyricJitterProtection = lyricProgress.lyricJitterProtection || {};
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
@@ -860,6 +861,9 @@ function checkPageState(check, page) {
   assert(bilingualDenseWordPerformance.progressFormattedWriteCount === bilingualDenseWordPerformance.progressWriteCount, `${label} bilingual dense lyric should write normalized CSS progress values: ${JSON.stringify(bilingualDenseWordPerformance)}`);
   assert(bilingualDenseWordPerformance.hotPathFrameCount > bilingualDenseWordPerformance.fullHighlightFrameCount, `${label} bilingual dense lyric should use the direct RAF hot path: ${JSON.stringify(bilingualDenseWordPerformance)}`);
   assert(bilingualDenseWordPerformance.averageUpdateMs < 5, `${label} bilingual dense lyric progress average update is too slow: ${JSON.stringify(bilingualDenseWordPerformance)}`);
+  assert(manualScrollGuard.suppressedAfterManualIntent === true, `${label} manual lyric scroll should temporarily suppress automatic follow-scroll: ${JSON.stringify(manualScrollGuard)}`);
+  assert(manualScrollGuard.forcedStillAllowed === true, `${label} forced lyric scroll should bypass the manual-scroll guard: ${JSON.stringify(manualScrollGuard)}`);
+  assert(manualScrollGuard.restoredAfterSuppressWindow === true, `${label} lyric follow-scroll should resume after the manual-scroll guard window: ${JSON.stringify(manualScrollGuard)}`);
   assert(isNonDecreasing(lyricJitterProtection.immersiveSecondWordProgressSequence), `${label} immersive lyric progress should not regress during playback clock jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert(isNonDecreasing(lyricJitterProtection.boundarySecondWordProgressSequence), `${label} immersive lyric full-word boundary should not flash backward during jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert(isNonDecreasing(lyricJitterProtection.boundaryThirdWordProgressSequence), `${label} immersive lyric next word should not lose progress after a small backward jitter: ${JSON.stringify(lyricJitterProtection)}`);

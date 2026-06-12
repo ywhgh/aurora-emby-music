@@ -409,8 +409,12 @@ function checkLyrics() {
   assert(/if \(nextView === "immersivePlayer" && state\.isLyricSynced\) \{[\s\S]*?updateImmersiveLyricProgress\(getVisibleLyricSyncTimeSeconds\(\), true, true\);/.test(app), "Entering immersive playback should immediately refresh current word lyric progress");
   assert(/if \(nextView === "nowPlaying" && state\.isLyricSynced\) \{[\s\S]*?updateLyricsHighlight\(getVisibleLyricSyncTimeSeconds\(\), true\);/.test(app), "Entering now-playing should immediately refresh current word lyric progress");
   assert(app.includes("LYRIC_AUTO_SCROLL_MIN_INTERVAL_MS"), "Lyric auto-scroll should have a minimum interval to avoid stacked smooth scrolls");
+  assert(app.includes("LYRIC_USER_SCROLL_SUPPRESS_MS"), "Lyric auto-scroll should pause briefly after manual lyric list interaction");
   assert(app.includes("lastLyricAutoScrollAt"), "Lyric auto-scroll should track the previous automatic scroll time");
+  assert(app.includes("lastManualLyricScrollAt"), "Lyric auto-scroll should track manual lyric list interaction");
   assert(app.includes("function shouldScrollLyricLine"), "Lyric auto-scroll should use a shared throttle helper");
+  assert(/function bindLyricManualScrollGuards\(\) \{[\s\S]*?\[lyricsList, immersiveLyricList\][\s\S]*?\["wheel", "touchstart", "pointerdown"\][\s\S]*?markManualLyricScrollIntent/.test(app), "Both lyric lists should detect manual wheel/touch/pointer intent");
+  assert(/function shouldScrollLyricLine\(isForced = false\) \{[\s\S]*?if \(isForced\)[\s\S]*?return true;[\s\S]*?isLyricAutoScrollSuppressedByUser\(nowMs\)[\s\S]*?return false;/.test(app), "Manual lyric scroll should suppress only non-forced follow-scroll");
   assert(app.includes("function scrollElementIntoContainerView"), "Lyric auto-scroll should use a container-scoped scroll helper");
   assert(app.includes("function scrollElementIntoNearestContainerView"), "List locate actions should have a nearest-container scroll helper");
   assert(app.includes("function getNearestScrollableContainer"), "List locate actions should detect their intended scroll container");
@@ -650,6 +654,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("driftTimeUpdateResyncedLyricClock"), "Browser smoke should verify drifted timeupdates still resync the lyric clock");
   assert(browserSmoke.includes("bufferingStoppedLyricFrame"), "Browser smoke should verify buffering stops the lyric RAF loop");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
+  assert(browserSmoke.includes("suppressedAfterManualIntent === true"), "Browser smoke should verify manual lyric scrolling pauses automatic follow-scroll");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
   assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");
   assert(browserSmoke.includes("documentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the document");
