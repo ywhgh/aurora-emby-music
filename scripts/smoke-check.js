@@ -470,7 +470,7 @@ function checkLyrics() {
   assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?updateProgress\(\);[\s\S]*?persistPlaybackPosition\(\);/.test(app), "Playback time updates should persist local resume position independently of server progress reports");
   assert(app.includes('document.addEventListener("visibilitychange", handleDocumentVisibilityChange);'), "Visibility changes should use the shared playback resume handler");
   assert(/function handleDocumentVisibilityChange\(\) \{[\s\S]*?document\.visibilityState === "visible"[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?refreshLyricsForPlaybackResume\(\);[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Visibility changes should resync lyrics on return and force-save/freeze when backgrounded");
-  assert(app.includes('window.addEventListener("pagehide", () => {\n    persistPlaybackPosition({ force: true });\n  });'), "Pagehide should force-save playback position on mobile browsers");
+  assert(/window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?flushLyricSettingsSave\(\);[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?\}\);/.test(app), "Pagehide should force-save lyric settings and playback position on mobile browsers");
   assert(app.includes("serverSearchController: null"), "Server search should keep an abort controller for stale requests");
   assert(app.includes("function abortActiveServerSearch"), "Server search should abort stale in-flight requests");
   assert(/function scheduleServerSearch\(rawQuery\) \{[\s\S]*?clearTimeout\(state\.serverSearchTimer\);\s*abortActiveServerSearch\(\);/.test(app), "Typing a new search query should immediately abort the previous in-flight request");
@@ -617,6 +617,7 @@ function checkLyrics() {
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
   assert(app.includes("autoImmersiveLyrics: false"), "Auto immersive lyrics should default off");
   assert(app.includes("let lyricSettingsLayoutFrame = 0") && app.includes("function refreshLyricLayoutAfterSettingsChange()") && app.includes("cancelAnimationFrame(lyricSettingsLayoutFrame)") && app.includes("lyricSettingsLayoutFrame = requestAnimationFrame(() =>") && app.includes("updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);"), "Lyric font settings should coalesce layout refreshes and force a second lyric layout refresh after CSS recalculation");
+  assert(app.includes("let lyricSettingsSaveTimer = 0") && app.includes("function scheduleLyricSettingsSave()") && app.includes('const shouldCoalesceSave = key === "fontScale"') && app.includes("flushLyricSettingsSave();") && app.includes("persistPlaybackPosition({ force: true });"), "Lyric font-size dragging should coalesce localStorage saves and flush before page unload");
   assert(browserSmoke.includes("open from a real immersive button click") || browserSmoke.includes("open from a real button click"), "Browser smoke should click immersive buttons instead of only calling modal open helpers");
   assert(browserSmoke.includes("createSearchAbortSmokeScript"), "Browser smoke should verify stale search request cancellation");
   assert(app.includes("runSearchAbortScenario"), "Main app browser smoke hooks should expose search cancellation behavior");

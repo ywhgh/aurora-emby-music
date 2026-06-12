@@ -867,6 +867,7 @@ let noticeDismissTimer = null;
 let audioQualityCloseTimer = 0;
 let downloadOptionsCloseTimer = 0;
 let lyricSettingsCloseTimer = 0;
+let lyricSettingsSaveTimer = 0;
 let playerStyleCloseTimer = 0;
 let immersiveCloseAnimationTimer = 0;
 let immersiveFullscreenState = Boolean(document.fullscreenElement);
@@ -1552,9 +1553,11 @@ function init() {
   window.addEventListener("pageshow", () => requestAnimationFrame(ensureVisibleMainPanel));
   document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
   window.addEventListener("pagehide", () => {
+    flushLyricSettingsSave();
     persistPlaybackPosition({ force: true });
   });
   window.addEventListener("beforeunload", () => {
+    flushLyricSettingsSave();
     persistPlaybackPosition({ force: true });
     reportPlaybackStopped();
   });
@@ -9301,6 +9304,27 @@ function saveLyricSettings() {
   localStorage.setItem(LYRIC_SETTINGS_KEY, JSON.stringify(normalizeLyricSettings(state.lyricSettings)));
 }
 
+function scheduleLyricSettingsSave() {
+  if (lyricSettingsSaveTimer) {
+    clearTimeout(lyricSettingsSaveTimer);
+  }
+
+  lyricSettingsSaveTimer = window.setTimeout(() => {
+    lyricSettingsSaveTimer = 0;
+    saveLyricSettings();
+  }, 220);
+}
+
+function flushLyricSettingsSave() {
+  if (!lyricSettingsSaveTimer) {
+    return;
+  }
+
+  clearTimeout(lyricSettingsSaveTimer);
+  lyricSettingsSaveTimer = 0;
+  saveLyricSettings();
+}
+
 function normalizeLyricSettings(settings = {}) {
   const fontScale = Number(settings?.fontScale);
   const fontFamily = LYRIC_FONT_FAMILY_MAP[settings?.fontFamily] ? settings.fontFamily : DEFAULT_LYRIC_SETTINGS.fontFamily;
@@ -9359,7 +9383,12 @@ function updateLyricSetting(key, value) {
     ...state.lyricSettings,
     [key]: value,
   });
-  applyLyricSettings({ save: true });
+
+  const shouldCoalesceSave = key === "fontScale";
+  applyLyricSettings({ save: !shouldCoalesceSave });
+  if (shouldCoalesceSave) {
+    scheduleLyricSettingsSave();
+  }
 
   if (key === "autoImmersiveLyrics" && state.lyricSettings.autoImmersiveLyrics) {
     maybeAutoShowImmersiveLyrics({ force: true });
