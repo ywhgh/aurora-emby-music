@@ -599,6 +599,7 @@ function checkLyrics() {
   assert(index.includes("id=\"immersiveMobileCurrentLyric\""), "Mobile immersive cover should expose a current lyric slot above the visualizer");
   assert(app.includes("function renderImmersiveMobileCurrentLyric"), "Mobile immersive current lyric should be rendered from the active lyric line");
   assert(app.includes("function getImmersiveMobileCurrentLyricParts") && app.includes("immersive-mobile-current-lyric-translated"), "Mobile immersive cover current lyric should render original and translated lines when available");
+  assert(app.includes("let immersiveMobileCurrentLyricAnimationTimer = 0") && app.includes("function clearImmersiveMobileCurrentLyricAnimationTimer()") && app.includes("immersiveMobileCurrentLyricAnimationTimer = window.setTimeout"), "Mobile immersive current lyric animation should clear stale timers before replaying");
   assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
   assert(css.includes(".immersive-mobile-current-lyric-translated") && css.includes(".immersive-mobile-current-lyric-single"), "Mobile immersive current lyric should style bilingual and single-line states");
   assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");

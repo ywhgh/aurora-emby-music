@@ -868,6 +868,7 @@ let audioQualityCloseTimer = 0;
 let downloadOptionsCloseTimer = 0;
 let lyricSettingsCloseTimer = 0;
 let lyricSettingsSaveTimer = 0;
+let immersiveMobileCurrentLyricAnimationTimer = 0;
 let playerStyleCloseTimer = 0;
 let immersiveCloseAnimationTimer = 0;
 let immersiveFullscreenState = Boolean(document.fullscreenElement);
@@ -10069,6 +10070,7 @@ function renderImmersiveMobileCurrentLyric(line) {
     immersiveMobileCurrentLyric.removeAttribute("title");
     immersiveMobileCurrentLyric.dataset.signature = "";
     immersiveMobileCurrentLyric.classList.remove("is-changing", "is-bilingual");
+    clearImmersiveMobileCurrentLyricAnimationTimer();
     return;
   }
 
@@ -10085,12 +10087,23 @@ function renderImmersiveMobileCurrentLyric(line) {
     span.textContent = part.text;
     return span;
   }));
+  clearImmersiveMobileCurrentLyricAnimationTimer();
   immersiveMobileCurrentLyric.classList.remove("is-changing");
   void immersiveMobileCurrentLyric.offsetWidth;
   immersiveMobileCurrentLyric.classList.add("is-changing");
-  window.setTimeout(() => {
+  immersiveMobileCurrentLyricAnimationTimer = window.setTimeout(() => {
+    immersiveMobileCurrentLyricAnimationTimer = 0;
     immersiveMobileCurrentLyric.classList.remove("is-changing");
   }, 360);
+}
+
+function clearImmersiveMobileCurrentLyricAnimationTimer() {
+  if (!immersiveMobileCurrentLyricAnimationTimer) {
+    return;
+  }
+
+  clearTimeout(immersiveMobileCurrentLyricAnimationTimer);
+  immersiveMobileCurrentLyricAnimationTimer = 0;
 }
 
 function getImmersiveMobileCurrentLyricParts(line) {
