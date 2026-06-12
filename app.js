@@ -3259,11 +3259,33 @@ function collectBrowserSmokeMobileImmersiveState() {
   };
   const playerStyleItem = [...trackActionSheetList.querySelectorAll("button")]
     .find((button) => /播放器样式/.test(button.textContent || ""));
+  const originalPlayerStyleForSmoke = normalizeImmersivePlayerStyle(state.immersivePlayerStyle);
   playerStyleItem?.click();
+  const fluidThemeButton = playerStyleModal?.querySelector('[data-player-theme="fluid"]');
+  const ribbonVisualizerButton = playerStyleModal?.querySelector('[data-visualizer-style="ribbon"]');
+  fluidThemeButton?.click();
+  ribbonVisualizerButton?.click();
+  const playerStyleShell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
+  const activePlayerThemeButton = playerStyleModal?.querySelector('[data-player-theme="fluid"]');
+  const activeVisualizerButton = playerStyleModal?.querySelector('[data-visualizer-style="ribbon"]');
+  const activeThemeStyle = activePlayerThemeButton ? window.getComputedStyle(activePlayerThemeButton) : null;
+  const playerStyleCard = playerStyleModal?.querySelector(".player-style-card");
+  const playerStyleCardStyle = playerStyleCard ? window.getComputedStyle(playerStyleCard) : null;
   moreActionSheet.playerStyleOpened = Boolean(playerStyleModal && !playerStyleModal.hidden);
   moreActionSheet.playerThemeChoiceCount = playerStyleModal?.querySelectorAll("[data-player-theme]").length || 0;
   moreActionSheet.visualizerStyleChoiceCount = playerStyleModal?.querySelectorAll("[data-visualizer-style]").length || 0;
+  moreActionSheet.playerStyleAppliedTheme = state.immersivePlayerStyle?.theme || "";
+  moreActionSheet.playerStyleAppliedVisualizer = state.immersivePlayerStyle?.visualizer || "";
+  moreActionSheet.playerStyleShellFluid = playerStyleShell?.classList.contains("is-fluid-bg") || false;
+  moreActionSheet.playerStyleShellVisualizer = playerStyleShell?.getAttribute("data-visualizer-style") || "";
+  moreActionSheet.playerStyleFluidPressed = activePlayerThemeButton?.getAttribute("aria-pressed") || "";
+  moreActionSheet.playerStyleRibbonPressed = activeVisualizerButton?.getAttribute("aria-pressed") || "";
+  moreActionSheet.playerStyleActiveBorderColor = activeThemeStyle?.borderColor || "";
+  moreActionSheet.playerStyleCardMaxHeight = playerStyleCardStyle?.maxHeight || "";
+  moreActionSheet.playerStyleCardOverflow = playerStyleCardStyle?.overflow || "";
   moreActionSheet.playerStyleLayer = getImmersiveModalLayerState(playerStyleModal, ".player-style-card");
+  state.immersivePlayerStyle = originalPlayerStyleForSmoke;
+  applyImmersivePlayerStyle({ save: true });
   closePlayerStyleModal();
   if (playerStyleCloseTimer) {
     window.clearTimeout(playerStyleCloseTimer);

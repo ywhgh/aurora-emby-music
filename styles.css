@@ -5273,7 +5273,9 @@ body.topbar-lyric-active .top-tabs:focus-within .top-lyric-focus {
     background 180ms ease,
     color 180ms ease,
     opacity 240ms ease,
-    box-shadow 220ms ease;
+    box-shadow 220ms ease,
+    filter 180ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .queue-track-row .track-actions .favorite-button:not(:disabled):hover,
@@ -7702,6 +7704,7 @@ body.action-sheet-open .content {
 
 .player-style-choice {
   display: grid;
+  position: relative;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.68rem;
@@ -7731,6 +7734,30 @@ body.action-sheet-open .content {
 .player-style-choice[aria-pressed="true"] {
   border-color: rgba(236, 65, 65, 0.28);
   background: rgba(236, 65, 65, 0.065);
+}
+
+.player-style-choice.active::after,
+.player-style-choice[aria-pressed="true"]::after {
+  display: grid;
+  position: absolute;
+  top: 0.58rem;
+  right: 0.58rem;
+  width: 1.24rem;
+  height: 1.24rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(236, 65, 65, 0.92);
+  color: #fff;
+  content: "✓";
+  font-size: 0.72rem;
+  font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgba(236, 65, 65, 0.2);
+}
+
+.player-style-choice:active {
+  filter: brightness(1.04);
+  transform: scale(0.985);
 }
 
 .player-style-choice > span:last-child {
@@ -8073,6 +8100,33 @@ body.immersive-player-open .audio-quality-video-option.active {
   box-shadow:
     0 18px 46px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(255, 244, 229, 0.12);
+}
+
+body.immersive-player-open .player-style-choice.active,
+body.immersive-player-open .player-style-choice[aria-pressed="true"] {
+  border-color: rgba(255, 246, 235, 0.42);
+  background:
+    linear-gradient(135deg, rgba(255, 246, 235, 0.15), rgba(255, 244, 229, 0.045)),
+    rgba(255, 244, 229, 0.07);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.24),
+    inset 0 0 0 1px rgba(255, 246, 235, 0.08),
+    inset 0 1px 0 rgba(255, 246, 235, 0.16);
+}
+
+body.immersive-player-open .player-style-choice.active::after,
+body.immersive-player-open .player-style-choice[aria-pressed="true"]::after {
+  background: rgba(255, 246, 235, 0.92);
+  color: rgba(18, 15, 12, 0.96);
+  box-shadow: 0 0 18px rgba(255, 246, 235, 0.22);
+}
+
+body.immersive-player-open .player-style-choice.active .player-style-swatch,
+body.immersive-player-open .player-style-choice[aria-pressed="true"] .player-style-swatch {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 235, 0.58),
+    0 0 0 2px rgba(255, 246, 235, 0.12),
+    0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
 body.immersive-player-open .action-sheet-icon,
@@ -10345,6 +10399,22 @@ body.immersive-player-open .audio-quality-test-button:not(:disabled):focus-visib
   opacity: 0.32;
   filter: blur(68px) saturate(0.68) contrast(1.04);
 }
+.immersive-player-shell.is-fluid-bg .immersive-mobile-cover-proxy,
+.immersive-player-shell.is-fluid-bg .immersive-cover-art {
+  box-shadow:
+    0 0 0 1px rgba(255, 246, 235, 0.12),
+    0 24px 68px rgba(255, 198, 161, 0.16),
+    0 0 80px rgba(255, 246, 235, 0.1);
+}
+
+.immersive-player-shell.is-stage-bg .immersive-mobile-cover-proxy,
+.immersive-player-shell.is-stage-bg .immersive-cover-art {
+  box-shadow:
+    0 -18px 80px rgba(255, 246, 235, 0.18),
+    0 26px 68px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 246, 235, 0.14);
+}
+
 
 .immersive-topbar,
 .immersive-stage,
@@ -14645,6 +14715,77 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 }
 
+  body.immersive-player-open #playerStyleModal:not([hidden]) {
+    align-items: end;
+    place-items: end stretch;
+    padding: 0 max(0.42rem, env(safe-area-inset-left)) max(0.42rem, env(safe-area-inset-bottom)) max(0.42rem, env(safe-area-inset-right));
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-card {
+    min-height: min(74dvh, 48rem) !important;
+    max-height: min(84dvh, 52rem) !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    padding: 1.16rem 1rem 1.08rem !important;
+    border-radius: 32px 32px 20px 20px !important;
+  }
+
+  body.immersive-player-open #playerStyleModal .modal-heading {
+    align-items: start;
+    padding: 0.2rem 0.06rem 0.28rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-stack {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.2rem 0.02rem 1.1rem;
+    scrollbar-width: none;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-stack::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section {
+    gap: 0.82rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section + .player-style-section {
+    margin-top: 0.5rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section-heading strong {
+    font-size: 1.14rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-section-heading small {
+    font-size: 0.82rem;
+    line-height: 1.42;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice {
+    min-height: 5.25rem;
+    grid-template-columns: 3.3rem minmax(0, 1fr);
+    gap: 0.9rem;
+    padding: 0.9rem 3rem 0.9rem 0.9rem;
+    border-radius: 24px;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice strong {
+    font-size: 1rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-choice small {
+    font-size: 0.82rem;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-swatch {
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 16px;
+  }
+
 @media (max-width: 380px) {
   .track-duration {
     display: none;
@@ -16131,6 +16272,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-player-shell[data-visualizer-style="pulse"] .immersive-waveform-runner {
     stroke-width: 7;
     stroke-dasharray: 8 34;
+  }
+
+  .immersive-player-shell[data-visualizer-style="wave"] .immersive-waveform-line {
+    stroke-width: 4.4;
+  }
+
+  .immersive-player-shell[data-visualizer-style="wave"] .immersive-waveform-runner {
+    stroke-dasharray: 12 88;
   }
 
   .immersive-control-deck {

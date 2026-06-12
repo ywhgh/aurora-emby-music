@@ -917,6 +917,9 @@ function checkPageState(check, page) {
   assert(moreActionSheet.playerStyleOpened === true, `${label} player style modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerThemeChoiceCount >= 3, `${label} player style modal should render theme choices: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.visualizerStyleChoiceCount >= 3, `${label} player style modal should render visualizer choices: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerStyleAppliedTheme === "fluid" && moreActionSheet.playerStyleShellFluid === true, `${label} player style theme choice should actually switch the immersive theme: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerStyleAppliedVisualizer === "ribbon" && moreActionSheet.playerStyleShellVisualizer === "ribbon", `${label} player style visualizer choice should actually switch waveform style: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerStyleFluidPressed === "true" && moreActionSheet.playerStyleRibbonPressed === "true", `${label} selected player style choices should expose pressed state: ${JSON.stringify(moreActionSheet)}`);
   assert(isAboveImmersivePanel(moreActionSheet.playerStyleLayer), `${label} player style modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.playerStyleLayer), `${label} player style modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("歌词设置"), `${label} immersive more action sheet should include lyric settings: ${JSON.stringify(moreActionSheet)}`);

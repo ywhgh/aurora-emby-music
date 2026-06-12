@@ -596,6 +596,10 @@ function checkLyrics() {
   assert(app.includes("IMMERSIVE_PLAYER_STYLE_KEY"), "Player style settings should be persisted");
   assert(app.includes("label: \"播放器样式\""), "Immersive more actions should include player style settings");
   assert(app.includes("data-visualizer-style"), "Player style modal should include visualizer style choices");
+  assert(browserSmoke.includes('playerStyleAppliedTheme === "fluid"') && browserSmoke.includes('playerStyleAppliedVisualizer === "ribbon"'), "Browser smoke should verify player style choices actually change the immersive UI");
+  assert(/body\.immersive-player-open #playerStyleModal \.player-style-card \{[\s\S]*?min-height:\s*min\(74dvh, 48rem\)/.test(css), "Mobile player style modal should use a large half-screen bottom sheet");
+  assert(/body\.immersive-player-open #playerStyleModal \.player-style-stack::-webkit-scrollbar \{[\s\S]*?display:\s*none;/.test(css), "Player style modal scrollbars should be hidden while content remains scrollable");
+  assert(css.includes('.player-style-choice.active::after') && css.includes('content: "✓"'), "Player style active choices should show a clear selected indicator");
   assert(index.includes("id=\"immersiveMobileCurrentLyric\""), "Mobile immersive cover should expose a current lyric slot above the visualizer");
   assert(app.includes("function renderImmersiveMobileCurrentLyric"), "Mobile immersive current lyric should be rendered from the active lyric line");
   assert(app.includes("function getImmersiveMobileCurrentLyricParts") && app.includes("immersive-mobile-current-lyric-translated"), "Mobile immersive cover current lyric should render original and translated lines when available");
