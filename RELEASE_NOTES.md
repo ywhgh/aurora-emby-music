@@ -1,3 +1,20 @@
+## 0.93.163
+
+### 版本说明
+补强移动端歌词设置保存可靠性：当用户拖动歌词字号后立刻切后台，页面隐藏时也会强制保存待写入的歌词设置，避免移动浏览器暂停定时器导致设置偶发丢失。
+
+### 更新内容
+- `visibilitychange` 进入后台时强制 flush 歌词设置保存队列。
+- 保留播放进度后台强制保存与歌词动画冻结逻辑。
+- 静态烟测更新为同时校验后台保存歌词设置与播放位置。
+
+### 验证
+- `npm run check:js`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `BROWSER_SMOKE_RUN=1 npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.162
 
 ### 版本说明

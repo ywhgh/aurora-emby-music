@@ -1598,6 +1598,7 @@ function handleDocumentVisibilityChange() {
     return;
   }
 
+  flushLyricSettingsSave();
   persistPlaybackPosition({ force: true });
   pauseLyricPlaybackClock();
   stopLyricProgressLoop();
