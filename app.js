@@ -2647,6 +2647,9 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
   let lyricClockAudioSecondsAfterSoftDrift = 0;
   let lyricClockStartedAtBeforeDriftTimeUpdate = 0;
   let lyricClockStartedAtAfterDriftTimeUpdate = 0;
+  let bufferingStoppedLyricFrame = false;
+  let bufferingPausedLyricClock = false;
+  let bufferingBlockedLyricLoop = false;
   let hotPathFrameCount = 0;
   let nowPlayingHotPathFrameCount = 0;
   let fullHighlightFrameCount = 0;
@@ -2717,6 +2720,43 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     lyricClockStartedAtBeforeDriftTimeUpdate = lyricClockStartedAtMs;
     handleAudioTimeUpdate();
     lyricClockStartedAtAfterDriftTimeUpdate = lyricClockStartedAtMs;
+    const existingBufferingState = state.isPlaybackBuffering;
+    const existingAudioPausedDescriptor = Object.getOwnPropertyDescriptor(audioPlayer, "paused");
+    const existingAudioEndedDescriptor = Object.getOwnPropertyDescriptor(audioPlayer, "ended");
+    const existingAudioSrc = audioPlayer.getAttribute("src");
+    try {
+      Object.defineProperty(audioPlayer, "paused", { configurable: true, get: () => false });
+      Object.defineProperty(audioPlayer, "ended", { configurable: true, get: () => false });
+      audioPlayer.setAttribute("src", getSilentAudioDataUrl());
+      lyricProgressFrame = 1;
+      lyricClockIsRunning = true;
+      handleAudioBufferingStart();
+      bufferingStoppedLyricFrame = lyricProgressFrame === 0;
+      bufferingPausedLyricClock = lyricClockIsRunning === false;
+      lyricProgressFrame = 1;
+      state.isPlaybackBuffering = true;
+      bufferingBlockedLyricLoop = shouldRunLyricProgressLoop() === false;
+    } finally {
+      if (existingAudioPausedDescriptor) {
+        Object.defineProperty(audioPlayer, "paused", existingAudioPausedDescriptor);
+      } else {
+        delete audioPlayer.paused;
+      }
+      if (existingAudioEndedDescriptor) {
+        Object.defineProperty(audioPlayer, "ended", existingAudioEndedDescriptor);
+      } else {
+        delete audioPlayer.ended;
+      }
+      if (existingAudioSrc) {
+        audioPlayer.setAttribute("src", existingAudioSrc);
+      } else {
+        audioPlayer.removeAttribute("src");
+      }
+      state.isPlaybackBuffering = existingBufferingState;
+      document.body.classList.toggle("is-playback-buffering", existingBufferingState);
+    }
+    lyricProgressFrame = lyricProgressFrame || 1;
+    lyricClockIsRunning = true;
     updateProgress();
     progressWriteCountAfterRafTimeUpdate = progressWriteCount;
     lyricProgressFrame = 0;
@@ -2769,6 +2809,9 @@ function runBrowserSmokeDenseLyricPerformanceScenario() {
     softDriftAvoidedHardResync: lyricClockAudioSecondsAfterSoftDrift > lyricClockAudioSecondsAtSoftDrift
       && lyricClockAudioSecondsAfterSoftDrift < lyricClockAudioSecondsBeforeSoftDrift,
     driftTimeUpdateResyncedLyricClock: lyricClockStartedAtAfterDriftTimeUpdate !== lyricClockStartedAtBeforeDriftTimeUpdate,
+    bufferingStoppedLyricFrame,
+    bufferingPausedLyricClock,
+    bufferingBlockedLyricLoop,
     hotPathFrameCount,
     nowPlayingHotPathFrameCount,
     fullHighlightFrameCount,
@@ -11329,7 +11372,8 @@ function shouldRunLyricProgressLoop() {
     && state.currentTrack
     && audioPlayer.src
     && !audioPlayer.paused
-    && !audioPlayer.ended;
+    && !audioPlayer.ended
+    && !state.isPlaybackBuffering;
 }
 
 function syncLyricProgressLoop() {
@@ -21092,6 +21136,7 @@ function handleAudioBufferingStart() {
 
   pauseLyricPlaybackClock();
   setPlaybackBuffering(true);
+  stopLyricProgressLoop();
 }
 
 function handleAudioBufferingEnd() {

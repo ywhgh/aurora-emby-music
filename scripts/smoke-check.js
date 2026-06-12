@@ -400,7 +400,8 @@ function checkLyrics() {
   assert(app.includes("function isImmersiveLyricsVisible"), "Immersive word lyric animation should have an explicit visibility gate");
   assert(app.includes("function isNowPlayingLyricsVisible"), "Now-playing lyrics should have an explicit visibility gate");
   assert(app.includes("function areSmoothLyricSurfacesVisible"), "Smooth lyric RAF should have a shared visible-surface gate");
-  assert(/function shouldRunLyricProgressLoop\(\) \{[\s\S]*?&& areSmoothLyricSurfacesVisible\(\)[\s\S]*?&& !audioPlayer\.ended;/.test(app), "Lyric RAF loop should run only while a lyric surface is visible");
+  assert(/function shouldRunLyricProgressLoop\(\) \{[\s\S]*?&& areSmoothLyricSurfacesVisible\(\)[\s\S]*?&& !audioPlayer\.ended[\s\S]*?&& !state\.isPlaybackBuffering;/.test(app), "Lyric RAF loop should run only while a lyric surface is visible and playback is not buffering");
+  assert(/function handleAudioBufferingStart\(\) \{[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?setPlaybackBuffering\(true\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Buffering should pause the lyric clock and stop the lyric RAF loop immediately");
   assert(/function getVisibleLyricSyncTimeSeconds\(fallbackSeconds = getAudioCurrentTimeSeconds\(\)\) \{[\s\S]*?areSmoothLyricSurfacesVisible\(\) && shouldEstimateLyricPlaybackClock\(\)/.test(app), "Visible lyric sync should use the smooth clock for every visible lyric surface");
   assert(/function updateActiveLyricWordProgressFrame\(currentSeconds\) \{[\s\S]*?updateInlineLyricProgress\(activeIndex, currentSeconds, \{[\s\S]*?list: isNowPlayingLyricsVisible\(\),[\s\S]*?focus: isNowPlayingLyricsVisible\(\),[\s\S]*?\}\);[\s\S]*?if \(isImmersiveLyricsVisible\(\)\) \{[\s\S]*?updateActiveImmersiveLyricWordProgressFrame\(currentSeconds\);/.test(app), "RAF lyric hot path should update only visible inline lyrics before immersive-specific work");
   assert(/const shouldUpdateList = options\.list \?\? isNowPlayingLyricsVisible\(\);[\s\S]*?const shouldUpdateFocus = options\.focus \?\? isNowPlayingLyricsVisible\(\);/.test(app), "Inline lyric progress should avoid updating hidden now-playing lyric DOM");
@@ -647,6 +648,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("softDriftAdjustedLyricClock"), "Browser smoke should verify small lyric clock drift is gradually corrected");
   assert(browserSmoke.includes("softDriftAvoidedHardResync"), "Browser smoke should verify small lyric clock drift does not hard-snap");
   assert(browserSmoke.includes("driftTimeUpdateResyncedLyricClock"), "Browser smoke should verify drifted timeupdates still resync the lyric clock");
+  assert(browserSmoke.includes("bufferingStoppedLyricFrame"), "Browser smoke should verify buffering stops the lyric RAF loop");
   assert(browserSmoke.includes("averageUpdateMs < 4"), "Browser smoke should guard dense lyric progress update cost");
   assert(browserSmoke.includes("endScrollLayout"), "Browser smoke should verify immersive end-of-lyrics layout stability");
   assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");

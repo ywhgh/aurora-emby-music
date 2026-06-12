@@ -1,3 +1,20 @@
+## 0.93.171
+
+### 版本说明
+优化逐字歌词在播放缓冲、卡顿、拖动进度时的稳定性。缓冲期间歌词高精度时钟和 RAF 逐字循环会立即暂停，恢复播放后重新同步，避免歌词假动、抖动或空跑。
+
+### 更新内容
+- 缓冲期间禁止逐字歌词 RAF 循环继续运行。
+- `waiting`、`stalled`、`seeking` 等缓冲状态会同时暂停歌词时钟并停止逐字动画帧。
+- 恢复播放后继续使用原有 `canplay/playing` 路径重新同步歌词，保证逐字进度重新跟随真实音乐。
+- 浏览器 smoke 增加缓冲场景验证，覆盖 RAF 停止、歌词时钟暂停、缓冲期间循环阻断。
+
+### 验证
+- `npm run check:js`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `BROWSER_SMOKE_RUN=1 npm run smoke:browser`
+- `git diff --check`
 ## 0.93.170
 
 ### 版本说明

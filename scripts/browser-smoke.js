@@ -840,6 +840,9 @@ function checkPageState(check, page) {
   assert(denseWordPerformance.softDriftAdjustedLyricClock === true, `${label} soft lyric clock drift should be corrected gradually: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.softDriftAvoidedHardResync === true, `${label} soft lyric clock drift should avoid a hard lyric snap: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.driftTimeUpdateResyncedLyricClock === true, `${label} drifted timeupdate should still resync the smooth lyric clock: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.bufferingStoppedLyricFrame === true, `${label} buffering should stop the lyric RAF loop immediately: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.bufferingPausedLyricClock === true, `${label} buffering should pause the smooth lyric clock: ${JSON.stringify(denseWordPerformance)}`);
+  assert(denseWordPerformance.bufferingBlockedLyricLoop === true, `${label} lyric RAF loop should not run while playback is buffering: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.hotPathFrameCount > denseWordPerformance.fullHighlightFrameCount, `${label} dense lyric progress should use the direct RAF hot path for most frames: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingHotPathFrameCount >= 40, `${label} now-playing lyrics should use the smooth RAF hot path: ${JSON.stringify(denseWordPerformance)}`);
   assert(denseWordPerformance.nowPlayingActiveIndex === 0, `${label} now-playing lyric hot path should stay on the active dense line: ${JSON.stringify(denseWordPerformance)}`);
