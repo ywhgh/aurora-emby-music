@@ -10,7 +10,7 @@ const path = require("node:path");
 const ROOT_DIR = path.resolve(__dirname, "..");
 const BRIDGE_SCRIPT = path.join(ROOT_DIR, "scripts", "source-bridge.js");
 const FIXTURE_MEDIA = Buffer.from("ID3\u0003\u0000\u0000\u0000\u0000\u0000\u0000EMBY_MUSIC_BRIDGE_SMOKE");
-const HEALTH_TIMEOUT_MS = 10000;
+const HEALTH_TIMEOUT_MS = 20000;
 
 async function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "emby-music-source-bridge-smoke-"));

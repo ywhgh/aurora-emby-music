@@ -1,3 +1,20 @@
+## 0.93.173
+
+### 版本说明
+优化歌词设置的保存可靠性。用户拖动歌词字体大小后关闭设置弹窗，会立即保存当前设置，避免依赖延迟定时器造成快速关闭、切走页面时设置落盘不够及时。
+
+### 更新内容
+- 关闭歌词设置弹窗时立即 flush 待保存的歌词设置。
+- 保留字体大小拖动过程中的合并保存，避免频繁写入 localStorage。
+- 浏览器 smoke 增加关闭弹窗后立即读取 localStorage 的验证，确保字体比例即时落盘。
+- 音乐桥 smoke 健康等待时间放宽到 20 秒，降低低性能或高负载环境下的偶发误失败。
+
+### 验证
+- `npm run check:js`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `BROWSER_SMOKE_RUN=1 npm run smoke:browser`
+- `git diff --check`
 ## 0.93.172
 
 ### 版本说明

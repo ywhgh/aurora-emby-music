@@ -941,6 +941,9 @@ function checkPageState(check, page) {
   assert(moreActionSheet.lyricSettingsAutoImmersiveChecked === false, `${label} lyric auto immersive setting should default off: ${JSON.stringify(moreActionSheet)}`);
   assert((moreActionSheet.lyricFontSizeAfterSetting || 0) > (moreActionSheet.lyricFontSizeBeforeSetting || 0) + 1, `${label} lyric font-size setting should immediately resize immersive lyrics: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricFontSizeRangeValue === "125", `${label} lyric font-size range should apply the selected value before restore: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsSavePendingBeforeClose === true, `${label} lyric font-size drag should coalesce save before closing: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsSavePendingAfterClose === false, `${label} closing lyric settings should flush pending lyric saves: ${JSON.stringify(moreActionSheet)}`);
+  assert(Number(moreActionSheet.lyricSettingsStoredFontScaleAfterClose) === 1.25, `${label} closing lyric settings should persist the selected font scale immediately: ${JSON.stringify(moreActionSheet)}`);
   if (check.name.startsWith("mobile")) {
     assert((moreActionSheet.playerStyleCardRect?.height || 0) >= (moreActionSheet.viewportHeight || 0) * 0.55, `${label} mobile player style modal should open as a large half-screen sheet: ${JSON.stringify(moreActionSheet)}`);
     assert(moreActionSheet.playerStyleStackOverflowY === "auto" && moreActionSheet.playerStyleStackScrollbarWidth === "none", `${label} mobile player style modal should keep content scrollable with hidden scrollbars: ${JSON.stringify(moreActionSheet)}`);

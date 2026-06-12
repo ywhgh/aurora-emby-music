@@ -3429,6 +3429,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
   }
   const lyricFontSizeAfterSetting = Number.parseFloat(window.getComputedStyle(activeImmersiveLyricLine || immersiveLyricList || document.body).fontSize) || 0;
+  const lyricSettingsSavePendingBeforeClose = Boolean(lyricSettingsSaveTimer);
   moreActionSheet.lyricSettingsOpened = Boolean(lyricSettingsModal && !lyricSettingsModal.hidden);
   moreActionSheet.lyricSettingsAutoScrollChecked = Boolean(lyricAutoScrollToggle?.checked);
   moreActionSheet.lyricSettingsAutoImmersiveChecked = Boolean(lyricAutoImmersiveToggle?.checked);
@@ -3436,11 +3437,19 @@ function collectBrowserSmokeMobileImmersiveState() {
   moreActionSheet.lyricFontSizeBeforeSetting = lyricFontSizeBeforeSetting;
   moreActionSheet.lyricFontSizeAfterSetting = lyricFontSizeAfterSetting;
   moreActionSheet.lyricFontSizeRangeValue = lyricFontSizeRange?.value || "";
+  closeLyricSettingsModal();
+  moreActionSheet.lyricSettingsSavePendingBeforeClose = lyricSettingsSavePendingBeforeClose;
+  moreActionSheet.lyricSettingsSavePendingAfterClose = Boolean(lyricSettingsSaveTimer);
+  try {
+    moreActionSheet.lyricSettingsStoredFontScaleAfterClose = JSON.parse(localStorage.getItem(LYRIC_SETTINGS_KEY) || "{}")?.fontScale;
+  } catch {
+    moreActionSheet.lyricSettingsStoredFontScaleAfterClose = null;
+  }
   if (lyricFontSizeRange) {
     lyricFontSizeRange.value = originalLyricFontSizeRangeValue;
     lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
   }
-  closeLyricSettingsModal();
+  flushLyricSettingsSave();
   if (lyricSettingsCloseTimer) {
     window.clearTimeout(lyricSettingsCloseTimer);
     lyricSettingsCloseTimer = 0;
@@ -9623,6 +9632,7 @@ function closeLyricSettingsModal() {
     return;
   }
 
+  flushLyricSettingsSave();
   lyricSettingsModal.classList.remove("is-open");
   lyricSettingsModal.classList.add("is-closing");
   lyricSettingsCloseTimer = window.setTimeout(() => {
