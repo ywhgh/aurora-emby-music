@@ -3244,10 +3244,25 @@ function collectBrowserSmokeMobileImmersiveState() {
   const lyricSettingsItem = [...trackActionSheetList.querySelectorAll("button")]
     .find((button) => /歌词设置/.test(button.textContent || ""));
   lyricSettingsItem?.click();
+  const activeImmersiveLyricLine = immersiveLyricList?.querySelector(".lyric-line.active, p.active");
+  const lyricFontSizeBeforeSetting = Number.parseFloat(window.getComputedStyle(activeImmersiveLyricLine || immersiveLyricList || document.body).fontSize) || 0;
+  const originalLyricFontSizeRangeValue = lyricFontSizeRange?.value || "100";
+  if (lyricFontSizeRange) {
+    lyricFontSizeRange.value = "125";
+    lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  const lyricFontSizeAfterSetting = Number.parseFloat(window.getComputedStyle(activeImmersiveLyricLine || immersiveLyricList || document.body).fontSize) || 0;
   moreActionSheet.lyricSettingsOpened = Boolean(lyricSettingsModal && !lyricSettingsModal.hidden);
   moreActionSheet.lyricSettingsAutoScrollChecked = Boolean(lyricAutoScrollToggle?.checked);
   moreActionSheet.lyricSettingsAutoImmersiveChecked = Boolean(lyricAutoImmersiveToggle?.checked);
   moreActionSheet.lyricSettingsLayer = getImmersiveModalLayerState(lyricSettingsModal, ".lyric-settings-card");
+  moreActionSheet.lyricFontSizeBeforeSetting = lyricFontSizeBeforeSetting;
+  moreActionSheet.lyricFontSizeAfterSetting = lyricFontSizeAfterSetting;
+  moreActionSheet.lyricFontSizeRangeValue = lyricFontSizeRange?.value || "";
+  if (lyricFontSizeRange) {
+    lyricFontSizeRange.value = originalLyricFontSizeRangeValue;
+    lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
+  }
   closeLyricSettingsModal();
   if (lyricSettingsCloseTimer) {
     window.clearTimeout(lyricSettingsCloseTimer);
@@ -9351,6 +9366,17 @@ function updateLyricSetting(key, value) {
   if (key === "autoScroll" && state.lyricSettings.autoScroll) {
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   }
+  if ((key === "fontScale" || key === "fontFamily") && state.lyricSettings.autoScroll) {
+    refreshLyricLayoutAfterSettingsChange();
+  }
+}
+
+function refreshLyricLayoutAfterSettingsChange() {
+  const syncTime = getVisibleLyricSyncTimeSeconds();
+  updateLyricsHighlight(syncTime, true);
+  requestAnimationFrame(() => {
+    updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
+  });
 }
 
 function openLyricSettingsModal() {
