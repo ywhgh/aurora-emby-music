@@ -3282,6 +3282,10 @@ function collectBrowserSmokeMobileImmersiveState() {
   moreActionSheet.playerStyleShellVisualizer = playerStyleShell?.getAttribute("data-visualizer-style") || "";
   moreActionSheet.playerStyleFluidPressed = activePlayerThemeButton?.getAttribute("aria-pressed") || "";
   moreActionSheet.playerStyleRibbonPressed = activeVisualizerButton?.getAttribute("aria-pressed") || "";
+  moreActionSheet.playerStyleFluidCurrent = activePlayerThemeButton?.hasAttribute("data-current") || false;
+  moreActionSheet.playerStyleRibbonCurrent = activeVisualizerButton?.hasAttribute("data-current") || false;
+  moreActionSheet.playerStyleFluidAriaLabel = activePlayerThemeButton?.getAttribute("aria-label") || "";
+  moreActionSheet.playerStyleRibbonAriaLabel = activeVisualizerButton?.getAttribute("aria-label") || "";
   moreActionSheet.playerStyleActiveBorderColor = activeThemeStyle?.borderColor || "";
   moreActionSheet.playerStyleCardMaxHeight = playerStyleCardStyle?.maxHeight || "";
   moreActionSheet.playerStyleCardMinHeight = playerStyleCardStyle?.minHeight || "";
@@ -9590,15 +9594,27 @@ function renderPlayerStyleControls() {
 
   playerThemeButtons.forEach((button) => {
     const active = button.dataset.playerTheme === normalized.theme;
+    const label = getPlayerStyleChoiceLabel(button);
     button.classList.toggle("active", active);
+    button.toggleAttribute("data-current", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.setAttribute("aria-label", `${active ? "当前播放器主题" : "切换播放器主题"}：${label}`);
+    button.setAttribute("title", `${active ? "当前" : "切换到"}：${label}`);
   });
 
   visualizerStyleButtons.forEach((button) => {
     const active = button.dataset.visualizerStyle === normalized.visualizer;
+    const label = getPlayerStyleChoiceLabel(button);
     button.classList.toggle("active", active);
+    button.toggleAttribute("data-current", active);
     button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.setAttribute("aria-label", `${active ? "当前可视化音乐样式" : "切换可视化音乐样式"}：${label}`);
+    button.setAttribute("title", `${active ? "当前" : "切换到"}：${label}`);
   });
+}
+
+function getPlayerStyleChoiceLabel(button) {
+  return button?.querySelector("strong")?.textContent?.trim() || "样式";
 }
 
 function updateImmersivePlayerStyle(key, value) {

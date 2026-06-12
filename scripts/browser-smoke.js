@@ -920,6 +920,8 @@ function checkPageState(check, page) {
   assert(moreActionSheet.playerStyleAppliedTheme === "fluid" && moreActionSheet.playerStyleShellFluid === true, `${label} player style theme choice should actually switch the immersive theme: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerStyleAppliedVisualizer === "ribbon" && moreActionSheet.playerStyleShellVisualizer === "ribbon", `${label} player style visualizer choice should actually switch waveform style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.playerStyleFluidPressed === "true" && moreActionSheet.playerStyleRibbonPressed === "true", `${label} selected player style choices should expose pressed state: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.playerStyleFluidCurrent === true && moreActionSheet.playerStyleRibbonCurrent === true, `${label} selected player style choices should expose current markers: ${JSON.stringify(moreActionSheet)}`);
+  assert(/当前播放器主题：流体光雾/.test(moreActionSheet.playerStyleFluidAriaLabel || "") && /当前可视化音乐样式：柔光丝带/.test(moreActionSheet.playerStyleRibbonAriaLabel || ""), `${label} selected player style choices should expose clear aria labels: ${JSON.stringify(moreActionSheet)}`);
   assert(isAboveImmersivePanel(moreActionSheet.playerStyleLayer), `${label} player style modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.playerStyleLayer), `${label} player style modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("歌词设置"), `${label} immersive more action sheet should include lyric settings: ${JSON.stringify(moreActionSheet)}`);

@@ -7755,6 +7755,20 @@ body.action-sheet-open .content {
   box-shadow: 0 8px 18px rgba(236, 65, 65, 0.2);
 }
 
+.player-style-choice[data-current]::before {
+  position: absolute;
+  right: 0.58rem;
+  bottom: 0.52rem;
+  padding: 0.12rem 0.38rem;
+  border-radius: 999px;
+  background: rgba(236, 65, 65, 0.1);
+  color: rgba(185, 28, 28, 0.94);
+  content: "当前";
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .player-style-choice:active {
   filter: brightness(1.04);
   transform: scale(0.985);
@@ -8119,6 +8133,12 @@ body.immersive-player-open .player-style-choice[aria-pressed="true"]::after {
   background: rgba(255, 246, 235, 0.92);
   color: rgba(18, 15, 12, 0.96);
   box-shadow: 0 0 18px rgba(255, 246, 235, 0.22);
+}
+
+body.immersive-player-open .player-style-choice[data-current]::before {
+  background: rgba(255, 246, 235, 0.13);
+  color: rgba(255, 246, 235, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 235, 0.08);
 }
 
 body.immersive-player-open .player-style-choice.active .player-style-swatch,
