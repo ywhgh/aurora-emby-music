@@ -1,3 +1,20 @@
+## 0.93.170
+
+### 版本说明
+增强音乐桥歌曲在手机浏览器返回、后台恢复、BFCache 恢复后的播放稳定性，避免页面重新进入后继续拿旧的音源地址导致播放失败。
+
+### 更新内容
+- 新增统一 `pageshow` 恢复处理，页面从 BFCache 返回时会重新同步歌词播放钟与当前界面状态。
+- BFCache 恢复后会把音乐桥队列和当前歌曲标记为需要重新解析，下一次继续播放会走当前音乐桥地址刷新音源。
+- 恢复页面时清空旧预加载，避免 stale preload 绕过音乐桥重新解析。
+- 浏览器 smoke 增加音乐桥 BFCache 恢复场景，验证会使用当前桥地址并触发 fresh resolve。
+
+### 验证
+- `npm run check:js`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `BROWSER_SMOKE_RUN=1 npm run smoke:browser`
+- `git diff --check`
 ## 0.93.169
 
 ### 版本说明

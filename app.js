@@ -1551,7 +1551,7 @@ function init() {
   window.addEventListener("online", handleBrowserOnline);
   window.addEventListener("offline", handleBrowserOffline);
   window.addEventListener("emby-music-hls-ready", handleHlsReady);
-  window.addEventListener("pageshow", () => requestAnimationFrame(ensureVisibleMainPanel));
+  window.addEventListener("pageshow", handlePageShow);
   document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
   window.addEventListener("pagehide", () => {
     flushLyricSettingsSave();
@@ -1603,6 +1603,34 @@ function handleDocumentVisibilityChange() {
   persistPlaybackPosition({ force: true });
   pauseLyricPlaybackClock();
   stopLyricProgressLoop();
+}
+
+function handlePageShow(event = {}) {
+  requestAnimationFrame(ensureVisibleMainPanel);
+
+  if (document.visibilityState === "visible") {
+    syncLyricPlaybackClock();
+    refreshLyricsForPlaybackResume();
+  }
+
+  refreshExternalSourceAfterPageRestore(Boolean(event?.persisted));
+}
+
+function refreshExternalSourceAfterPageRestore(wasRestoredFromPageCache = false) {
+  if (!wasRestoredFromPageCache || !isExternalSourceSession(state.session)) {
+    return;
+  }
+
+  syncExternalSourceSessionApiUrl(state.session);
+  clearPreload();
+
+  if (Array.isArray(state.queue)) {
+    state.queue.forEach(markRestoredQueueTrackForFreshResolve);
+  }
+
+  if (state.currentTrack) {
+    markRestoredQueueTrackForFreshResolve(state.currentTrack);
+  }
 }
 
 function createBrowserSmokeTrack(options = {}) {
@@ -1720,6 +1748,9 @@ async function runExternalSourceReentryScenario() {
   let playbackTrack = null;
   let persistedQueueState = null;
   let restoredMarkerBeforePlay = false;
+  let restoredMarkerClearedAfterPlay = false;
+  let pageShowMarkedFreshResolve = false;
+  let pageShowUsedCurrentBridgeUrl = false;
   let result = null;
 
   externalSourceApi.fetchMediaSource = async (apiUrl, requestedTrack, options = {}) => {
@@ -1783,11 +1814,16 @@ async function runExternalSourceReentryScenario() {
       persistedExternal.bridgeStreamUrl,
       persistedExternal.directUrl,
     ].filter(Boolean);
+    restoredMarkerClearedAfterPlay = !playbackTrack?._restoredQueueNeedsFreshResolve;
+    clearRestoredQueueFreshResolveMarker(playbackTrack);
+    handlePageShow({ persisted: true });
+    pageShowMarkedFreshResolve = Boolean(playbackTrack?._restoredQueueNeedsFreshResolve);
+    pageShowUsedCurrentBridgeUrl = getSessionExternalSourceApiUrl(state.session) === currentBridgeUrl;
 
     result = {
       loadedFromLegacyQueue: loadedQueueState.queue.length === 1 && playbackTrack?.Id === track.Id,
       restoredMarkerBeforePlay,
-      restoredMarkerClearedAfterPlay: !playbackTrack?._restoredQueueNeedsFreshResolve,
+      restoredMarkerClearedAfterPlay,
       fetchCallCount: fetchCalls.length,
       fetchCall: fetchCalls[0] || null,
       usedCurrentBridgeUrl: fetchCalls[0]?.apiUrl === currentBridgeUrl,
@@ -1813,6 +1849,8 @@ async function runExternalSourceReentryScenario() {
           && persistedExternal.restore?.pluginUrl
           && persistedExternal.restore?.raw
       ),
+      pageShowMarkedFreshResolve,
+      pageShowUsedCurrentBridgeUrl,
       persistedPluginUrl: persistedExternal.pluginUrl || "",
       savedPositionSeconds: persistedQueueState.positionSeconds,
       lastPlaybackInfoError: state.lastPlaybackInfoError,

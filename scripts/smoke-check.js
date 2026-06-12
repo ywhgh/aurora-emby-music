@@ -470,6 +470,9 @@ function checkLyrics() {
   assert(/function handleAudioTimeUpdate\(\) \{[\s\S]*?updateProgress\(\);[\s\S]*?persistPlaybackPosition\(\);/.test(app), "Playback time updates should persist local resume position independently of server progress reports");
   assert(app.includes('document.addEventListener("visibilitychange", handleDocumentVisibilityChange);'), "Visibility changes should use the shared playback resume handler");
   assert(/function handleDocumentVisibilityChange\(\) \{[\s\S]*?document\.visibilityState === "visible"[\s\S]*?syncLyricPlaybackClock\(\);[\s\S]*?refreshLyricsForPlaybackResume\(\);[\s\S]*?flushLyricSettingsSave\(\);[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?pauseLyricPlaybackClock\(\);[\s\S]*?stopLyricProgressLoop\(\);/.test(app), "Visibility changes should resync lyrics on return and force-save lyric settings/playback position when backgrounded");
+  assert(/window\.addEventListener\("pageshow", handlePageShow\);/.test(app), "Pageshow should use a shared resume handler for BFCache restores");
+  assert(/function handlePageShow\(event = \{\}\) \{[\s\S]*?refreshLyricsForPlaybackResume\(\);[\s\S]*?refreshExternalSourceAfterPageRestore\(Boolean\(event\?\.persisted\)\);/.test(app), "Pageshow should resync lyrics and refresh external source state after page restore");
+  assert(/function refreshExternalSourceAfterPageRestore\(wasRestoredFromPageCache = false\) \{[\s\S]*?syncExternalSourceSessionApiUrl\(state\.session\);[\s\S]*?clearPreload\(\);[\s\S]*?state\.queue\.forEach\(markRestoredQueueTrackForFreshResolve\);[\s\S]*?markRestoredQueueTrackForFreshResolve\(state\.currentTrack\);/.test(app), "BFCache restores should force restored external tracks to resolve through the current bridge URL");
   assert(/window\.addEventListener\("pagehide", \(\) => \{[\s\S]*?flushLyricSettingsSave\(\);[\s\S]*?persistPlaybackPosition\(\{ force: true \}\);[\s\S]*?\}\);/.test(app), "Pagehide should force-save lyric settings and playback position on mobile browsers");
   assert(app.includes("serverSearchController: null"), "Server search should keep an abort controller for stale requests");
   assert(app.includes("function abortActiveServerSearch"), "Server search should abort stale in-flight requests");
@@ -638,6 +641,7 @@ function checkLyrics() {
   assert(browserSmoke.includes("usedCurrentBridgeUrl === true"), "Browser smoke should verify restored external tracks use the current bridge URL");
   assert(browserSmoke.includes("forceResolve === true"), "Browser smoke should verify restored external tracks force a fresh media resolve");
   assert(browserSmoke.includes("persistedDroppedPlayableUrls === true"), "Browser smoke should verify persisted plugin queues drop stale playable URLs");
+  assert(browserSmoke.includes("pageShowMarkedFreshResolve === true"), "Browser smoke should verify BFCache restore marks external tracks for fresh resolve");
   assert(browserSmoke.includes("progressWriteCount > 60"), "Browser smoke should verify visible lyric clip progress writes");
   assert(browserSmoke.includes("stableTimeUpdateKeptLyricClock"), "Browser smoke should verify stable timeupdates do not reset the lyric RAF clock");
   assert(browserSmoke.includes("softDriftAdjustedLyricClock"), "Browser smoke should verify small lyric clock drift is gradually corrected");

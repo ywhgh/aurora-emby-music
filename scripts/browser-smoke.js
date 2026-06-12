@@ -745,6 +745,8 @@ function checkPageState(check, page) {
   assert(externalSourceReentry.persistedDroppedStaleUrls === true, `${label} persisted queue should drop stale external playback URLs: ${JSON.stringify(externalSourceReentry)}`);
   assert(externalSourceReentry.persistedDroppedPlayableUrls === true, `${label} persisted plugin queue should not keep playable URLs that expire after app restart: ${JSON.stringify(externalSourceReentry)}`);
   assert(externalSourceReentry.persistedRestoreHasPluginIdentity === true, `${label} persisted plugin queue should keep restore identity for future re-entry: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.pageShowMarkedFreshResolve === true, `${label} BFCache page restore should mark external tracks for a fresh bridge resolve: ${JSON.stringify(externalSourceReentry)}`);
+  assert(externalSourceReentry.pageShowUsedCurrentBridgeUrl === true, `${label} BFCache page restore should keep the current bridge URL: ${JSON.stringify(externalSourceReentry)}`);
   assert(lyricProgress.hasHook, `${label} missing browser-smoke lyric progress hook`);
   assert(!lyricProgress.error, `${label} lyric progress smoke failed: ${lyricProgress.error || "-"}`);
   assert(lyricProgress.activeView === "immersivePlayer", `${label} lyric progress smoke did not open immersive player`);
