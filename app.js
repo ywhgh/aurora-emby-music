@@ -236,6 +236,7 @@ const DEFAULT_LYRIC_OFFSET_SECONDS = 0.18;
 const LYRIC_OFFSET_STEP_SECONDS = 0.1;
 const MIN_LYRIC_OFFSET_SECONDS = -2;
 const MAX_LYRIC_OFFSET_SECONDS = 2;
+const PLAYLIST_TRACK_PAGE_SIZE = 500;
 const DEFAULT_LYRIC_SETTINGS = Object.freeze({
   fontScale: 1,
   fontFamily: "system",
@@ -575,6 +576,7 @@ const playlistDetailCover = document.querySelector("#playlistDetailCover");
 const playlistDetailTitle = document.querySelector("#playlistDetailTitle");
 const playlistDetailMeta = document.querySelector("#playlistDetailMeta");
 const playlistTrackList = document.querySelector("#playlistTrackList");
+const loadMorePlaylistTracksButton = document.querySelector("#loadMorePlaylistTracksButton");
 const playPlaylistButton = document.querySelector("#playPlaylistButton");
 const shufflePlaylistButton = document.querySelector("#shufflePlaylistButton");
 const nextPlaylistButton = document.querySelector("#nextPlaylistButton");
@@ -990,6 +992,7 @@ const state = {
   artistAlbums: [],
   selectedPlaylist: null,
   playlistTracks: [],
+  totalPlaylistTracks: 0,
   detailReturnViews: {
     albumDetail: "albums",
     artistDetail: "artists",
@@ -1015,6 +1018,7 @@ const state = {
   isLoadingMoreAlbums: false,
   isLoadingMoreArtists: false,
   isLoadingMorePlaylists: false,
+  isLoadingMorePlaylistTracks: false,
   isLoadingMoreFavorites: false,
   isConnecting: false,
   isTestingServer: false,
@@ -1242,6 +1246,7 @@ function init() {
   loadMoreArtistsButton.addEventListener("click", loadMoreArtists);
   loadMoreFavoritesButton.addEventListener("click", loadMoreFavorites);
   loadMorePlaylistsButton.addEventListener("click", loadMorePlaylists);
+  loadMorePlaylistTracksButton?.addEventListener("click", () => loadMoreSelectedPlaylistTracks());
   clearFilterButton.addEventListener("click", clearSearchAndFilters);
   playLibraryButton.addEventListener("click", () => playTrackCollection(state.filteredTracks, "音乐库"));
   queueLibraryButton.addEventListener("click", () => queueTrackCollection(state.filteredTracks, "音乐库"));
@@ -4279,6 +4284,8 @@ async function loadMusicLibrary(session) {
   state.artistAlbums = [];
   state.selectedPlaylist = null;
   state.playlistTracks = [];
+  state.totalPlaylistTracks = 0;
+  state.isLoadingMorePlaylistTracks = false;
   state.detailReturnViews = {
     albumDetail: "albums",
     artistDetail: "artists",
@@ -9157,6 +9164,11 @@ async function fetchLyricsText(track) {
     return externalSourceApi.fetchLyric(apiUrl, track);
   }
 
+  const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge(track);
+  if (sidecarText.trim()) {
+    return sidecarText;
+  }
+
   const embyText = await fetchEmbyLyricsText(track);
   if (embyText.trim()) {
     return embyText;
@@ -9165,14 +9177,35 @@ async function fetchLyricsText(track) {
   return fetchMatchedLyricsFromSourceBridge(track);
 }
 
+async function fetchEmbySidecarLyricsFromSourceBridge(track) {
+  const apiUrl = getLyricsSourceBridgeApiUrl();
+  if (!apiUrl || !track?.Path) {
+    return "";
+  }
+
+  try {
+    const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/lyric-by-path?${toQueryString({
+      path: track.Path,
+    })}`, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      return "";
+    }
+
+    return extractLyricsTextFromResponse(await response.json());
+  } catch {
+    return "";
+  }
+}
+
 async function fetchEmbyLyricsText(track) {
   const encodedId = encodeURIComponent(track.Id);
   const candidates = [
     `/Items/${encodedId}/Lyrics`,
     `/Items/${encodedId}/Lyrics?MediaSourceId=${encodeURIComponent(getTrackDefaultMediaSourceId(track))}`,
-    `/Audio/${encodedId}/Lyrics`,
   ];
-  let lastError = null;
 
   for (const path of candidates) {
     try {
@@ -9185,14 +9218,8 @@ async function fetchEmbyLyricsText(track) {
         return text;
       }
     } catch (error) {
-      if (!readableError(error).includes("404")) {
-        lastError = error;
-      }
+      console.debug?.("Emby lyrics endpoint failed; trying next lyrics source.", path, readableError(error));
     }
-  }
-
-  if (lastError) {
-    throw lastError;
   }
 
   return "";
@@ -9214,6 +9241,7 @@ async function fetchMatchedLyricsFromSourceBridge(track) {
     result = await externalSourceApi.fetchTracks(apiUrl, {
       query,
       limit: 8,
+      localOnly: true,
       timeoutMs: 12000,
     });
   } catch {
@@ -9233,10 +9261,24 @@ async function fetchMatchedLyricsFromSourceBridge(track) {
 }
 
 function getLyricsSourceBridgeApiUrl() {
+  if (!isExternalSourceSession()) {
+    return getSameHostSourceBridgeApiUrl()
+      || normalizeExternalSourceApiUrl(DEFAULT_EXTERNAL_SOURCE_API_URL || "");
+  }
+
   return getSessionExternalSourceApiUrl(state.session)
     || normalizeExternalSourceApiUrl(state.externalSourceApiUrl || "")
     || loadExternalSourceApiUrl()
     || normalizeExternalSourceApiUrl(DEFAULT_EXTERNAL_SOURCE_API_URL || "");
+}
+
+function getSameHostSourceBridgeApiUrl() {
+  if (location.protocol !== "http:" && location.protocol !== "https:") {
+    return "";
+  }
+
+  const port = location.port && location.port !== "5173" ? location.port : "5174";
+  return normalizeExternalSourceApiUrl(`${location.protocol}//${location.hostname}:${port}`);
 }
 
 function buildLyricMatchQuery(track) {
@@ -9252,7 +9294,7 @@ function findBestMatchedLyricTrack(sourceTrack, candidates) {
 
   return (candidates || []).find((candidate) => {
     const candidateTitle = normalizeLyricMatchText(candidate?.Name);
-    if (!sourceTitle || !candidateTitle || sourceTitle !== candidateTitle) {
+    if (!isLyricTitleMatch(sourceTitle, candidateTitle)) {
       return false;
     }
 
@@ -9261,6 +9303,19 @@ function findBestMatchedLyricTrack(sourceTrack, candidates) {
       || !candidateArtists.length
       || sourceArtists.some((artist) => candidateArtists.includes(artist));
   }) || null;
+}
+
+function isLyricTitleMatch(sourceTitle, candidateTitle) {
+  if (!sourceTitle || !candidateTitle) {
+    return false;
+  }
+
+  if (sourceTitle === candidateTitle) {
+    return true;
+  }
+
+  return candidateTitle.endsWith(sourceTitle)
+    || sourceTitle.endsWith(candidateTitle);
 }
 
 function getLyricMatchArtistTokens(track) {
@@ -9273,6 +9328,8 @@ function getLyricMatchArtistTokens(track) {
 function normalizeLyricMatchText(value) {
   return String(value || "")
     .toLowerCase()
+    .replace(/^\s*\[[^\]]+\]\s*/, "")
+    .replace(/^\s*\d+\s*[.-]\s*/, "")
     .replace(/\s+/g, "")
     .replace(/[《》<>()[\]【】{}"'“”‘’·.,，。:：;；!！?？_-]/g, "")
     .trim();
@@ -9304,6 +9361,10 @@ function extractLyricsTextFromResponse(response) {
   }
 
   const direct = [
+    response.lrc,
+    response.lyric,
+    response.lyrics,
+    response.rawLrc,
     response.Lyrics,
     response.Lyric,
     response.Text,
@@ -14773,6 +14834,8 @@ function handleContentScroll() {
     loadMoreArtists();
   } else if (activePanel === "playlists") {
     loadMorePlaylists();
+  } else if (activePanel === "playlistDetail") {
+    loadMoreSelectedPlaylistTracks();
   } else if (activePanel === "favorites") {
     loadMoreFavorites();
   }
@@ -15748,21 +15811,20 @@ async function openPlaylistDetail(playlist) {
   captureDetailReturnView("playlistDetail", "playlists");
   state.selectedPlaylist = playlist;
   state.playlistTracks = [];
+  state.totalPlaylistTracks = getPlaylistKnownTrackCount(playlist);
+  state.isLoadingMorePlaylistTracks = false;
   renderPlaylistDetail(playlist, [], true);
   switchView("playlistDetail", { resetScroll: true });
   setLibraryStatus("正在加载歌单歌曲...");
 
   try {
-    state.playlistTracks = await fetchPlaylistTracks(playlist);
+    await loadPlaylistTrackPage(playlist, { reset: true });
   } catch (error) {
     state.playlistTracks = [];
+    state.totalPlaylistTracks = 0;
     setLibraryStatus(`歌单歌曲加载失败：${readableError(error)}`);
+    renderPlaylistDetail(playlist, [], false);
   }
-
-  state.tracks = mergeUniqueItems(state.tracks, state.playlistTracks);
-  state.favoriteTracks = mergeUniqueItems(state.favoriteTracks, state.playlistTracks.filter(isFavorite));
-  applyFilters();
-  renderLibrary();
 
   if (state.playlistTracks.length) {
     setLibraryStatus("");
@@ -15770,17 +15832,7 @@ async function openPlaylistDetail(playlist) {
 }
 
 async function fetchPlaylistTracks(playlist) {
-  try {
-    return await fetchPlaylistTracksFromPlaylistEndpoint(playlist);
-  } catch (error) {
-    const fallbackTracks = await fetchPlaylistTracksFromParent(playlist);
-
-    if (fallbackTracks.length) {
-      return fallbackTracks;
-    }
-
-    throw error;
-  }
+  return fetchAllPlaylistTracks(playlist);
 }
 
 async function getPlayablePlaylistTracks(playlist) {
@@ -15788,13 +15840,22 @@ async function getPlayablePlaylistTracks(playlist) {
     return [];
   }
 
-  if (state.selectedPlaylist?.Id === playlist.Id && state.playlistTracks.length) {
+  if (
+    state.selectedPlaylist?.Id === playlist.Id
+    && state.playlistTracks.length
+    && (!state.totalPlaylistTracks || state.playlistTracks.length >= state.totalPlaylistTracks)
+  ) {
     return state.playlistTracks;
   }
 
   const tracks = await fetchPlaylistTracks(playlist);
   state.tracks = mergeUniqueItems(state.tracks, tracks);
   state.favoriteTracks = mergeUniqueItems(state.favoriteTracks, tracks.filter(isFavorite));
+  if (state.selectedPlaylist?.Id === playlist.Id) {
+    state.playlistTracks = tracks;
+    state.totalPlaylistTracks = tracks.length;
+    renderPlaylistDetail(playlist, state.playlistTracks, false);
+  }
   applyFilters();
   renderLibrary();
   return tracks;
@@ -15812,57 +15873,124 @@ async function queuePlaylistFromCard(playlist) {
   queueTrackCollection(tracks, "歌单");
 }
 
-async function fetchPlaylistTracksFromPlaylistEndpoint(playlist) {
-  const encodedPlaylistId = encodeURIComponent(playlist.Id);
-
-  return fetchAudioPages((startIndex, limit) => {
-    return `/Playlists/${encodedPlaylistId}/Items?${toQueryString({
-      UserId: state.session.userId,
-      StartIndex: startIndex,
-      Limit: limit,
-      Fields: itemFields,
-    })}`;
-  });
-}
-
-async function fetchPlaylistTracksFromParent(playlist) {
-  return fetchAudioPages((startIndex, limit) => {
-    return userItemsPath(state.session, {
-      ParentId: playlist.Id,
-      Recursive: true,
-      IncludeItemTypes: "Audio",
-      StartIndex: startIndex,
-      Limit: limit,
-      Fields: itemFields,
-      EnableUserData: true,
-    });
-  });
-}
-
-async function fetchAudioPages(buildPath) {
-  const tracks = [];
-  const limit = 500;
-  let startIndex = 0;
-  let total = null;
-
-  while (true) {
-    const response = await embyFetch(state.session, buildPath(startIndex, limit));
-    const items = normalizeItems(response.Items);
-    const audioItems = items.filter(isAudioItem);
-    tracks.push(...audioItems);
-
-    total = Number.isFinite(response.TotalRecordCount) ? response.TotalRecordCount : total;
-    startIndex += items.length;
-
-    if (!items.length || (total !== null && startIndex >= total) || (total === null && items.length < limit)) {
-      break;
-    }
+async function loadMoreSelectedPlaylistTracks() {
+  if (!state.selectedPlaylist?.Id || state.isLoadingMorePlaylistTracks) {
+    return;
   }
 
-  return tracks;
+  if (state.totalPlaylistTracks && state.playlistTracks.length >= state.totalPlaylistTracks) {
+    updatePlaylistTrackLoadMoreButton();
+    return;
+  }
+
+  try {
+    await loadPlaylistTrackPage(state.selectedPlaylist);
+  } catch (error) {
+    showNotice(`加载更多歌单歌曲失败：${readableError(error)}`, {
+      type: "error",
+      actions: [{ label: "重试", handler: loadMoreSelectedPlaylistTracks }],
+    });
+  }
+}
+
+async function loadPlaylistTrackPage(playlist, options = {}) {
+  if (!playlist?.Id) {
+    return [];
+  }
+
+  const reset = Boolean(options.reset);
+  const startIndex = reset ? 0 : state.playlistTracks.length;
+
+  state.isLoadingMorePlaylistTracks = true;
+  updatePlaylistTrackLoadMoreButton();
+
+  try {
+    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE);
+    const nextTracks = reset ? page.tracks : [...state.playlistTracks, ...page.tracks];
+
+    state.playlistTracks = nextTracks;
+    state.totalPlaylistTracks = page.total ?? getPlaylistKnownTrackCount(playlist) ?? nextTracks.length;
+    state.tracks = mergeUniqueItems(state.tracks, page.tracks);
+    state.favoriteTracks = mergeUniqueItems(state.favoriteTracks, page.tracks.filter(isFavorite));
+    applyFilters();
+    renderLibrary();
+    renderPlaylistDetail(playlist, state.playlistTracks, false);
+
+    return page.tracks;
+  } finally {
+    state.isLoadingMorePlaylistTracks = false;
+    updatePlaylistTrackLoadMoreButton();
+  }
+}
+
+async function fetchPlaylistTrackPage(playlist, startIndex, limit) {
+  const response = await embyFetch(state.session, userItemsPath(state.session, {
+    ParentId: playlist.Id,
+    Recursive: true,
+    IncludeItemTypes: "Audio",
+    StartIndex: startIndex,
+    Limit: limit,
+    Fields: itemFields,
+    EnableUserData: true,
+  }));
+  const items = normalizeItems(response.Items);
+  const tracks = items.filter(isAudioItem);
+  const total = Number.isFinite(response.TotalRecordCount)
+    ? response.TotalRecordCount
+    : startIndex + tracks.length;
+
+  return { tracks, total };
+}
+
+async function fetchAllPlaylistTracks(playlist) {
+  const allTracks = [];
+  let total = 0;
+  let startIndex = 0;
+
+  do {
+    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE);
+    allTracks.push(...page.tracks);
+    total = page.total || allTracks.length;
+
+    if (!page.tracks.length) {
+      break;
+    }
+
+    startIndex += page.tracks.length;
+  } while (allTracks.length < total);
+
+  return mergeUniqueItems([], allTracks);
+}
+
+function getPlaylistKnownTrackCount(playlist) {
+  const count = Number(playlist?.ChildCount || playlist?.SongCount || playlist?.ItemCount || 0);
+
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function updatePlaylistTrackLoadMoreButton() {
+  if (!loadMorePlaylistTracksButton) {
+    return;
+  }
+
+  const loaded = state.playlistTracks.length;
+  const total = state.totalPlaylistTracks || loaded;
+  const hasMore = total > loaded;
+
+  loadMorePlaylistTracksButton.hidden = !state.selectedPlaylist?.Id || !hasMore;
+  loadMorePlaylistTracksButton.disabled = state.isLoadingMorePlaylistTracks;
+  loadMorePlaylistTracksButton.textContent = state.isLoadingMorePlaylistTracks
+    ? "正在加载..."
+    : `加载更多歌曲 (${formatCount(loaded)}/${formatCount(total)})`;
 }
 
 function renderPlaylistDetail(playlist, tracks, isLoading) {
+  const total = state.selectedPlaylist?.Id === playlist?.Id
+    ? state.totalPlaylistTracks
+    : getPlaylistKnownTrackCount(playlist);
+  const isPartial = total > tracks.length;
+  const loadedMeta = isPartial ? `已加载 ${formatCount(tracks.length)}/${formatCount(total)} 首` : "";
+
   updateDetailBackButton(backToPlaylistsButton, "playlistDetail");
   playlistDetailCover.replaceChildren();
   playlistDetailCover.className = "album-detail-cover playlist-detail-cover cover-d";
@@ -15870,10 +15998,15 @@ function renderPlaylistDetail(playlist, tracks, isLoading) {
   playlistDetailTitle.textContent = playlist.Name || "未命名歌单";
   playlistDetailMeta.textContent = [
     getPlaylistSubtitle(playlist),
+    loadedMeta,
     tracks.length ? getTrackCollectionMeta(tracks) : "",
     getCollectionQualitySummary(tracks),
   ].filter(Boolean).join(" · ");
 
+  playPlaylistButton.textContent = isPartial ? "播放全部" : "播放歌单";
+  shufflePlaylistButton.textContent = isPartial ? "随机全部" : "随机播放";
+  nextPlaylistButton.textContent = isPartial ? "下一首全部" : "下一首";
+  queuePlaylistButton.textContent = isPartial ? "全部入队" : "加入队列";
   playPlaylistButton.disabled = !tracks.length;
   shufflePlaylistButton.disabled = !tracks.length;
   nextPlaylistButton.disabled = !tracks.length;
@@ -15881,6 +16014,9 @@ function renderPlaylistDetail(playlist, tracks, isLoading) {
   updateFavoriteButton(favoritePlaylistButton, playlist, "收藏歌单");
 
   if (isLoading) {
+    if (loadMorePlaylistTracksButton) {
+      loadMorePlaylistTracksButton.hidden = true;
+    }
     playlistTrackList.innerHTML = loadingMarkup("正在加载歌单歌曲...");
     return;
   }
@@ -15889,34 +16025,52 @@ function renderPlaylistDetail(playlist, tracks, isLoading) {
     context: "playlist",
     emptyText: "这个歌单里没有读取到可播放歌曲。",
   });
+  updatePlaylistTrackLoadMoreButton();
   updateActiveRows();
 }
 
-function playSelectedPlaylist() {
-  if (!state.playlistTracks.length) {
+async function playSelectedPlaylist() {
+  if (!state.selectedPlaylist?.Id && !state.playlistTracks.length) {
     return;
   }
 
-  playTrack(state.playlistTracks[0], state.playlistTracks);
+  const tracks = state.selectedPlaylist?.Id
+    ? await getPlayablePlaylistTracks(state.selectedPlaylist)
+    : state.playlistTracks;
+
+  if (tracks.length) {
+    playTrack(tracks[0], tracks);
+  }
 }
 
-function shuffleSelectedPlaylist() {
-  if (!state.playlistTracks.length) {
+async function shuffleSelectedPlaylist() {
+  if (!state.selectedPlaylist?.Id && !state.playlistTracks.length) {
     return;
   }
 
-  const shuffled = [...state.playlistTracks];
+  const tracks = state.selectedPlaylist?.Id
+    ? await getPlayablePlaylistTracks(state.selectedPlaylist)
+    : state.playlistTracks;
+  const shuffled = [...tracks];
   shuffleTracks(shuffled);
 
-  playTrack(shuffled[0], shuffled);
+  if (shuffled.length) {
+    playTrack(shuffled[0], shuffled);
+  }
 }
 
-function queueSelectedPlaylist() {
-  queueTrackCollection(state.playlistTracks, "歌单");
+async function queueSelectedPlaylist() {
+  const tracks = state.selectedPlaylist?.Id
+    ? await getPlayablePlaylistTracks(state.selectedPlaylist)
+    : state.playlistTracks;
+  queueTrackCollection(tracks, "歌单");
 }
 
-function playSelectedPlaylistNext() {
-  playTrackCollectionNext(state.playlistTracks, "歌单");
+async function playSelectedPlaylistNext() {
+  const tracks = state.selectedPlaylist?.Id
+    ? await getPlayablePlaylistTracks(state.selectedPlaylist)
+    : state.playlistTracks;
+  playTrackCollectionNext(tracks, "歌单");
 }
 
 function openCreatePlaylistModal() {
@@ -23785,6 +23939,8 @@ function clearSession() {
   state.artistAlbums = [];
   state.selectedPlaylist = null;
   state.playlistTracks = [];
+  state.totalPlaylistTracks = 0;
+  state.isLoadingMorePlaylistTracks = false;
   resetPlayerMeta();
   renderQueue();
   setPlayerEnabled(false);
