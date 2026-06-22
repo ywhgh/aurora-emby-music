@@ -190,7 +190,8 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
 
     return buildServerUrl(session.serverUrl, `/emby/Items/${encodeURIComponent(item.Id)}/Images/Primary?${toQueryString({
       maxWidth,
-      quality: 90,
+      quality: 82,
+      format: "webp",
       api_key: session.accessToken,
     })}`);
   }
@@ -208,7 +209,8 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
 
     return buildServerUrl(session.serverUrl, `/emby/Items/${encodeURIComponent(imageItemId)}/Images/Primary?${toQueryString({
       maxWidth,
-      quality: 90,
+      quality: 82,
+      format: "webp",
       api_key: session.accessToken,
     })}`);
   }

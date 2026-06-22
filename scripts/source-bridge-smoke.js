@@ -64,6 +64,18 @@ async function main() {
     assert(matchedLyric.matched === true, "local track without sidecar lyrics should use plugin lyric matching");
     assert(String(matchedLyric.lrc || "").includes("[00:01.00]Bridge lyric line"), `matched lyric text mismatch: ${matchedLyric.lrc || "-"}`);
 
+    const sidecarTrackPath = createBilingualSidecarFixture(path.dirname(pluginCachePath));
+    const sidecarLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?path=${encodeURIComponent(sidecarTrackPath)}`);
+    assert(sidecarLyric.local === true, "lyric-by-path should mark resolved sidecar lyrics as local");
+    assert(sidecarLyric.hasBilingual === true, "lyric-by-path should report bilingual sidecar lyrics");
+    assert(String(sidecarLyric.lrc || "").includes("双语翻译行"), `lyric-by-path should prefer bilingual sidecar lyrics, got: ${sidecarLyric.lrc || "-"}`);
+    assert(!String(sidecarLyric.lyricPath || "").includes(".lddc.verbatim.lrc"), "lyric-by-path should avoid the LDDC verbatim sidecar for normal display");
+
+    const remoteSidecarPath = `/server/library/${path.basename(path.dirname(sidecarTrackPath))}/${path.basename(sidecarTrackPath)}`;
+    const suffixSidecarLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?path=${encodeURIComponent(remoteSidecarPath)}`);
+    assert(suffixSidecarLyric.hasBilingual === true, "lyric-by-path should resolve Emby paths by music-dir suffix fallback");
+    assert(String(suffixSidecarLyric.mediaPath || "") === sidecarTrackPath, `suffix fallback resolved wrong media path: ${suffixSidecarLyric.mediaPath || "-"}`);
+
     await waitForPluginCache(pluginCachePath, "resume-song");
     const cachePayload = JSON.parse(fs.readFileSync(pluginCachePath, "utf8"));
     assert(cachePayload.tracks?.some((item) => item.sourceId === "resume-song"), "plugin track cache did not persist the searched track");
@@ -206,6 +218,30 @@ function createLocalMusicFixture(pluginCachePath) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "Smoke Artist - Bridge Resume Smoke.mp3"), FIXTURE_MEDIA);
   return dir;
+}
+
+function createBilingualSidecarFixture(rootDir) {
+  const dir = path.join(rootDir, "music", "sidecar");
+  const mediaPath = path.join(dir, "Sidecar Artist - Bilingual Sidecar.mp3");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(mediaPath, FIXTURE_MEDIA);
+  fs.writeFileSync(path.join(dir, "Sidecar Artist - Bilingual Sidecar.lrc"), [
+    "[00:01.00]English only line",
+    "[00:02.00]Another English line",
+  ].join("\n"));
+  fs.writeFileSync(path.join(dir, "Sidecar Artist - Bilingual Sidecar.safe.lrc"), [
+    "[00:01.00]Original line one",
+    "[00:01.00]双语翻译行一",
+    "[00:02.00]Original line two",
+    "[00:02.00]双语翻译行二",
+    "[00:03.00]Original line three",
+    "[00:03.00]双语翻译行三",
+  ].join("\n"));
+  fs.writeFileSync(path.join(dir, "Sidecar Artist - Bilingual Sidecar.lddc.verbatim.lrc"), [
+    "[00:01.00]<0.00>Original",
+    "[00:01.00]<0.00>逐字备份",
+  ].join("\n"));
+  return mediaPath;
 }
 
 async function waitForHealth(url) {

@@ -53,7 +53,7 @@ function parseLyrics(text) {
     return ttmlLyrics;
   }
 
-  const rawLines = rawText.split(/\r?\n/);
+  const rawLines = normalizeColonlessLyricTimestamps(rawText).split(/\r?\n/);
   const yrcLyrics = parseYrcLyrics(rawLines);
 
   if (yrcLyrics) {
@@ -118,6 +118,75 @@ function parseLyrics(text) {
     isSynced: false,
     lines: plainLines,
   };
+}
+
+// 将 [A.B] 这类“点号、无冒号”时间戳规范化为标准 [mm:ss.xx]，使其能被剥离前缀并参与滚动同步。
+// 仅当整文件没有标准 [mm:ss] 时间戳时才介入，避免影响正常 LRC。
+function normalizeColonlessLyricTimestamps(rawText) {
+  const lines = String(rawText || "").split(/\r?\n/);
+  const hasColonTime = lines.some((line) => /\[\d{1,2}:\d{1,2}/.test(line));
+  if (hasColonTime) {
+    return rawText;
+  }
+
+  const colonlessPattern = /\[(\d{1,3})\.(\d{1,3})\]/g;
+  const pairs = [];
+  lines.forEach((line) => {
+    colonlessPattern.lastIndex = 0;
+    let match;
+    while ((match = colonlessPattern.exec(line)) !== null) {
+      pairs.push({ a: Number(match[1]), b: Number(match[2]), bStr: match[2] });
+    }
+  });
+
+  if (!pairs.length) {
+    return rawText;
+  }
+
+  const useSeconds = detectColonlessLyricAsSeconds(pairs);
+
+  return lines.map((line) => line.replace(colonlessPattern, (full, aStr, bStr) => {
+    const a = Number(aStr);
+    const b = Number(bStr);
+    const totalSeconds = useSeconds ? a : (a * 60 + b);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = Math.floor(totalSeconds % 60);
+    const fraction = useSeconds ? bStr.padEnd(2, "0").slice(0, 2) : "00";
+    return `[${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${fraction}]`;
+  })).join("\n");
+}
+
+// 判定点号时间戳是 [秒.百分秒]（返回 true）还是 [分.秒]（返回 false）。
+function detectColonlessLyricAsSeconds(pairs) {
+  // 小数侧出现 >59：不可能是“秒”，只能是百分秒 → 整体按 [秒.百分秒]
+  if (pairs.some((pair) => pair.b > 59)) {
+    return true;
+  }
+  // 整数侧出现 >=60：作为“分”不合理（≥60 分钟）→ 按 [秒.百分秒]
+  if (pairs.some((pair) => pair.a >= 60)) {
+    return true;
+  }
+
+  // 两种都说得通：比较单调性，再用密度兜底
+  const asSeconds = pairs.map((pair) => pair.a + Number(`0.${pair.bStr}`));
+  const asMinSec = pairs.map((pair) => pair.a * 60 + pair.b);
+  const monotonic = (arr) => arr.every((value, index) => index === 0 || value >= arr[index - 1] - 0.01);
+  const secondsMonotonic = monotonic(asSeconds);
+  const minSecMonotonic = monotonic(asMinSec);
+
+  if (secondsMonotonic && !minSecMonotonic) {
+    return true;
+  }
+  if (minSecMonotonic && !secondsMonotonic) {
+    return false;
+  }
+
+  // 都单调：若按秒整首被压进过短窗口（平均行距 <1s），更像 [分.秒]
+  const span = asSeconds[asSeconds.length - 1] - asSeconds[0];
+  if (span < pairs.length) {
+    return false;
+  }
+  return true;
 }
 
 function parseLyricTextPart(text) {
@@ -691,19 +760,23 @@ function buildBilingualLine(parts) {
 }
 
 function mergeBilingualTimedLines(lines) {
-  const groups = new Map();
+  const groups = [];
 
-  lines
+  const sortedLines = lines
     .filter((line) => line.text)
-    .sort((left, right) => left.time - right.time)
-    .forEach((line) => {
-      const key = String(Math.round(line.time * 100));
-      const group = groups.get(key) || [];
-      group.push(line);
-      groups.set(key, group);
-    });
+    .sort((left, right) => left.time - right.time);
 
-  return [...groups.values()].map((group) => {
+  sortedLines.forEach((line) => {
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup && shouldMergeIntoBilingualTimeGroup(lastGroup, line)) {
+      lastGroup.push(line);
+      return;
+    }
+
+    groups.push([line]);
+  });
+
+  return groups.map((group) => {
     const texts = [];
 
     group.forEach((line) => {
@@ -743,6 +816,34 @@ function mergeBilingualTimedLines(lines) {
       ...(translatedTimeline?.length ? { translatedWordTimeline: translatedTimeline } : {}),
     };
   }).filter((line) => line.text);
+}
+
+function shouldMergeIntoBilingualTimeGroup(group, line) {
+  const first = group[0];
+  if (!first || !Number.isFinite(first.time) || !Number.isFinite(line?.time)) {
+    return false;
+  }
+
+  const deltaSeconds = Math.abs(line.time - first.time);
+  if (deltaSeconds > 0.08) {
+    return false;
+  }
+
+  if (Math.round(line.time * 100) === Math.round(first.time * 100)) {
+    return true;
+  }
+
+  const texts = [];
+  group.forEach((item) => {
+    appendUniqueText(texts, item.originalText);
+    appendUniqueText(texts, item.text);
+  });
+  appendUniqueText(texts, line.originalText);
+  appendUniqueText(texts, line.text);
+
+  const hasChinese = texts.some(isLikelyChineseText);
+  const hasNonChinese = texts.some((text) => text && !isLikelyChineseText(text));
+  return hasChinese && hasNonChinese;
 }
 
 function findMergedLineEndTime(lines) {

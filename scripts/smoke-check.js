@@ -80,6 +80,7 @@ function checkVersions() {
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
   assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174"'), "Default source bridge URL should point to the built-in local bridge");
+  assert(config.includes("DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL"), "Emby lyrics should support a dedicated source bridge URL");
   assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
   assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
   assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
@@ -197,8 +198,8 @@ function checkCss() {
   assert(/\.top-lyric-char\s*\{[\s\S]*?opacity:\s*0\.6;/.test(css), "Topbar lyric characters should start in the unplayed opacity state");
   assert(css.includes(".top-lyric-char.is-sharded"), "Topbar lyric shard effect should hide triggered characters");
   assert(css.includes(".top-lyric-shard-canvas"), "Topbar lyric shard effect should render temporary canvases");
-  assert(/\.lyric-line \.lyric-original \{[\s\S]*?font-size:\s*0\.8rem;/.test(css), "Bilingual lyric original text should be smaller than the translated text");
-  assert(/\.lyric-line \.lyric-translated \{[\s\S]*?font-size:\s*1rem;/.test(css), "Bilingual lyric translated text should be larger than the original text");
+  assert(/\.lyric-line \.lyric-original \{[\s\S]*?font-size:\s*1em;/.test(css), "Bilingual lyric original text should match the translated text size");
+  assert(/\.lyric-line \.lyric-translated \{[\s\S]*?font-size:\s*1em;/.test(css), "Bilingual lyric translated text should match the original text size");
   assert(css.includes("Mobile refinement layer"), "Mobile refinement layer should stay as the final phone layout guard");
   assert(/body\.immersive-player-open \.playerbar,\s*body\.immersive-player-open \.mobile-bottom-nav,\s*body\.immersive-player-open \.mobile-nav[\s\S]*?display:\s*none !important;/.test(css), "Immersive mobile playback should hide shared player and bottom navigation");
   assert(/\.login-view \.login-shell \{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/.test(css), "Mobile login shell should not crop saved accounts or the form");
@@ -282,6 +283,9 @@ function checkLyrics() {
   assert(bilingualEnhancedLine.translatedWordTimeline?.length === 2, `Bilingual enhanced translation should expose 2 timed words, got ${bilingualEnhancedLine.translatedWordTimeline?.length || 0}`);
   assert(bilingualEnhancedLine.wordTimeline?.[1]?.time === 0.6, `Bilingual enhanced original second word time expected 0.6, got ${bilingualEnhancedLine.wordTimeline?.[1]?.time}`);
   assert(bilingualEnhancedLine.translatedWordTimeline?.[1]?.time === 0.6, `Bilingual enhanced translated second word time expected 0.6, got ${bilingualEnhancedLine.translatedWordTimeline?.[1]?.time}`);
+  const nearTimestampBilingualLine = parseLyrics("[00:00.00]Hello world\n[00:00.01]你好世界").lines[0];
+  assert(nearTimestampBilingualLine?.originalText === "Hello world", `Near-timestamp bilingual originalText expected Hello world, got ${nearTimestampBilingualLine?.originalText}`);
+  assert(nearTimestampBilingualLine?.text === "你好世界", `Near-timestamp bilingual translated text expected 你好世界, got ${nearTimestampBilingualLine?.text}`);
   const inlineBilingualEnhancedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world <1.20>/ <1.40>你<2.00>好").lines[0];
   assert(inlineBilingualEnhancedLine?.originalText === "Hello world", `Inline bilingual enhanced originalText expected Hello world, got ${inlineBilingualEnhancedLine?.originalText}`);
   assert(inlineBilingualEnhancedLine?.text === "你好", `Inline bilingual enhanced translated text expected 你好, got ${inlineBilingualEnhancedLine?.text}`);
@@ -615,9 +619,14 @@ function checkLyrics() {
   assert(index.includes("id=\"immersiveMobileCurrentLyric\""), "Mobile immersive cover should expose a current lyric slot above the visualizer");
   assert(app.includes("function renderImmersiveMobileCurrentLyric"), "Mobile immersive current lyric should be rendered from the active lyric line");
   assert(app.includes("function getImmersiveMobileCurrentLyricParts") && app.includes("immersive-mobile-current-lyric-translated"), "Mobile immersive cover current lyric should render original and translated lines when available");
+  assert(app.includes("function renderImmersiveDesktopCurrentLyric") && app.includes("immersive-desktop-current-lyric-translated"), "Desktop immersive default lyric should render original and translated lines when available");
   assert(app.includes("let immersiveMobileCurrentLyricAnimationTimer = 0") && app.includes("function clearImmersiveMobileCurrentLyricAnimationTimer()") && app.includes("immersiveMobileCurrentLyricAnimationTimer = window.setTimeout"), "Mobile immersive current lyric animation should clear stale timers before replaying");
   assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
   assert(css.includes(".immersive-mobile-current-lyric-translated") && css.includes(".immersive-mobile-current-lyric-single"), "Mobile immersive current lyric should style bilingual and single-line states");
+  assert(css.includes(".immersive-desktop-current-lyric-translated") && css.includes(".immersive-desktop-current-lyric-original"), "Desktop immersive current lyric should style bilingual original and translated lines");
+  assert(css.includes(".immersive-player-shell .immersive-mobile-stage-toggle .immersive-waveform") && css.includes("display: none !important"), "Desktop immersive view should hide the mobile full-width waveform");
+  assert(css.includes("width: min(52%, 27rem) !important"), "Desktop immersive waveform should stay narrower than the lyric region");
+  assert(css.includes(".immersive-player-shell .immersive-waveform-fill") && css.includes("opacity: 0;"), "Desktop immersive waveform should not render the gray filled area under the line");
   assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");
   assert(css.includes("body.immersive-player-open .audio-quality-card") && css.includes("background-color: rgba(8, 8, 10, 0.9)"), "Immersive modal cards should use the warm dark glass style");
   assert(css.includes("--quality-tone: #fff4e5"), "Immersive modal quality states should be normalized to warm white instead of colored quality tones");

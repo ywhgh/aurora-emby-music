@@ -1,8 +1,9 @@
 window.EmbyMusicConfig = {
   APP_NAME: "Emby Music Web",
-  APP_VERSION: "0.93.173",
+  APP_VERSION: "0.93.182",
   DEFAULT_SERVER_URL: "",
   DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174",
+  DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: "http://103.24.216.51:5174",
   LOCK_SERVER_URL: false,
   ACCOUNT_PROFILES_KEY: "emby-music-web/account-profiles",
   SESSION_KEY: "emby-music-web/session",
@@ -274,6 +275,7 @@ window.EmbyMusicConfig = {
     "MediaSources",
     "MediaType",
     "ParentIndexNumber",
+    "Path",
     "PlaylistItemId",
     "PrimaryImageAspectRatio",
     "ProductionYear",
@@ -282,4 +284,3 @@ window.EmbyMusicConfig = {
     "UserData",
   ].join(","),
 };
-

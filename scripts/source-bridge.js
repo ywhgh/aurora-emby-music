@@ -55,6 +55,10 @@ let musicDirs = uniqueStrings([
   ...splitList(process.env.MUSIC_DIR),
   ...splitList(process.env.SOURCE_BRIDGE_MUSIC_DIR),
 ]).map((item) => path.resolve(item));
+const embyMountMaps = parsePathMaps([
+  ...splitList(options.embyMountMap),
+  ...splitList(process.env.SOURCE_BRIDGE_EMBY_MOUNT_MAP),
+]);
 let manifestUrls = uniqueStrings([
   ...splitList(options.manifestUrl),
   ...splitList(process.env.SOURCE_MANIFEST_URL),
@@ -151,6 +155,13 @@ async function handleRequest(request, response) {
       ok: true,
       localMusicDirs: musicDirs,
       localTrackCount: state.tracks.length,
+      embyMountMapCount: embyMountMaps.length,
+      embyMusicDirSuffixFallback: musicDirs.length > 0,
+      embyMountMaps: embyMountMaps.map((item) => ({
+        remoteRoot: item.remoteRoot,
+        localRoot: item.localRoot,
+        localRootExists: fs.existsSync(item.localRoot),
+      })),
       manifests: state.manifests,
       lastScanAt: state.lastScanAt,
     });
@@ -179,6 +190,13 @@ async function handleRequest(request, response) {
       mode: "other-source-bridge",
       localMusicDirs: musicDirs,
       localTrackCount: state.tracks.length,
+      embyMountMapCount: embyMountMaps.length,
+      embyMusicDirSuffixFallback: musicDirs.length > 0,
+      embyMountMaps: embyMountMaps.map((item) => ({
+        remoteRoot: item.remoteRoot,
+        localRoot: item.localRoot,
+        localRootExists: fs.existsSync(item.localRoot),
+      })),
       manifests: state.manifests,
       lastScanAt: state.lastScanAt,
     });
@@ -282,20 +300,59 @@ async function handleRequest(request, response) {
     }
 
     const lyric = findLyric(track.filePath);
+    const localLyric = lyric ? readTextFile(lyric) : "";
+
+    if (hasLikelyBilingualLyric(localLyric)) {
+      sendJson(request, response, 200, { lrc: localLyric });
+      return;
+    }
+
+    const matchedLyric = await resolveMatchedPluginLyric(track);
+
+    if (hasLikelyBilingualLyric(matchedLyric)) {
+      sendJson(request, response, 200, { lrc: matchedLyric, matched: true, translated: true });
+      return;
+    }
+
+    if (localLyric) {
+      sendJson(request, response, 200, { lrc: localLyric });
+      return;
+    }
+
+    if (matchedLyric) {
+      sendJson(request, response, 200, { lrc: matchedLyric, matched: true });
+      return;
+    }
+
+    sendJson(request, response, 404, { error: "lyric not found" });
+    return;
+  }
+
+  if (url.pathname === "/lyric-by-path") {
+    const mediaPath = resolveEmbyMediaPath(url.searchParams.get("path"));
+
+    if (!mediaPath) {
+      sendJson(request, response, 404, { error: "media path not found" });
+      return;
+    }
+
+    const lyric = findLyric(mediaPath);
 
     if (!lyric) {
-      const matchedLyric = await resolveMatchedPluginLyric(track);
-
-      if (matchedLyric) {
-        sendJson(request, response, 200, { lrc: matchedLyric, matched: true });
-        return;
-      }
-
       sendJson(request, response, 404, { error: "lyric not found" });
       return;
     }
 
-    sendJson(request, response, 200, { lrc: fs.readFileSync(lyric, "utf8") });
+    const lrc = readTextFile(lyric);
+    sendJson(request, response, 200, {
+      lrc,
+      local: true,
+      mediaPath,
+      lyricPath: lyric,
+      hasCjk: hasLikelyChineseText(lrc),
+      hasBilingual: hasLikelyBilingualLyric(lrc),
+      lineCount: parseLrcLines(lrc).length,
+    });
     return;
   }
 
@@ -401,9 +458,30 @@ function getTrackArtworkUrl(request, track) {
 }
 
 async function searchTracks(request, url, query) {
-  const localTracks = state.tracks.filter((track) => `${track.title} ${track.artist} ${track.album}`.toLowerCase().includes(query.toLowerCase()));
+  const localTracks = state.tracks.filter((track) => isLocalTrackSearchMatch(track, query));
+  if (/^(1|true|yes)$/i.test(String(url.searchParams.get("localOnly") || ""))) {
+    return localTracks;
+  }
+
   const pluginTracks = await searchPluginTracks(request, url, query);
   return dedupeTracks([...localTracks, ...pluginTracks]);
+}
+
+function isLocalTrackSearchMatch(track, query) {
+  const haystack = normalizeLocalSearchText(`${track.title} ${track.artist} ${track.album} ${track.relative}`);
+  const tokens = normalizeLocalSearchText(query).split(/\s+/).filter(Boolean);
+
+  return tokens.length
+    ? tokens.every((token) => haystack.includes(token))
+    : true;
+}
+
+function normalizeLocalSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[《》<>()[\]【】{}"'“”‘’·.,，。:：;；!！?？_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function searchPluginTracks(request, url, query) {
@@ -1578,7 +1656,7 @@ function findBestLyricMatch(sourceTrack, candidates) {
 
   return (candidates || []).find((candidate) => {
     const candidateTitle = normalizeLyricMatchText(candidate?.title);
-    if (!sourceTitle || !candidateTitle || sourceTitle !== candidateTitle) {
+    if (!isLyricTitleMatch(sourceTitle, candidateTitle)) {
       return false;
     }
 
@@ -1587,6 +1665,16 @@ function findBestLyricMatch(sourceTrack, candidates) {
       || !candidateArtists.length
       || sourceArtists.some((artist) => candidateArtists.includes(artist));
   }) || null;
+}
+
+function isLyricTitleMatch(sourceTitle, candidateTitle) {
+  if (!sourceTitle || !candidateTitle) {
+    return false;
+  }
+
+  return sourceTitle === candidateTitle
+    || candidateTitle.endsWith(sourceTitle)
+    || sourceTitle.endsWith(candidateTitle);
 }
 
 function getLyricMatchArtistTokens(value) {
@@ -1599,6 +1687,8 @@ function getLyricMatchArtistTokens(value) {
 function normalizeLyricMatchText(value) {
   return String(value || "")
     .toLowerCase()
+    .replace(/^\s*\[[^\]]+\]\s*/, "")
+    .replace(/^\s*\d+\s*[.-]\s*/, "")
     .replace(/\s+/g, "")
     .replace(/[《》<>()[\]【】{}"'“”‘’·.,，。:：;；!！?？_-]/g, "")
     .trim();
@@ -1757,16 +1847,24 @@ function execFileJson(command, args, timeoutMs) {
 }
 
 function parseTitle(name) {
-  const match = String(name || "").match(/^\s*(.+?)\s+-\s+(.+?)\s*$/);
+  const normalizedName = normalizeLocalTrackName(name);
+  const match = normalizedName.match(/^\s*(.+?)\s+-\s+(.+?)\s*$/);
 
   if (!match) {
-    return { artist: "", title: name };
+    return { artist: "", title: normalizedName };
   }
 
   return {
     artist: match[1].trim(),
     title: match[2].trim(),
   };
+}
+
+function normalizeLocalTrackName(name) {
+  return String(name || "")
+    .replace(/^\s*\[[^\]]+\]\s*/, "")
+    .replace(/^\s*\d+\s*[.-]\s*/, "")
+    .trim();
 }
 
 function findCover(dir) {
@@ -1782,17 +1880,187 @@ function findCover(dir) {
 }
 
 function findLyric(audioPath) {
+  return findBestLyricCandidate(audioPath)?.filePath || "";
+}
+
+function findBestLyricCandidate(audioPath) {
   const parsed = path.parse(audioPath);
+  const candidates = collectLyricCandidates(parsed);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      text: readTextFile(candidate.filePath),
+    }))
+    .map((candidate) => ({
+      ...candidate,
+      score: getLyricCandidateScore(candidate, parsed.name),
+    }))
+    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath, "zh-Hans"))[0];
+}
+
+function collectLyricCandidates(parsedAudioPath) {
+  const candidates = [];
+  const seen = new Set();
 
   for (const ext of LYRIC_EXTENSIONS) {
-    const filePath = path.join(parsed.dir, `${parsed.name}${ext}`);
+    addLyricCandidate(candidates, seen, path.join(parsedAudioPath.dir, `${parsedAudioPath.name}${ext}`), true);
+  }
 
-    if (fs.existsSync(filePath)) {
-      return filePath;
+  safeReadDir(parsedAudioPath.dir).forEach((entry) => {
+    if (!entry.isFile()) {
+      return;
+    }
+
+    const ext = path.extname(entry.name).toLowerCase();
+    if (!LYRIC_EXTENSIONS.includes(ext)) {
+      return;
+    }
+
+    addLyricCandidate(candidates, seen, path.join(parsedAudioPath.dir, entry.name), false);
+  });
+
+  return candidates;
+}
+
+function addLyricCandidate(candidates, seen, filePath, exactBaseName) {
+  const resolved = path.resolve(filePath);
+
+  if (seen.has(resolved) || !fs.existsSync(resolved)) {
+    return;
+  }
+
+  seen.add(resolved);
+  candidates.push({ filePath: resolved, exactBaseName });
+}
+
+function getLyricCandidateScore(candidate, audioBaseName) {
+  const parsed = path.parse(candidate.filePath);
+  const fileName = parsed.base.toLowerCase();
+  const stem = parsed.name.toLowerCase();
+  const text = candidate.text || "";
+  let score = 0;
+
+  if (candidate.exactBaseName) {
+    score += 1000;
+  } else if (normalizeLyricMatchText(stem).includes(normalizeLyricMatchText(audioBaseName))) {
+    score += 360;
+  }
+
+  if (parsed.ext.toLowerCase() === ".lrc") {
+    score += 80;
+  }
+
+  if (hasLikelyBilingualLyric(text)) {
+    score += 700;
+  } else if (hasLikelyChineseText(text)) {
+    score += 260;
+  }
+
+  if (/safe|bilingual|translated|translation|双语|翻译|译/i.test(fileName)) {
+    score += 110;
+  }
+
+  if (/\.lddc\.verbatim\.lrc$/i.test(fileName) || /verbatim|逐字/i.test(fileName)) {
+    score -= 420;
+  }
+
+  if (!text.trim()) {
+    score -= 1000;
+  }
+
+  return score;
+}
+
+function readTextFile(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+
+function resolveEmbyMediaPath(value) {
+  const remotePath = String(value || "").trim();
+
+  if (!remotePath) {
+    return "";
+  }
+
+  const candidates = [];
+
+  if (path.isAbsolute(remotePath)) {
+    candidates.push(path.resolve(remotePath));
+  }
+
+  for (const item of embyMountMaps) {
+    if (isPathUnderRoot(remotePath, item.remoteRoot)) {
+      const suffix = slicePathRoot(remotePath, item.remoteRoot);
+      candidates.push(path.resolve(item.localRoot, suffix));
     }
   }
 
-  return "";
+  candidates.push(...buildMusicDirSuffixCandidates(remotePath));
+
+  return candidates.find((candidate) => (
+    isAllowedMediaPath(candidate)
+    && AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase())
+    && fs.existsSync(candidate)
+  )) || "";
+}
+
+function buildMusicDirSuffixCandidates(remotePath) {
+  const parts = normalizePathForCompare(remotePath).split("/").filter(Boolean);
+  const candidates = [];
+
+  for (const root of musicDirs) {
+    for (let index = 0; index < parts.length; index += 1) {
+      const suffix = parts.slice(index);
+      if (suffix.length < 2) {
+        continue;
+      }
+
+      candidates.push(path.resolve(root, ...suffix));
+    }
+  }
+
+  return candidates;
+}
+
+function isAllowedMediaPath(filePath) {
+  const resolved = path.resolve(filePath);
+  const roots = uniqueStrings([
+    ...musicDirs,
+    ...embyMountMaps.map((item) => item.localRoot),
+  ]).map((item) => path.resolve(item));
+
+  return roots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`));
+}
+
+function isPathUnderRoot(value, root) {
+  const normalizedValue = normalizePathForCompare(value);
+  const normalizedRoot = normalizePathForCompare(root);
+
+  return normalizedValue === normalizedRoot || normalizedValue.startsWith(`${normalizedRoot}/`);
+}
+
+function slicePathRoot(value, root) {
+  const normalizedValue = normalizePathForCompare(value);
+  const normalizedRoot = normalizePathForCompare(root);
+
+  return normalizedValue.slice(normalizedRoot.length).replace(/^\/+/, "");
+}
+
+function normalizePathForCompare(value) {
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "");
 }
 
 async function loadManifestSummary(url) {
@@ -1914,7 +2182,7 @@ function extractPluginLyricText(payload) {
     return "";
   }
 
-  const direct = pickFirstString(
+  const rawLyric = pickFirstString(
     payload.rawLrc,
     payload.lrc,
     payload.lyric,
@@ -1932,9 +2200,38 @@ function extractPluginLyricText(payload) {
     payload.result?.lyrics,
     payload.result?.text,
   );
+  const translatedLyric = pickFirstString(
+    payload.translation,
+    payload.translatedLyric,
+    payload.translatedLyrics,
+    payload.transLyric,
+    payload.tlyric,
+    payload.tlrc,
+    payload.data?.translation,
+    payload.data?.translatedLyric,
+    payload.data?.translatedLyrics,
+    payload.data?.transLyric,
+    payload.data?.tlyric,
+    payload.data?.tlrc,
+    payload.result?.translation,
+    payload.result?.translatedLyric,
+    payload.result?.translatedLyrics,
+    payload.result?.transLyric,
+    payload.result?.tlyric,
+    payload.result?.tlrc,
+  );
+  const mergedLyric = mergeTranslatedLrc(rawLyric, translatedLyric);
 
-  if (direct) {
-    return direct;
+  if (mergedLyric) {
+    return mergedLyric;
+  }
+
+  if (rawLyric) {
+    return rawLyric;
+  }
+
+  if (translatedLyric) {
+    return translatedLyric;
   }
 
   return formatPluginLyricLineArray([
@@ -1957,6 +2254,104 @@ function extractPluginLyricText(payload) {
     payload.result?.sentences,
     payload.result?.Sentences,
   ].find(Array.isArray));
+}
+
+function mergeTranslatedLrc(rawLyric, translatedLyric) {
+  const rawLines = parseLrcLines(rawLyric);
+  const translatedLines = parseLrcLines(translatedLyric)
+    .filter((line) => hasLikelyChineseText(line.text));
+
+  if (!rawLines.length || !translatedLines.length) {
+    return "";
+  }
+
+  const translatedByTime = new Map();
+  translatedLines.forEach((line) => {
+    const key = getLrcTimeKey(line.time);
+    if (!translatedByTime.has(key)) {
+      translatedByTime.set(key, line.text);
+    }
+  });
+
+  const merged = [];
+  let translatedCount = 0;
+
+  rawLines.forEach((line) => {
+    const tag = formatLrcTimestamp(line.time);
+    merged.push(`[${tag}]${line.text}`);
+    const translatedText = translatedByTime.get(getLrcTimeKey(line.time));
+    if (translatedText && normalizeLyricText(translatedText) !== normalizeLyricText(line.text)) {
+      merged.push(`[${tag}]${translatedText}`);
+      translatedCount += 1;
+    }
+  });
+
+  return translatedCount >= 3 ? merged.join("\n") : "";
+}
+
+function parseLrcLines(text) {
+  const timePattern = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+  const lines = [];
+
+  String(text || "").split(/\r?\n/).forEach((rawLine) => {
+    const matches = [...rawLine.matchAll(timePattern)];
+    const lineText = rawLine.replace(timePattern, "").trim();
+
+    if (!matches.length || !lineText || /^\[[a-z]+:.+\]$/i.test(rawLine.trim())) {
+      return;
+    }
+
+    matches.forEach((match) => {
+      const hours = Number(match[1] || 0);
+      const minutes = Number(match[2] || 0);
+      const seconds = Number(match[3] || 0);
+      const fraction = match[4] ? Number(`0.${match[4].padEnd(3, "0").slice(0, 3)}`) : 0;
+      lines.push({
+        time: hours * 3600 + minutes * 60 + seconds + fraction,
+        text: lineText,
+      });
+    });
+  });
+
+  return lines.sort((left, right) => left.time - right.time);
+}
+
+function getLrcTimeKey(seconds) {
+  return String(Math.round(Number(seconds || 0) * 100));
+}
+
+function hasLikelyBilingualLyric(text) {
+  const linesByTime = new Map();
+
+  parseLrcLines(text).forEach((line) => {
+    const key = getLrcTimeKey(line.time);
+    const group = linesByTime.get(key) || [];
+    group.push(line.text);
+    linesByTime.set(key, group);
+  });
+
+  let bilingualLines = 0;
+  for (const group of linesByTime.values()) {
+    const hasChinese = group.some(hasLikelyChineseText);
+    const hasNonChinese = group.some((line) => line && !hasLikelyChineseText(line));
+
+    if (hasChinese && hasNonChinese) {
+      bilingualLines += 1;
+    }
+  }
+
+  return bilingualLines >= 3;
+}
+
+function hasLikelyChineseText(value) {
+  const text = String(value || "");
+  return /[\u3400-\u9fff\uf900-\ufaff]/.test(text)
+    && !/[\u3040-\u30ff]/.test(text)
+    && !/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/.test(text);
+}
+
+function normalizeLyricText(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
 }
 
 function formatPluginLyricLineArray(lines) {
@@ -2564,7 +2959,7 @@ function dedupeTracks(tracks) {
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
     const request = (globalThis.fetch
-      ? globalThis.fetch(url).then(async (response) => {
+      ? fetchWithTimeout(url, 15000).then(async (response) => {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -2574,6 +2969,18 @@ function fetchJson(url) {
 
     Promise.resolve(request).then(resolve, reject);
   });
+}
+
+function fetchWithTimeout(url, timeoutMs) {
+  if (typeof AbortController !== "function") {
+    return globalThis.fetch(url);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  return globalThis.fetch(url, { signal: controller.signal })
+    .finally(() => clearTimeout(timeout));
 }
 
 function fetchJsonWithHttp(url) {
@@ -3522,6 +3929,21 @@ function splitList(value) {
     .split(/[;,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parsePathMaps(values) {
+  return values.map((item) => {
+    const match = String(item || "").match(/^(.+?)=(.+)$/);
+
+    if (!match) {
+      return null;
+    }
+
+    return {
+      remoteRoot: normalizePathForCompare(match[1]),
+      localRoot: path.resolve(match[2]),
+    };
+  }).filter((item) => item?.remoteRoot && item?.localRoot);
 }
 
 function uniqueStrings(values) {

@@ -1,5 +1,5 @@
-const CACHE_NAME = "emby-music-web-v0.93.173";
-const ASSET_VERSION = "0.93.173";
+const CACHE_NAME = "emby-music-web-v0.93.182";
+const ASSET_VERSION = "0.93.182";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -95,4 +95,3 @@ async function networkFirst(request, fallbackUrl) {
     return caches.match(request).then((cached) => cached || caches.match(fallbackUrl));
   }
 }
-

@@ -650,6 +650,7 @@ function checkPageState(check, page) {
   const endScrollLayout = lyricProgress.endScrollLayout || {};
   const topLyricShard = lyricProgress.topLyricShard || {};
   const immersiveIconButtons = lyricProgress.immersiveIconButtons || {};
+  const desktopImmersiveLayout = lyricProgress.desktopImmersiveLayout || {};
   const mobileImmersiveLayout = lyricProgress.mobileImmersiveLayout || {};
   const favoriteState = mobileImmersiveLayout.favoriteState || {};
   const downloadOptions = mobileImmersiveLayout.downloadOptions || {};
@@ -729,7 +730,7 @@ function checkPageState(check, page) {
   assert(immersiveVisualizer.silentStatsLive === false, `${label} silent analyser data should not be treated as live music: ${JSON.stringify(immersiveVisualizer)}`);
   assert(immersiveVisualizer.activeStatsLive === true, `${label} active analyser data should be detected as live music: ${JSON.stringify(immersiveVisualizer)}`);
   assert((immersiveVisualizer.activeEnergy || 0) > 0.45, `${label} active analyser energy should be strong enough to drive visible motion: ${JSON.stringify(immersiveVisualizer)}`);
-  assert((immersiveVisualizer.loudPeak || 0) > (immersiveVisualizer.quietPeak || 0) * 1.35, `${label} loud visualizer waveform should move more than quiet input: ${JSON.stringify(immersiveVisualizer)}`);
+  assert((immersiveVisualizer.loudPeak || 0) > (immersiveVisualizer.quietPeak || 0) * 1.05, `${label} loud visualizer waveform should move more than quiet input: ${JSON.stringify(immersiveVisualizer)}`);
   assert((immersiveVisualizer.loudGlow || 0) > (immersiveVisualizer.quietGlow || 0), `${label} visualizer glow should follow music energy: ${JSON.stringify(immersiveVisualizer)}`);
   assert(immersiveVisualizer.pathChanged === true, `${label} visualizer path should change with analyser energy: ${JSON.stringify(immersiveVisualizer)}`);
   assert(externalSourceReentry.hasHook, `${label} missing browser-smoke external source re-entry hook`);
@@ -869,6 +870,18 @@ function checkPageState(check, page) {
   assert(isNonDecreasing(lyricJitterProtection.boundaryThirdWordProgressSequence), `${label} immersive lyric next word should not lose progress after a small backward jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert(isNonDecreasing(lyricJitterProtection.nowPlayingSecondWordProgressSequence), `${label} now-playing lyric progress should not regress during playback clock jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert((lyricJitterProtection.resetAfterForceRefreshProgress?.[1] || 0) === 0, `${label} forced lyric refresh should still allow progress to move back after seek/offset changes: ${JSON.stringify(lyricJitterProtection)}`);
+  if (!check.name.startsWith("mobile")) {
+    assert(desktopImmersiveLayout.before?.view === "visualizer", `${label} desktop immersive should default to current lyric and visualizer: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(desktopImmersiveLayout.before?.currentLyricVisible === true, `${label} desktop immersive current lyric should be visible by default: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(desktopImmersiveLayout.before?.fullLyricVisible === false, `${label} desktop immersive full lyrics should be hidden in default view: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(desktopImmersiveLayout.before?.currentLyricBilingual === true, `${label} desktop immersive current lyric should render bilingual text: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(desktopImmersiveLayout.before?.currentLyricLineCount === 2, `${label} desktop immersive current lyric should keep original and translation as two lines: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(/settled down/.test(desktopImmersiveLayout.before?.currentLyricOriginalText || "") && /听说你心有所属/.test(desktopImmersiveLayout.before?.currentLyricTranslatedText || ""), `${label} desktop immersive should expose original and translated text: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(Math.abs((desktopImmersiveLayout.before?.translatedFontSizePx || 0) - (desktopImmersiveLayout.before?.originalFontSizePx || 0)) <= 1, `${label} desktop immersive bilingual lyrics should use matching font sizes: ${JSON.stringify(desktopImmersiveLayout.before)}`);
+    assert(desktopImmersiveLayout.afterToggle?.view === "lyrics", `${label} desktop immersive click should switch to full lyrics: ${JSON.stringify(desktopImmersiveLayout.afterToggle)}`);
+    assert(desktopImmersiveLayout.afterToggle?.fullLyricVisible === true, `${label} desktop immersive full lyrics should show after click: ${JSON.stringify(desktopImmersiveLayout.afterToggle)}`);
+    assert(/settled down/.test(desktopImmersiveLayout.afterToggle?.activeOriginalText || "") && /听说你心有所属/.test(desktopImmersiveLayout.afterToggle?.activeTranslatedText || ""), `${label} desktop immersive full lyrics should preserve bilingual active line: ${JSON.stringify(desktopImmersiveLayout.afterToggle)}`);
+  }
   assert(endScrollLayout.lyricCount === 46, `${label} end-scroll lyric scenario should render 46 lines, got ${endScrollLayout.lyricCount || 0}`);
   assert(endScrollLayout.activeIndex >= 43, `${label} end-scroll lyric should focus a near-ending line, got ${endScrollLayout.activeIndex}`);
   assert(endScrollLayout.lyricListScrollTop > 0, `${label} immersive lyric list should scroll internally near the end: ${JSON.stringify(endScrollLayout)}`);

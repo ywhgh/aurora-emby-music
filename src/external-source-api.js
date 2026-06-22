@@ -29,6 +29,10 @@ function createExternalSourceApi() {
       url.searchParams.set("type", "music");
     }
 
+    if (options.localOnly) {
+      url.searchParams.set("localOnly", "1");
+    }
+
     const payload = await requestJson(url, {
       signal: options.signal,
       timeoutMs: options.timeoutMs,

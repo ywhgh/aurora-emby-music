@@ -8,26 +8,26 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Emby Music" />
     <title>Emby Music Web</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.173" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.173" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.173" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.182" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.182" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.182" />
   </head>
   <body>
     <section id="loginView" class="login-view">
       <main class="login-shell">
         <section class="login-intro" aria-label="应用介绍">
           <div class="brand-row">
-            <div class="brand-mark">E</div>
+            <div class="brand-mark">A</div>
             <div>
-              <p class="kicker">Emby Music</p>
+              <p class="kicker">Aurora Music</p>
               <strong>私人音乐播放器</strong>
             </div>
           </div>
 
           <div class="intro-copy">
             <p class="kicker">欢迎</p>
-            <h1>连接你的 Emby 音乐服务器</h1>
-            <p>登录后进入音乐客户端内部，浏览专辑、歌曲，并直接播放 Emby 音乐库。</p>
+            <h1>选择您最舒适的方式</h1>
+            <p>登录后进入音乐客户端内部，浏览专辑、歌曲，并直接播放音乐库。</p>
           </div>
 
           <div class="cover-showcase" aria-hidden="true">
@@ -150,7 +150,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.173</span>
+            <span id="loginVersion">v0.93.182</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1122,6 +1122,9 @@
             </section>
 
             <div id="playlistTrackList" class="track-list large" aria-live="polite"></div>
+            <button id="loadMorePlaylistTracksButton" class="load-more-button" type="button" hidden>
+              加载更多歌曲
+            </button>
           </section>
 
           <section id="queuePanel" class="view-panel" data-panel="queue">
@@ -1356,7 +1359,7 @@
           </section>
 
           <section id="immersivePlayerPanel" class="view-panel immersive-player-panel" data-panel="immersivePlayer">
-            <section class="immersive-player-shell" aria-label="沉浸式播放">
+            <section class="immersive-player-shell" data-desktop-view="visualizer" data-mobile-view="cover" aria-label="沉浸式播放">
               <div id="immersiveBackdrop" class="immersive-backdrop cover-a" aria-hidden="true"></div>
 
               <header class="immersive-topbar">
@@ -1511,22 +1514,22 @@
                       <span id="immersiveMobileDeckQuality" class="immersive-mobile-track-quality">-</span>
                     </span>
                     <span id="immersiveMobileCurrentLyric" class="immersive-mobile-current-lyric" aria-live="polite" hidden></span>
-                    <span class="immersive-waveform" aria-hidden="true">
+                    <span class="immersive-waveform immersive-mobile-waveform" aria-hidden="true">
                       <svg class="immersive-waveform-svg" viewBox="0 0 360 108" preserveAspectRatio="none" focusable="false">
                         <defs>
-                          <linearGradient id="immersiveWaveLineGradient" x1="0" y1="0" x2="1" y2="0">
+                          <linearGradient id="immersiveMobileWaveLineGradient" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
                             <stop offset="16%" stop-color="rgba(255,244,229,0.72)"></stop>
                             <stop offset="48%" stop-color="rgba(255,252,246,0.98)"></stop>
                             <stop offset="78%" stop-color="rgba(255,232,197,0.72)"></stop>
                             <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
                           </linearGradient>
-                          <linearGradient id="immersiveWaveFillGradient" x1="0" y1="0" x2="0" y2="1">
+                          <linearGradient id="immersiveMobileWaveFillGradient" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stop-color="rgba(255,246,235,0.18)"></stop>
                             <stop offset="56%" stop-color="rgba(255,232,197,0.07)"></stop>
                             <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
                           </linearGradient>
-                          <linearGradient id="immersiveWaveRunnerGradient" x1="0" y1="0" x2="1" y2="0">
+                          <linearGradient id="immersiveMobileWaveRunnerGradient" x1="0" y1="0" x2="1" y2="0">
                             <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
                             <stop offset="48%" stop-color="rgba(255,255,255,0.96)"></stop>
                             <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
@@ -1538,6 +1541,37 @@
                         <path class="immersive-waveform-runner" d="M0 54 L360 54" pathLength="100"></path>
                       </svg>
                     </span>
+                  </span>
+                </button>
+
+                <button id="immersiveDesktopStageToggle" class="immersive-desktop-stage-toggle" type="button" aria-label="显示完整歌词" aria-pressed="false">
+                  <span id="immersiveDesktopCurrentLyric" class="immersive-desktop-current-lyric" aria-live="polite">播放歌曲后显示歌词。</span>
+                  <span class="immersive-waveform" aria-hidden="true">
+                    <svg class="immersive-waveform-svg" viewBox="0 0 360 108" preserveAspectRatio="none" focusable="false">
+                      <defs>
+                        <linearGradient id="immersiveWaveLineGradient" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
+                          <stop offset="16%" stop-color="rgba(255,244,229,0.72)"></stop>
+                          <stop offset="48%" stop-color="rgba(255,252,246,0.98)"></stop>
+                          <stop offset="78%" stop-color="rgba(255,232,197,0.72)"></stop>
+                          <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                        </linearGradient>
+                        <linearGradient id="immersiveWaveFillGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="rgba(255,246,235,0.18)"></stop>
+                          <stop offset="56%" stop-color="rgba(255,232,197,0.07)"></stop>
+                          <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                        </linearGradient>
+                        <linearGradient id="immersiveWaveRunnerGradient" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stop-color="rgba(255,246,235,0)"></stop>
+                          <stop offset="48%" stop-color="rgba(255,255,255,0.96)"></stop>
+                          <stop offset="100%" stop-color="rgba(255,246,235,0)"></stop>
+                        </linearGradient>
+                      </defs>
+                      <path class="immersive-waveform-fill" d="M0 54 L360 54 L360 108 L0 108 Z"></path>
+                      <path class="immersive-waveform-aura" d="M0 54 L360 54" pathLength="100"></path>
+                      <path class="immersive-waveform-line" d="M0 54 L360 54" pathLength="100"></path>
+                      <path class="immersive-waveform-runner" d="M0 54 L360 54" pathLength="100"></path>
+                    </svg>
                   </span>
                 </button>
 
@@ -2785,7 +2819,7 @@
 
     <script>
       (() => {
-        const version = "0.93.173";
+        const version = "0.93.182";
         const appName = "Emby Music Web";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -3163,13 +3197,19 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.173" defer></script>
-    <script src="./src/format.js?v=0.93.173" defer></script>
-    <script src="./src/lyrics.js?v=0.93.173" defer></script>
-    <script src="./src/emby-api.js?v=0.93.173" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.173" defer></script>
-    <script src="./src/storage.js?v=0.93.173" defer></script>
-    <script src="./app.js?v=0.93.173" defer></script>
+    <script src="./src/config.js?v=0.93.182" defer></script>
+    <script src="./src/format.js?v=0.93.182" defer></script>
+    <script src="./src/lyrics.js?v=0.93.182" defer></script>
+    <script src="./src/emby-api.js?v=0.93.182" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.182" defer></script>
+    <script src="./src/storage.js?v=0.93.182" defer></script>
+    <script src="./src/ui-helpers.js?v=0.93.182" defer></script>
+    <script src="./src/performance.js?v=0.93.182" defer></script>
+    <script src="./src/accessibility.js?v=0.93.182" defer></script>
+    <script src="./src/state-management.js?v=0.93.182" defer></script>
+    <script src="./src/theme.js?v=0.93.182" defer></script>
+    <script src="./src/color-extractor.js?v=0.93.182" defer></script>
+    <script src="./app.js?v=0.93.182" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>
