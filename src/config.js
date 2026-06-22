@@ -274,6 +274,7 @@ window.EmbyMusicConfig = {
     "MediaSources",
     "MediaType",
     "ParentIndexNumber",
+    "Path",
     "PlaylistItemId",
     "PrimaryImageAspectRatio",
     "ProductionYear",
@@ -282,4 +283,3 @@ window.EmbyMusicConfig = {
     "UserData",
   ].join(","),
 };
-

@@ -168,7 +168,7 @@
 - 歌词优先从 Emby 已返回的 `MediaSources` 文本附件/嵌入字段中解析，避免新增不稳定接口依赖；LRC 有时间轴时随播放高亮，TXT 则静态展示。
 - 分页加载使用 `StartIndex` 和 `Limit`，并在浏览器端按 `Id` 合并去重。
 - 艺人详情优先使用 Emby `ArtistIds`/`AlbumArtistIds` 查询，失败时回退到当前已加载的本地音乐库内容。
-- 歌单列表通过 `IncludeItemTypes=Playlist` 渐进加载，歌单详情优先走 `/Playlists/{id}/Items`，失败时回退到 `ParentId` 查询。
+- 歌单列表通过 `IncludeItemTypes=Playlist` 渐进加载，歌单详情使用 `ParentId` 普通只读查询，并通过 `StartIndex/Limit` 分页加载歌曲；打开详情时只取第一页，避免超大歌单一次性拖垮 Emby 或前端。
 - 创建歌单使用 Emby `POST /Playlists`，传入 `Name` 和 `MediaType=Audio`，成功后合并到本地列表。
 - 添加歌曲到歌单使用 Emby `POST /Playlists/{Id}/Items`；从歌单移除使用 `PlaylistItemId` 和 `DELETE /Playlists/{Id}/Items?EntryIds=...`，并保留 `POST /Items/Delete` 兼容兜底。
 - 歌单排序使用 Emby `POST /Playlists/{Id}/Items/{ItemId}/Move/{NewIndex}`；优先使用 `PlaylistItemId`，失败时回退歌曲 `Id`，提高不同服务器版本的兼容性。
