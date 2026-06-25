@@ -1,6 +1,6 @@
 window.EmbyMusicConfig = {
-  APP_NAME: "Emby Music Web",
-  APP_VERSION: "0.93.182",
+  APP_NAME: "Aurora Music",
+  APP_VERSION: "0.93.191",
   DEFAULT_SERVER_URL: "",
   DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174",
   DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: "http://103.24.216.51:5174",

@@ -83,12 +83,29 @@ function parseLyrics(text) {
     }
 
     const matches = [...line.matchAll(timePattern)];
+    if (!matches.length) {
+      const plainText = line.replace(inlineTimePattern, "").trim();
+      if (isLyricCreditOrMetadataLine(plainText)) {
+        return;
+      }
+
+      const plainLyricText = parseLyricTextPart(plainText);
+      if (isLyricCreditOrMetadataPayload(plainLyricText)) {
+        return;
+      }
+
+      plainLines.push({ time: null, ...plainLyricText });
+      return;
+    }
+
     const textPart = line.replace(timePattern, "").trim();
     const wordTimeline = parseInlineLyricWordTimeline(textPart, inlineTimePattern);
-    const lyricText = parseLyricTextPart(wordTimeline.text);
+    if (isLyricCreditOrMetadataLine(wordTimeline.text)) {
+      return;
+    }
 
-    if (!matches.length) {
-      plainLines.push({ time: null, ...parseLyricTextPart(line.replace(inlineTimePattern, "")) });
+    const lyricText = parseLyricTextPart(wordTimeline.text);
+    if (isLyricCreditOrMetadataPayload(lyricText)) {
       return;
     }
 
@@ -118,6 +135,33 @@ function parseLyrics(text) {
     isSynced: false,
     lines: plainLines,
   };
+}
+
+function isLyricCreditOrMetadataPayload(payload) {
+  if (!payload) {
+    return false;
+  }
+
+  return [
+    payload.originalText,
+    payload.text,
+  ].filter(Boolean).some(isLyricCreditOrMetadataLine);
+}
+
+function isLyricCreditOrMetadataLine(value) {
+  const text = String(value || "")
+    .trim()
+    .replace(/^[\s"'“”‘’《》【】\[\]（）()]+|[\s"'“”‘’《》【】\[\]（）()]+$/g, "");
+
+  if (!text) {
+    return true;
+  }
+
+  if (/^\[[a-z]+:.+\]$/i.test(text)) {
+    return true;
+  }
+
+  return /^(?:词|作词|歌词|曲|作曲|词曲|编曲|编配|制作人|制作|监制|混音|混音师|录音|录音师|母带|母带工程|和声|和音|吉他|贝斯|鼓|键盘|弦乐|配唱|出品|发行|OP|SP|企划|统筹|唱片公司|歌手|演唱|原唱|翻唱|特别鸣谢)\s*[:：]/i.test(text);
 }
 
 // 将 [A.B] 这类“点号、无冒号”时间戳规范化为标准 [mm:ss.xx]，使其能被剥离前缀并参与滚动同步。

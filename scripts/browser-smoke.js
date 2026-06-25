@@ -16,6 +16,7 @@ const OLD_PROFILE_CLEANUP_LIMIT = Number(process.env.BROWSER_SMOKE_OLD_PROFILE_C
 const RUN_BROWSER_SMOKE = process.env.BROWSER_SMOKE_RUN === "1";
 const SKIP_BROWSER_SMOKE = process.env.SKIP_BROWSER_SMOKE === "1" || !RUN_BROWSER_SMOKE;
 const CHECK_MOBILE_VIEWPORT = process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1";
+const SCREENSHOT_DIR = process.env.BROWSER_SMOKE_SCREENSHOT_DIR || "";
 const CHROME_PATHS = [
   process.env.CHROME_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -26,6 +27,7 @@ const CHECKS = [
   ...(CHECK_MOBILE_VIEWPORT
     ? [
       { name: "mobile", width: 390, height: 844 },
+      { name: "tablet-narrow", width: 768, height: 920 },
       { name: "mobile-narrow", width: 360, height: 780 },
     ]
     : []),
@@ -541,6 +543,17 @@ async function runBrowserCheck(cdp, check) {
     });
     await waitForAppReady(cdp, check);
     await delay(250);
+    if (SCREENSHOT_DIR) {
+      fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+      await cdp.send("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+        captureBeyondViewport: true,
+      }).then((result) => {
+        const fileName = `browser-smoke-${check.name}.png`;
+        fs.writeFileSync(path.join(SCREENSHOT_DIR, fileName), Buffer.from(result.data, "base64"));
+      });
+    }
 
     const evaluation = await cdp.send("Runtime.evaluate", {
       awaitPromise: true,
@@ -625,6 +638,8 @@ async function runBrowserCheck(cdp, check) {
 
 function checkPageState(check, page) {
   const label = `[${check.name}]`;
+  const isPhoneCheck = check.name.startsWith("mobile");
+  const isMobileImmersiveLayoutCheck = isPhoneCheck;
   const lyricOffset = page.lyricOffset || {};
   const lyricProgress = page.lyricProgress || {};
   const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
@@ -671,7 +686,7 @@ function checkPageState(check, page) {
     && Number(layer.zIndex || 0) > Number(layer.panelZIndex || 0)
     && /blur/i.test(layer.backdropFilter || "");
 
-  assert(page.title === "Emby Music Web", `${label} expected title Emby Music Web, got ${page.title || "-"}`);
+  assert(page.title === "Aurora Music", `${label} expected title Aurora Music, got ${page.title || "-"}`);
   assert(["interactive", "complete"].includes(page.readyState), `${label} document did not become interactive`);
   assert(page.appReady, `${label} main app did not report ready`);
   assert(!page.appError, `${label} main app reported initialization error: ${page.appError || "-"}`);
@@ -692,7 +707,7 @@ function checkPageState(check, page) {
     assert(page.hasPlayerBar, `${label} missing player bar`);
     assert(page.playerbarVisible, `${label} player bar is not visible`);
     assert((page.playerbarRect?.height || 0) >= 48, `${label} player bar height is too small: ${page.playerbarRect?.height || 0}`);
-    if (check.name.startsWith("mobile")) {
+    if (isPhoneCheck) {
       assert(page.mobileBottomNavVisible, `${label} mobile bottom navigation is not visible`);
       assert((page.mobileBottomNavRect?.height || 0) >= 44, `${label} mobile bottom navigation height is too small: ${page.mobileBottomNavRect?.height || 0}`);
     } else {
@@ -870,7 +885,7 @@ function checkPageState(check, page) {
   assert(isNonDecreasing(lyricJitterProtection.boundaryThirdWordProgressSequence), `${label} immersive lyric next word should not lose progress after a small backward jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert(isNonDecreasing(lyricJitterProtection.nowPlayingSecondWordProgressSequence), `${label} now-playing lyric progress should not regress during playback clock jitter: ${JSON.stringify(lyricJitterProtection)}`);
   assert((lyricJitterProtection.resetAfterForceRefreshProgress?.[1] || 0) === 0, `${label} forced lyric refresh should still allow progress to move back after seek/offset changes: ${JSON.stringify(lyricJitterProtection)}`);
-  if (!check.name.startsWith("mobile")) {
+  if (!isMobileImmersiveLayoutCheck) {
     assert(desktopImmersiveLayout.before?.view === "visualizer", `${label} desktop immersive should default to current lyric and visualizer: ${JSON.stringify(desktopImmersiveLayout.before)}`);
     assert(desktopImmersiveLayout.before?.currentLyricVisible === true, `${label} desktop immersive current lyric should be visible by default: ${JSON.stringify(desktopImmersiveLayout.before)}`);
     assert(desktopImmersiveLayout.before?.fullLyricVisible === false, `${label} desktop immersive full lyrics should be hidden in default view: ${JSON.stringify(desktopImmersiveLayout.before)}`);
@@ -957,12 +972,16 @@ function checkPageState(check, page) {
   assert(moreActionSheet.lyricSettingsSavePendingBeforeClose === true, `${label} lyric font-size drag should coalesce save before closing: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsSavePendingAfterClose === false, `${label} closing lyric settings should flush pending lyric saves: ${JSON.stringify(moreActionSheet)}`);
   assert(Number(moreActionSheet.lyricSettingsStoredFontScaleAfterClose) === 1.25, `${label} closing lyric settings should persist the selected font scale immediately: ${JSON.stringify(moreActionSheet)}`);
-  if (check.name.startsWith("mobile")) {
+  if (isPhoneCheck) {
     assert((moreActionSheet.playerStyleCardRect?.height || 0) >= (moreActionSheet.viewportHeight || 0) * 0.55, `${label} mobile player style modal should open as a large half-screen sheet: ${JSON.stringify(moreActionSheet)}`);
     assert(moreActionSheet.playerStyleStackOverflowY === "auto" && moreActionSheet.playerStyleStackScrollbarWidth === "none", `${label} mobile player style modal should keep content scrollable with hidden scrollbars: ${JSON.stringify(moreActionSheet)}`);
+  }
+
+  if (isMobileImmersiveLayoutCheck) {
     assert(mobileImmersiveLayout.before?.view === "cover", `${label} mobile immersive should default to cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.coverVisible === true, `${label} mobile immersive cover/visualizer should be visible by default: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.lyricVisible === false, `${label} mobile immersive lyrics should be hidden in cover view: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert(mobileImmersiveLayout.before?.desktopStageVisible === false, `${label} mobile immersive cover should not show the desktop current lyric stage: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.offsetValueVisible === false, `${label} mobile immersive should hide the lyric offset numeric value: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.topTitleVisible === false, `${label} mobile immersive should not show the top title: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.currentLyricVisible === true, `${label} mobile immersive cover should show the current lyric above the visualizer: ${JSON.stringify(mobileImmersiveLayout.before)}`);
@@ -978,8 +997,10 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.before?.waveformVisible === true, `${label} mobile immersive waveform should be visible: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformPathCount >= 3, `${label} mobile immersive should render waveform paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.waveformHasCurvePath === true, `${label} mobile immersive waveform should use smooth curve paths: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert((mobileImmersiveLayout.before?.waveformRect?.width || 0) >= 320, `${label} mobile immersive waveform is too narrow: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert((mobileImmersiveLayout.before?.waveformRect?.height || 0) >= 70, `${label} mobile immersive waveform is too short: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.width || 0) >= 220, `${label} mobile immersive waveform should keep the desktop-style compact width: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.width || 0) <= 300, `${label} mobile immersive waveform should not stretch wider than the desktop-style visualizer: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.height || 0) >= 42, `${label} mobile immersive waveform should keep the desktop-style height: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.waveformRect?.height || 0) <= 70, `${label} mobile immersive waveform should not use the old oversized mobile height: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(Math.abs((mobileImmersiveLayout.before?.coverRect?.centerX || 0) - (mobileImmersiveLayout.before?.viewportCenterX || 0)) <= 6, `${label} mobile immersive cover should be centered: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(Math.abs((mobileImmersiveLayout.before?.trackCopyRect?.centerX || 0) - (mobileImmersiveLayout.before?.viewportCenterX || 0)) <= 6, `${label} mobile immersive track copy should be centered: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(Math.abs((mobileImmersiveLayout.before?.waveformRect?.centerX || 0) - (mobileImmersiveLayout.before?.viewportCenterX || 0)) <= 6, `${label} mobile immersive waveform should be centered: ${JSON.stringify(mobileImmersiveLayout.before)}`);
@@ -994,6 +1015,7 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.lyricVisible === true, `${label} mobile immersive lyrics should show after tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.coverVisible === false, `${label} mobile immersive cover should hide after lyric tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
+    assert(mobileImmersiveLayout.afterToggle?.desktopStageVisible === false, `${label} mobile immersive lyric view should not show the desktop current lyric stage: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topActionsCollapsed === true, `${label} mobile immersive lyric view should collapse top actions: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.topRevealVisible === true, `${label} mobile immersive lyric view should show the reveal dot: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.closeVisible === true, `${label} mobile immersive lyric view should keep the top-right exit button visible: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);

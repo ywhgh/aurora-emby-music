@@ -1664,8 +1664,8 @@ function createBrowserSmokeTrack(options = {}) {
     Name: options.name || "Browser Smoke Lyric Track",
     Album: "Smoke Tests",
     AlbumId: "browser-smoke-album",
-    Artists: ["Emby Music Web"],
-    ArtistItems: [{ Id: "browser-smoke-artist", Name: "Emby Music Web" }],
+    Artists: ["Aurora Music"],
+    ArtistItems: [{ Id: "browser-smoke-artist", Name: "Aurora Music" }],
     RunTimeTicks: secondsToTicks(options.durationSeconds || 12),
     UserData: {},
     LyricsText: lyricsText,
@@ -3295,6 +3295,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     view: shell?.getAttribute("data-mobile-view") || "",
     coverVisible: isVisibleElement(coverToggle),
     lyricVisible: isVisibleElement(lyricFocus),
+    desktopStageVisible: isVisibleElement(immersiveDesktopStageToggle),
     offsetValueVisible: isVisibleElement(offsetValue),
     waveformVisible: isVisibleElement(coverToggle?.querySelector(".immersive-waveform")),
     waveformRect: getRect(coverToggle?.querySelector(".immersive-waveform")),
@@ -3343,6 +3344,7 @@ function collectBrowserSmokeMobileImmersiveState() {
     view: shell?.getAttribute("data-mobile-view") || "",
     coverVisible: isVisibleElement(coverToggle),
     lyricVisible: isVisibleElement(lyricFocus),
+    desktopStageVisible: isVisibleElement(immersiveDesktopStageToggle),
     ariaPressed: coverToggle?.getAttribute("aria-pressed") || "",
     topActionsCollapsed: shell?.classList.contains("is-top-actions-collapsed") || false,
     topRevealVisible: isVisibleElement(immersiveTopRevealButton),
@@ -8516,7 +8518,7 @@ function renderNowPlaying() {
   if (!track) {
     nowPlayingCover.classList.remove("media-video-host");
     nowPlayingTitle.textContent = "等待选择音乐";
-    nowPlayingArtist.textContent = "Emby Music Web";
+    nowPlayingArtist.textContent = "Aurora Music";
     nowPlayingAlbum.textContent = "-";
     nowPlayingArtist.disabled = true;
     nowPlayingAlbum.disabled = true;
@@ -8627,30 +8629,34 @@ function setMobileImmersiveStageView(view = "cover", options = {}) {
   const nextView = view === "lyrics" ? "lyrics" : "cover";
   const shell = immersivePlayerPanel?.querySelector(".immersive-player-shell");
   const previousView = state.mobileImmersiveView;
+  const shouldAnimate = options.animate !== false && previousView !== nextView;
+  const transitionClass = nextView === "lyrics" ? "is-mobile-stage-entering-lyrics" : "is-mobile-stage-entering-cover";
 
   state.mobileImmersiveView = nextView;
   shell?.setAttribute("data-mobile-view", nextView);
   immersiveMobileStageToggle?.setAttribute("aria-pressed", nextView === "lyrics" ? "true" : "false");
   immersiveMobileStageToggle?.setAttribute("aria-label", nextView === "lyrics" ? "显示封面和音乐律动" : "显示歌词");
   setImmersiveTopActionsCollapsed(nextView === "lyrics");
-  if (shell && options.animate === false) {
+  if (shell) {
     shell.classList.remove("is-title-docking", "is-title-undocking");
-  } else if (shell && previousView !== nextView) {
-    shell.classList.remove("is-title-docking", "is-title-undocking");
-    void shell.offsetWidth;
-    shell.classList.add(nextView === "lyrics" ? "is-title-docking" : "is-title-undocking");
-    window.setTimeout(() => {
-      shell.classList.remove("is-title-docking", "is-title-undocking");
-    }, 440);
+    shell.classList.remove("is-mobile-stage-entering-lyrics", "is-mobile-stage-entering-cover");
+    if (shouldAnimate) {
+      void shell.offsetWidth;
+      shell.classList.add(transitionClass);
+      window.setTimeout(() => {
+        shell?.classList.remove(transitionClass);
+      }, 420);
+    }
   }
   if (nextView === "lyrics") {
-    triggerImmersiveLyricExpansion(options.animate !== false);
+    triggerImmersiveLyricExpansion(shouldAnimate);
     updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
     requestAnimationFrame(() => {
       updateImmersiveLyricProgress(getVisibleLyricSyncTimeSeconds(), true, true);
     });
   } else {
     shell?.classList.remove("is-lyrics-expanding");
+    renderIdleImmersiveWaveform();
   }
 }
 
@@ -8826,16 +8832,16 @@ function renderImmersivePlayer(track = state.currentTrack) {
       immersiveMobileTitle.textContent = "等待选择音乐";
     }
     if (immersiveMobileArtist) {
-      immersiveMobileArtist.textContent = "Emby Music Web";
+      immersiveMobileArtist.textContent = "Aurora Music";
     }
     if (immersiveMobileDeckTitle) {
       immersiveMobileDeckTitle.textContent = "等待选择音乐";
     }
     if (immersiveMobileDeckSubtitle) {
-      immersiveMobileDeckSubtitle.textContent = "Emby Music Web";
+      immersiveMobileDeckSubtitle.textContent = "Aurora Music";
     }
     renderImmersiveMobileDeckQuality(null);
-    immersiveArtist.textContent = "Emby Music Web";
+    immersiveArtist.textContent = "Aurora Music";
     immersiveAlbum.textContent = "-";
     immersiveArtist.disabled = true;
     immersiveAlbum.disabled = true;
@@ -8885,6 +8891,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
   renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, track);
   renderImmersiveMobileCurrentLyric(getCurrentTopLyricLine());
   renderImmersiveLyricFocus();
+  renderIdleImmersiveWaveform();
 }
 
 function renderImmersiveMobileDeckQuality(track = state.currentTrack) {
@@ -8988,7 +8995,6 @@ function renderLyrics(track) {
   renderImmersiveLyricFocus();
   updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   renderNowLyricFocus();
-  maybeAutoShowImmersiveLyrics();
 }
 
 function appendLyricLineContent(container, line, options = {}) {
@@ -19769,7 +19775,7 @@ function updateMediaSessionMetadata(track) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.Name || "未命名歌曲",
       artist: getArtists(track) || "未知艺人",
-      album: track.Album || "Emby Music",
+      album: track.Album || "Aurora Music",
       artwork,
     });
   } catch {
@@ -21121,7 +21127,7 @@ function updatePlayerMeta(track) {
   document.body.classList.toggle("has-current-track", Boolean(track));
   updateMediaElementPresentation(track);
   playerTitle.textContent = track.Name || "未命名歌曲";
-  playerSubtitle.textContent = [getArtists(track), track.Album].filter(Boolean).join(" · ") || "Emby Music";
+  playerSubtitle.textContent = [getArtists(track), track.Album].filter(Boolean).join(" · ") || "Aurora Music";
   renderPlayerPlaybackMeta(track);
   playerCover.replaceChildren();
   playerCover.className = "mini-cover";
@@ -21354,7 +21360,7 @@ function resetPlayerMeta() {
     state.trackChangeTimer = null;
   }
   playerTitle.textContent = "等待选择音乐";
-  playerSubtitle.textContent = "Emby Music Web";
+  playerSubtitle.textContent = "Aurora Music";
   renderPlayerPlaybackMeta(null);
   playerCover.replaceChildren();
   playerCover.className = "mini-cover";
@@ -21783,7 +21789,6 @@ function handleAudioRateChange() {
 function refreshLyricsForPlaybackResume(fallbackSeconds = getAudioCurrentTimeSeconds()) {
   updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(fallbackSeconds));
   syncLyricProgressLoop();
-  maybeAutoShowImmersiveLyrics();
 }
 
 function setPlaybackBuffering(isBuffering) {
@@ -21998,6 +22003,10 @@ function syncTrackFluidRows(activeTrackId, isPlaying) {
 
 function getImmersiveWaveformParts() {
   const root = getActiveImmersiveWaveformRoot();
+  return getImmersiveWaveformPartsFromRoot(root);
+}
+
+function getImmersiveWaveformPartsFromRoot(root) {
   return {
     root,
     aura: root?.querySelector(".immersive-waveform-aura") || null,
@@ -22007,10 +22016,16 @@ function getImmersiveWaveformParts() {
   };
 }
 
-function getActiveImmersiveWaveformRoot() {
-  const roots = [
+function getImmersiveWaveformRoots() {
+  return [
     immersivePlayerPanel?.querySelector(".immersive-desktop-stage-toggle .immersive-waveform"),
     immersivePlayerPanel?.querySelector(".immersive-mobile-stage-toggle .immersive-waveform"),
+  ].filter(Boolean);
+}
+
+function getActiveImmersiveWaveformRoot() {
+  const roots = [
+    ...getImmersiveWaveformRoots(),
     document.querySelector(".immersive-waveform"),
   ].filter(Boolean);
 
@@ -22132,6 +22147,10 @@ function stopImmersiveVisualizer() {
   immersiveVisualizerLastStats = null;
 }
 
+function renderIdleImmersiveWaveform() {
+  renderImmersiveWaveform(getImmersiveWaveformFallbackLevels(72, getMonotonicNowMs() / 1000, { idle: true }), 0.18);
+}
+
 function updateImmersiveVisualizerFrame() {
   immersiveVisualizerFrame = 0;
 
@@ -22190,8 +22209,8 @@ function updateImmersiveVisualizerFrame() {
 }
 
 function renderImmersiveWaveform(levels, peak = 0.4) {
-  const waveform = getImmersiveWaveformParts();
-  if (!waveform.line || !waveform.fill || !levels.length) {
+  const roots = getImmersiveWaveformRoots();
+  if (!roots.length || !levels.length) {
     return;
   }
 
@@ -22209,12 +22228,21 @@ function renderImmersiveWaveform(levels, peak = 0.4) {
     return { x, y };
   });
   const path = buildSmoothWaveformPath(points);
+  const fillPath = `${path} L${width.toFixed(1)} ${height.toFixed(1)} L0 ${height.toFixed(1)} Z`;
+  const glow = clamp((peak - 0.1) / 0.9, 0, 1).toFixed(3);
 
-  waveform.line.setAttribute("d", path);
-  waveform.aura?.setAttribute("d", path);
-  waveform.runner?.setAttribute("d", path);
-  waveform.fill.setAttribute("d", `${path} L${width.toFixed(1)} ${height.toFixed(1)} L0 ${height.toFixed(1)} Z`);
-  waveform.root?.style.setProperty("--wave-glow", clamp((peak - 0.1) / 0.9, 0, 1).toFixed(3));
+  roots.forEach((root) => {
+    const waveform = getImmersiveWaveformPartsFromRoot(root);
+    if (!waveform.line || !waveform.fill) {
+      return;
+    }
+
+    waveform.line.setAttribute("d", path);
+    waveform.aura?.setAttribute("d", path);
+    waveform.runner?.setAttribute("d", path);
+    waveform.fill.setAttribute("d", fillPath);
+    waveform.root?.style.setProperty("--wave-glow", glow);
+  });
 }
 
 function buildSmoothWaveformPath(points) {
@@ -22497,7 +22525,7 @@ function switchView(view, options = {}) {
       immersiveShell?.classList.remove("is-page-entering");
     }, 520);
     setMobileImmersiveStageView("cover", { animate: false });
-    maybeAutoShowImmersiveLyrics();
+    renderIdleImmersiveWaveform();
     updateImmersiveFullscreenLabel();
   }
   if (nextView !== "library") {

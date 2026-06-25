@@ -182,13 +182,16 @@ function checkCss() {
   assert(css.includes(".lyric-line:hover,\n.lyric-line:focus-visible"), "Lyric hover fog should apply to every lyric row");
   assert(!css.includes(".lyric-line[role=\"button\"]:hover,\n.lyric-line[role=\"button\"]:focus-visible"), "Lyric hover fog should not be limited to seekable rows");
   assert(/rgba\(255, 255, 255, 0\.03\) 25%/.test(lyricHoverRule), "Inactive lyric hover fog should stay subtle and feathered");
-  assert(/rgba\(255, 255, 255, 0\.08\) 20%/.test(lyricActiveRule), "Active lyric fog should use a brighter feathered center");
-  assert(/-webkit-backdrop-filter:\s*blur\(12px\);/.test(lyricActiveRule), "Active lyric fog should include webkit backdrop blur");
-  assert(/backdrop-filter:\s*blur\(12px\);/.test(lyricActiveRule), "Active lyric fog should include backdrop blur");
+  assert(/background:\s*transparent;/.test(lyricActiveRule), "Active lyric row should stay transparent");
+  assert(/-webkit-backdrop-filter:\s*none;/.test(lyricActiveRule), "Active lyric row should not use backdrop blur");
+  assert(/backdrop-filter:\s*none;/.test(lyricActiveRule), "Active lyric row should not use backdrop blur");
   assert(/width:\s*100%;/.test(immersiveLyricBaseRule), "Immersive lyric rows should span the full row width");
   assert(/background:\s*transparent;/.test(immersiveLyricBaseRule), "Inactive immersive lyric rows should stay background-transparent");
   assert(/border-radius:\s*0;/.test(immersiveLyricBaseRule), "Immersive lyric rows should not use rounded rectangle backgrounds");
-  assert(/width:\s*100%;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should span the full row width");
+  assert(
+    /\.immersive-lyric-list \.lyric-line\.active,\s*\.immersive-lyric-list p\.active \{[\s\S]*?width:\s*100%;/.test(css),
+    "Active immersive lyric fog should span the full row width"
+  );
   assert(/box-shadow:\s*none;/.test(immersiveLyricActiveRule), "Active immersive lyric fog should not add a framed shadow");
   assert(css.includes("body.topbar-lyric-active .top-tabs .tab"), "Topbar lyric mode styles should remain available behind the display flag");
   assert(css.includes("body.topbar-lyric-active .top-tabs:hover .tab"), "Topbar lyric hover restore styles should remain available behind the display flag");
@@ -286,6 +289,19 @@ function checkLyrics() {
   const nearTimestampBilingualLine = parseLyrics("[00:00.00]Hello world\n[00:00.01]你好世界").lines[0];
   assert(nearTimestampBilingualLine?.originalText === "Hello world", `Near-timestamp bilingual originalText expected Hello world, got ${nearTimestampBilingualLine?.originalText}`);
   assert(nearTimestampBilingualLine?.text === "你好世界", `Near-timestamp bilingual translated text expected 你好世界, got ${nearTimestampBilingualLine?.text}`);
+  const creditFilteredLines = parseLyrics([
+    "[00:00.00]李荣浩 - 不将就",
+    "[00:08.00]词：李荣浩/黄伟文",
+    "[00:12.00]曲：李荣浩",
+    "[00:16.00]编曲：Edward Chan",
+    "[00:20.00]制作人：李荣浩",
+    "[00:24.00]你的暴烈太温柔",
+    "[00:24.01]Your intensity is too gentle",
+  ].join("\n")).lines;
+  assert(!creditFilteredLines.some((line) => /^(?:词|曲|编曲|制作人)[:：]/.test(line.text || line.originalText || "")), "Timed lyric credits should be filtered out");
+  assert(creditFilteredLines.some((line) => line.originalText === "Your intensity is too gentle" && line.text === "你的暴烈太温柔"), "Real bilingual lyric should remain after credit filtering");
+  const plainCreditFilteredLines = parseLyrics("词：李荣浩/黄伟文\n曲：李荣浩\n你的暴烈太温柔").lines;
+  assert(plainCreditFilteredLines.length === 1 && plainCreditFilteredLines[0]?.text === "你的暴烈太温柔", "Plain lyric credits should be filtered out");
   const inlineBilingualEnhancedLine = parseLyrics("[00:00.00]<0.00>Hello <0.60>world <1.20>/ <1.40>你<2.00>好").lines[0];
   assert(inlineBilingualEnhancedLine?.originalText === "Hello world", `Inline bilingual enhanced originalText expected Hello world, got ${inlineBilingualEnhancedLine?.originalText}`);
   assert(inlineBilingualEnhancedLine?.text === "你好", `Inline bilingual enhanced translated text expected 你好, got ${inlineBilingualEnhancedLine?.text}`);
@@ -624,8 +640,8 @@ function checkLyrics() {
   assert(css.includes(".immersive-mobile-current-lyric"), "Mobile immersive current lyric should have scoped styling");
   assert(css.includes(".immersive-mobile-current-lyric-translated") && css.includes(".immersive-mobile-current-lyric-single"), "Mobile immersive current lyric should style bilingual and single-line states");
   assert(css.includes(".immersive-desktop-current-lyric-translated") && css.includes(".immersive-desktop-current-lyric-original"), "Desktop immersive current lyric should style bilingual original and translated lines");
-  assert(css.includes(".immersive-player-shell .immersive-mobile-stage-toggle .immersive-waveform") && css.includes("display: none !important"), "Desktop immersive view should hide the mobile full-width waveform");
-  assert(css.includes("width: min(52%, 27rem) !important"), "Desktop immersive waveform should stay narrower than the lyric region");
+  assert(/\.immersive-mobile-title,\s*\.immersive-mobile-stage-toggle,\s*\.immersive-desktop-stage-toggle \{\s*display:\s*none;/.test(css), "Desktop immersive view should keep the mobile stage toggle hidden");
+  assert(/\.immersive-desktop-stage-toggle \.immersive-waveform \{\s*[\s\S]*?width:\s*min\(52%, 27rem\);/.test(css), "Desktop immersive waveform should stay narrower than the lyric region");
   assert(css.includes(".immersive-player-shell .immersive-waveform-fill") && css.includes("opacity: 0;"), "Desktop immersive waveform should not render the gray filled area under the line");
   assert(css.includes("body.immersive-player-open .modal-backdrop") && css.includes("z-index: 360"), "Immersive modals should render above the immersive player layer");
   assert(css.includes("body.immersive-player-open .audio-quality-card") && css.includes("background-color: rgba(8, 8, 10, 0.9)"), "Immersive modal cards should use the warm dark glass style");
