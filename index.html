@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Aurora Music" />
     <title>Aurora Music</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.191" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.191" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.191" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.202" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.202" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.202" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -28,6 +28,31 @@
             <p class="kicker">欢迎</p>
             <h1>选择您最舒适的方式</h1>
             <p>登录后进入音乐客户端内部，浏览专辑、歌曲，并直接播放音乐库。</p>
+          </div>
+
+          <div class="login-hero" aria-hidden="true">
+            <p class="login-hero-eyebrow">欢迎回来</p>
+            <h1 class="login-hero-title">听见你的<em>私人音乐库</em></h1>
+            <p class="login-hero-sub">连接服务器，畅享专辑 · 歌单 · 电台。</p>
+          </div>
+
+          <div class="login-vinyl" aria-hidden="true">
+            <div class="login-vinyl-disc">
+              <span class="login-vinyl-label">A</span>
+            </div>
+            <div class="login-vinyl-eq" aria-hidden="true">
+              <i style="--d: 0s"></i>
+              <i style="--d: -.3s"></i>
+              <i style="--d: -.6s"></i>
+              <i style="--d: -.15s"></i>
+              <i style="--d: -.45s"></i>
+              <i style="--d: -.75s"></i>
+              <i style="--d: -.2s"></i>
+            </div>
+            <div class="login-vinyl-meta">
+              <strong>Now Playing</strong>
+              <span>Aurora 私人电台</span>
+            </div>
           </div>
 
           <div class="cover-showcase" aria-hidden="true">
@@ -68,9 +93,32 @@
               <span>Radio</span>
             </div>
           </div>
+
+          <div class="login-entry" aria-label="开始登录">
+            <div
+              class="login-source-mode login-entry-mode"
+              role="radiogroup"
+              aria-label="音源模式"
+              data-login-mode-swipe
+            >
+              <button type="button" data-login-source-mode="external" aria-pressed="false">音源桥</button>
+              <button type="button" data-login-source-mode="emby" aria-pressed="false">Emby</button>
+              <span class="login-entry-mode-thumb" aria-hidden="true"></span>
+            </div>
+            <button id="openLoginSheetButton" class="primary-button login-entry-button" type="button">
+              <span>登录</span>
+            </button>
+          </div>
+
+          <p class="login-entry-version" aria-hidden="true">v0.93.202</p>
         </section>
 
+        <div class="login-sheet-backdrop" data-close-login-sheet hidden></div>
+
         <form id="connectForm" class="login-card" action="javascript:void(0)" method="post" onsubmit="return false">
+          <button type="button" class="login-sheet-handle" data-close-login-sheet aria-label="收起登录面板">
+            <span></span>
+          </button>
           <div class="form-heading">
             <p class="kicker">服务器登录</p>
             <h2 id="loginTitle">登录 Emby</h2>
@@ -150,7 +198,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.191</span>
+            <span id="loginVersion">v0.93.202</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1407,24 +1455,6 @@
                     </svg>
                     <span class="sr-only">皮肤样式：原始</span>
                   </button>
-                  <button id="immersiveQualityButton" class="immersive-round-button" type="button" aria-label="音质" title="音质">
-                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 14v-4"></path>
-                      <path d="M8 18V6"></path>
-                      <path d="M12 21V3"></path>
-                      <path d="M16 18V6"></path>
-                      <path d="M20 14v-4"></path>
-                    </svg>
-                    <span class="sr-only">音质</span>
-                  </button>
-                  <button id="immersiveDownloadButton" class="immersive-round-button" type="button" aria-label="下载当前音乐" title="下载当前音乐" disabled>
-                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 3v12"></path>
-                      <path d="m7 10 5 5 5-5"></path>
-                      <path d="M5 21h14"></path>
-                    </svg>
-                    <span class="sr-only">下载当前音乐</span>
-                  </button>
                   <button id="immersiveMoreButton" class="immersive-round-button" type="button" aria-label="更多沉浸播放操作" title="更多沉浸播放操作">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <circle cx="5" cy="12" r="1.5"></circle>
@@ -1685,6 +1715,16 @@
                     </svg>
                     <span class="sr-only">收藏</span>
                   </button>
+                  <button id="immersiveQualityButton" class="immersive-control-button" type="button" aria-label="音质" title="音质">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 14v-4"></path>
+                      <path d="M8 18V6"></path>
+                      <path d="M12 21V3"></path>
+                      <path d="M16 18V6"></path>
+                      <path d="M20 14v-4"></path>
+                    </svg>
+                    <span class="sr-only">音质</span>
+                  </button>
                   <button id="immersivePrevButton" class="immersive-control-button" type="button" aria-label="上一首" title="上一首" disabled>
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M6 6v12"></path>
@@ -1701,6 +1741,14 @@
                       <path d="m6 6 8.5 6L6 18V6Z"></path>
                     </svg>
                     <span class="sr-only">下一首</span>
+                  </button>
+                  <button id="immersiveDownloadButton" class="immersive-control-button" type="button" aria-label="下载当前音乐" title="下载当前音乐" disabled>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 3v12"></path>
+                      <path d="m7 10 5 5 5-5"></path>
+                      <path d="M5 21h14"></path>
+                    </svg>
+                    <span class="sr-only">下载当前音乐</span>
                   </button>
                   <button id="immersiveZenButton" class="immersive-control-button immersive-zen-button" type="button" aria-label="开启纯享无干扰模式" title="开启纯享无干扰模式" aria-pressed="false">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -2136,10 +2184,25 @@
                   <p class="kicker">操作</p>
                   <h3 id="trackActionSheetTitle">歌曲操作</h3>
                 </div>
+                <div class="action-sheet-heading-nav" aria-label="侧栏历史导航">
+                  <button id="trackActionSheetBack" class="action-sheet-header-nav-button" type="button" aria-label="返回" title="返回" disabled>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </button>
+                  <button id="trackActionSheetForward" class="action-sheet-header-nav-button" type="button" aria-label="前进" title="前进" disabled>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
                 <button id="trackActionSheetClose" class="icon-button" type="button" aria-label="关闭">×</button>
               </div>
               <p id="trackActionSheetSubtitle" class="modal-subtitle">-</p>
-              <div id="trackActionSheetList" class="action-sheet-list"></div>
+              <div class="action-sheet-layout">
+                <div id="trackActionSheetList" class="action-sheet-list"></div>
+                <aside id="trackActionSheetDetail" class="action-sheet-detail" aria-live="polite" hidden></aside>
+              </div>
             </section>
           </div>
           <div id="audioQualityModal" class="modal-backdrop" hidden>
@@ -2195,6 +2258,18 @@
                   <h3 id="lyricSettingsTitle">歌词设置</h3>
                   <p id="lyricSettingsSubtitle" class="modal-subtitle">调整沉浸式歌词的阅读、同步和自动展示方式。</p>
                 </div>
+                <div class="action-sheet-heading-nav lyric-settings-heading-nav" aria-label="侧栏历史导航">
+                  <button class="action-sheet-header-nav-button" type="button" aria-label="返回" title="返回" disabled>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m15 18-6-6 6-6"></path>
+                    </svg>
+                  </button>
+                  <button class="action-sheet-header-nav-button" type="button" aria-label="前进" title="前进" disabled>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m9 18 6-6-6-6"></path>
+                    </svg>
+                  </button>
+                </div>
                 <button id="lyricSettingsClose" class="audio-quality-close-button" type="button" aria-label="关闭歌词设置">
                   <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 6l12 12"></path>
@@ -2210,17 +2285,24 @@
                   </span>
                   <input id="lyricFontSizeRange" type="range" min="85" max="125" step="5" value="100" aria-label="歌词字体大小" />
                 </label>
-                <label class="lyric-settings-row">
+                <div class="lyric-settings-row">
                   <span>
                     <strong>歌词字体</strong>
                     <small>只影响沉浸式歌词</small>
                   </span>
-                  <select id="lyricFontFamilySelect" aria-label="歌词字体">
-                    <option value="system">系统默认</option>
-                    <option value="rounded">柔和圆体</option>
-                    <option value="serif">温润衬线</option>
-                    <option value="mono">等宽歌词</option>
-                  </select>
+                  <button id="lyricFontFamilyButton" class="lyric-settings-select-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="歌词字体">
+                    <span id="lyricFontFamilyValue">系统默认</span>
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m6 9 6 6 6-6"></path>
+                    </svg>
+                  </button>
+                </div>
+                <label class="lyric-settings-row lyric-settings-range">
+                  <span>
+                    <strong>字与字间距</strong>
+                    <small id="lyricLetterSpacingValue">标准</small>
+                  </span>
+                  <input id="lyricLetterSpacingRange" type="range" min="0" max="12" step="1" value="0" aria-label="字与字间距" />
                 </label>
                 <div class="lyric-settings-row lyric-settings-offset">
                   <span>
@@ -2819,7 +2901,7 @@
 
     <script>
       (() => {
-        const version = "0.93.191";
+        const version = "0.93.202";
         const appName = "Aurora Music";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -3197,20 +3279,22 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.191" defer></script>
-    <script src="./src/format.js?v=0.93.191" defer></script>
-    <script src="./src/lyrics.js?v=0.93.191" defer></script>
-    <script src="./src/emby-api.js?v=0.93.191" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.191" defer></script>
-    <script src="./src/storage.js?v=0.93.191" defer></script>
-    <script src="./src/ui-helpers.js?v=0.93.191" defer></script>
-    <script src="./src/performance.js?v=0.93.191" defer></script>
-    <script src="./src/accessibility.js?v=0.93.191" defer></script>
-    <script src="./src/state-management.js?v=0.93.191" defer></script>
-    <script src="./src/theme.js?v=0.93.191" defer></script>
-    <script src="./src/color-extractor.js?v=0.93.191" defer></script>
-    <script src="./app.js?v=0.93.191" defer></script>
+    <script src="./src/config.js?v=0.93.202" defer></script>
+    <script src="./src/format.js?v=0.93.202" defer></script>
+    <script src="./src/lyrics.js?v=0.93.202" defer></script>
+    <script src="./src/emby-api.js?v=0.93.202" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.202" defer></script>
+    <script src="./src/storage.js?v=0.93.202" defer></script>
+    <script src="./src/ui-helpers.js?v=0.93.202" defer></script>
+    <script src="./src/performance.js?v=0.93.202" defer></script>
+    <script src="./src/accessibility.js?v=0.93.202" defer></script>
+    <script src="./src/state-management.js?v=0.93.202" defer></script>
+    <script src="./src/theme.js?v=0.93.202" defer></script>
+    <script src="./src/color-extractor.js?v=0.93.202" defer></script>
+    <script src="./app.js?v=0.93.202" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>
+
+
 

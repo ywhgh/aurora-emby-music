@@ -40,6 +40,7 @@
   box-sizing: border-box;
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 *::-webkit-scrollbar {
@@ -475,6 +476,16 @@ input:disabled {
   -webkit-backdrop-filter: blur(24px);
   border-radius: 24px;
   box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.04);
+}
+
+/* 移动端专属控件：桌面端默认隐藏，仅在 max-width:620px 启用 */
+.login-entry,
+.login-entry-version,
+.login-hero,
+.login-vinyl,
+.login-sheet-handle,
+.login-sheet-backdrop {
+  display: none;
 }
 
 .form-heading {
@@ -7376,6 +7387,10 @@ body.action-sheet-open .content {
   gap: 1rem;
 }
 
+.modal-heading > div:first-child {
+  min-width: 0;
+}
+
 .modal-heading h3 {
   margin-top: 0.12rem;
   font-size: 1.2rem;
@@ -7420,6 +7435,471 @@ body.action-sheet-open .content {
   display: grid;
   gap: 0.35rem;
   margin-top: 1rem;
+}
+
+.action-sheet-backdrop:not([hidden]) {
+  align-items: stretch;
+  justify-items: end;
+  place-items: stretch end;
+  padding: 0;
+  background: rgba(17, 24, 39, 0.06);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.action-sheet-card {
+  width: min(40rem, calc(100vw - 2rem));
+  height: 100dvh;
+  max-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: 1.05rem;
+  border-radius: 0;
+  background: rgb(253, 253, 252);
+  box-shadow:
+    -18px 0 44px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  animation: actionSheetSlideFromRight 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.action-sheet-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.88fr) minmax(13rem, 1fr);
+  gap: 0.72rem;
+  min-height: 0;
+  margin-top: 0.82rem;
+  overflow: hidden;
+}
+
+.action-sheet-layout .action-sheet-list {
+  min-height: 0;
+  margin-top: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.08rem;
+  scrollbar-width: none;
+}
+
+.action-sheet-layout .action-sheet-list::-webkit-scrollbar {
+  display: none;
+}
+
+.action-sheet-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.78rem;
+  border: 1px solid rgba(17, 24, 39, 0.07);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.78);
+  scrollbar-width: none;
+}
+
+.action-sheet-detail::-webkit-scrollbar {
+  display: none;
+}
+
+.action-sheet-live-panel {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.action-sheet-live-eyebrow {
+  color: var(--red);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.action-sheet-live-panel > strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 880;
+}
+
+.action-sheet-live-panel > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+.action-sheet-live-summary {
+  display: grid;
+  gap: 0.46rem;
+  margin: 0.15rem 0 0;
+}
+
+.action-sheet-live-summary div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.58rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.action-sheet-live-summary dt,
+.action-sheet-live-summary dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.action-sheet-live-summary dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.action-sheet-live-summary dd {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-sheet-item.is-live-updated {
+  background: rgba(236, 65, 65, 0.08);
+}
+
+.action-sheet-page {
+  position: relative;
+  display: grid;
+  gap: 0.78rem;
+  min-height: 100%;
+  animation: actionSheetPageRise 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.action-sheet-heading-nav {
+  display: flex;
+  align-items: end;
+  gap: 0.25rem;
+  margin-left: auto;
+  align-self: end;
+  height: 1.9rem;
+  padding-bottom: 0.02rem;
+}
+
+.lyric-settings-heading-nav {
+  margin-left: auto;
+}
+
+.action-sheet-header-nav-button {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.action-sheet-header-nav-button:disabled {
+  opacity: 0.38;
+}
+
+.action-sheet-header-nav-button:not(:disabled):hover,
+.action-sheet-header-nav-button:not(:disabled):focus-visible {
+  color: var(--red);
+  outline: 0;
+}
+
+.action-sheet-header-nav-button .line-icon {
+  width: 1.18rem;
+  height: 1.18rem;
+}
+
+.action-sheet-card .modal-heading {
+  align-items: end;
+}
+
+.action-sheet-card #trackActionSheetClose {
+  align-self: end;
+  width: 1.9rem;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  height: 1.9rem;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  line-height: 1;
+}
+
+.action-sheet-card #trackActionSheetClose:not(:disabled):hover,
+.action-sheet-card #trackActionSheetClose:not(:disabled):focus-visible {
+  background: transparent;
+  color: var(--red);
+}
+
+.action-sheet-page-heading {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.action-sheet-page-heading strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 880;
+}
+
+.action-sheet-page-heading small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 720;
+  line-height: 1.4;
+}
+
+.action-sheet-page-body {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  min-height: 0;
+}
+
+.action-sheet-status-card {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.78rem;
+  border: 1px solid rgba(236, 65, 65, 0.14);
+  border-radius: 14px;
+  background: rgba(236, 65, 65, 0.06);
+}
+
+.action-sheet-status-card strong {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.action-sheet-status-card span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 740;
+}
+
+.action-sheet-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.action-sheet-choice-list {
+  display: grid;
+  gap: 0.46rem;
+}
+
+.action-sheet-choice,
+.action-sheet-setting-row,
+.action-sheet-save-button,
+.action-sheet-choice-option {
+  min-height: 2.55rem;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text);
+  font-weight: 820;
+}
+
+.action-sheet-choice-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  min-height: 3.1rem;
+  padding: 0.58rem 0.66rem;
+  text-align: left;
+}
+
+.action-sheet-choice-option > span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.action-sheet-choice-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.action-sheet-choice-option strong {
+  color: inherit;
+  font-size: 0.86rem;
+  font-weight: 880;
+}
+
+.action-sheet-choice-option small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.action-sheet-choice-option i {
+  flex: 0 0 auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 1px solid rgba(17, 24, 39, 0.18);
+  border-radius: 50%;
+}
+
+.action-sheet-choice.active,
+.action-sheet-choice-option.active {
+  border-color: rgba(236, 65, 65, 0.28);
+  background: rgba(236, 65, 65, 0.08);
+  color: var(--red);
+}
+
+.action-sheet-choice-option.active i {
+  border-color: var(--red);
+  background: var(--red);
+  box-shadow: inset 0 0 0 2px rgba(255, 251, 250, 0.94);
+}
+
+.action-sheet-default-badge {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.34rem;
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 820;
+  line-height: 1.2;
+}
+
+.action-sheet-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  padding: 0.62rem 0.68rem;
+  text-align: left;
+}
+
+.action-sheet-setting-row > span {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.action-sheet-setting-row strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 860;
+}
+
+.action-sheet-setting-row small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.action-sheet-setting-row input[type="checkbox"] {
+  width: 2.35rem;
+  height: 1.3rem;
+  accent-color: var(--red);
+}
+
+.action-sheet-select-row em {
+  flex: 0 0 auto;
+  color: var(--red);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 860;
+}
+
+.action-sheet-save-button {
+  margin-top: 0.25rem;
+  background: var(--red);
+  color: rgb(255, 251, 250);
+}
+
+.action-sheet-choice-popover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  align-items: center;
+  padding: 0.75rem;
+  background: rgba(253, 253, 252, 0.78);
+}
+
+.action-sheet-choice-card {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.78rem;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 16px;
+  background: rgb(253, 253, 252);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
+}
+
+.action-sheet-choice-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.25rem;
+}
+
+.action-sheet-choice-heading strong {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 880;
+}
+
+.action-sheet-choice-heading button {
+  min-height: 1.9rem;
+  padding: 0 0.58rem;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.06);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+@keyframes actionSheetSlideFromRight {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes actionSheetSlideFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(0.9rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes actionSheetPageRise {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .action-sheet-grabber {
@@ -7467,8 +7947,8 @@ body.action-sheet-open .content {
   width: 2.15rem;
   height: 2.15rem;
   place-items: center;
-  border-radius: 999px;
-  background: rgba(35, 35, 41, 0.06);
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   font-weight: 900;
 }
@@ -7741,17 +8221,98 @@ body.action-sheet-open .content {
   accent-color: var(--red);
 }
 
-.lyric-settings-row select {
+.lyric-settings-select-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
   width: 100%;
   min-height: 2.35rem;
   padding: 0 0.72rem;
   border: 1px solid rgba(17, 24, 39, 0.1);
   border-radius: 10px;
-  background: #fff;
+  background: rgb(255, 255, 254);
   color: #111827;
   font: inherit;
   font-size: 0.84rem;
   font-weight: 760;
+}
+
+.lyric-settings-select-button .line-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.lyric-settings-choice-popover {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  align-items: end;
+  padding: 0.9rem;
+  background: rgba(253, 253, 252, 0.58);
+}
+
+.lyric-settings-choice-card {
+  display: grid;
+  gap: 0.46rem;
+  padding: 0.82rem;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 16px;
+  background: rgb(255, 255, 254);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+  animation: actionSheetPageRise 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lyric-settings-choice-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.16rem;
+}
+
+.lyric-settings-choice-heading strong {
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 860;
+}
+
+.lyric-settings-choice-heading button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+}
+
+.lyric-settings-choice-option {
+  display: grid;
+  min-height: 3.05rem;
+  padding: 0.62rem 0.72rem;
+  border: 1px solid rgba(17, 24, 39, 0.075);
+  border-radius: 12px;
+  background: rgba(249, 250, 251, 0.78);
+  color: #111827;
+  text-align: left;
+}
+
+.lyric-settings-choice-option.active {
+  border-color: rgba(236, 65, 65, 0.24);
+  background: rgba(236, 65, 65, 0.08);
+  color: #b91c1c;
+}
+
+.lyric-settings-choice-option span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.lyric-settings-choice-option small {
+  color: #6b7280;
+  font-size: 0.72rem;
 }
 
 .lyric-settings-toggle {
@@ -8016,6 +8577,10 @@ body.action-sheet-open .content {
   gap: 1rem;
 }
 
+.download-options-heading > div:first-child {
+  min-width: 0;
+}
+
 .download-options-list {
   display: grid;
   gap: 0.62rem;
@@ -8091,12 +8656,9 @@ body.action-sheet-open .content {
 
 body.immersive-player-open .modal-backdrop {
   z-index: 360;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(255, 244, 229, 0.18), transparent 28rem),
-    radial-gradient(circle at 82% 86%, rgba(255, 232, 197, 0.12), transparent 30rem),
-    rgba(2, 3, 5, 0.62);
-  -webkit-backdrop-filter: blur(26px) saturate(0.96);
-  backdrop-filter: blur(26px) saturate(0.96);
+  background: rgba(2, 3, 5, 0.06);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 body.immersive-player-open .modal-card,
@@ -8107,10 +8669,8 @@ body.immersive-player-open .player-style-card,
 body.immersive-player-open .action-sheet-card {
   border-color: rgba(255, 244, 229, 0.13);
   background:
-    radial-gradient(circle at 18% 0%, rgba(255, 244, 229, 0.13), transparent 18rem),
-    radial-gradient(circle at 92% 100%, rgba(255, 232, 197, 0.06), transparent 15rem),
-    linear-gradient(145deg, rgba(15, 14, 12, 0.94), rgba(6, 7, 9, 0.84));
-  background-color: rgba(8, 8, 10, 0.9);
+    linear-gradient(145deg, rgba(18, 17, 15, 0.96), rgba(8, 8, 9, 0.9));
+  background-color: rgba(12, 12, 13, 0.92);
   box-shadow:
     0 32px 90px rgba(0, 0, 0, 0.44),
     inset 0 1px 0 rgba(255, 244, 229, 0.16);
@@ -8154,13 +8714,13 @@ body.immersive-player-open .action-sheet-copy small {
 }
 
 body.immersive-player-open .audio-quality-close-button {
-  background: rgba(255, 244, 229, 0.07);
+  background: transparent;
   color: rgba(255, 244, 229, 0.62);
 }
 
 body.immersive-player-open .audio-quality-close-button:not(:disabled):hover,
 body.immersive-player-open .audio-quality-close-button:not(:disabled):focus-visible {
-  background: rgba(255, 244, 229, 0.13);
+  background: transparent;
   color: rgba(255, 246, 235, 0.96);
 }
 
@@ -8232,6 +8792,175 @@ body.immersive-player-open .action-sheet-item:active {
   filter: brightness(1.08);
 }
 
+body.immersive-player-open .action-sheet-backdrop:not([hidden]) {
+  align-items: stretch;
+  justify-items: end;
+  place-items: stretch end;
+  padding: 0;
+  background: rgba(2, 3, 5, 0.04);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.immersive-player-open .action-sheet-card {
+  width: min(39rem, 100vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0.95rem;
+  border-color: rgba(255, 244, 229, 0.075);
+  border-radius: 0;
+  box-shadow:
+    -8px 0 26px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 244, 229, 0.07);
+}
+
+body.immersive-player-open .action-sheet-detail {
+  border-color: rgba(255, 244, 229, 0.075);
+  background: rgba(255, 244, 229, 0.055);
+  color: rgba(255, 244, 229, 0.9);
+}
+
+body.immersive-player-open .action-sheet-live-panel > strong,
+body.immersive-player-open .action-sheet-live-summary dd {
+  color: rgba(255, 246, 235, 0.96);
+}
+
+body.immersive-player-open .action-sheet-live-panel > p,
+body.immersive-player-open .action-sheet-live-summary dt {
+  color: rgba(255, 244, 229, 0.58);
+}
+
+body.immersive-player-open .action-sheet-live-summary div {
+  background: rgba(255, 244, 229, 0.07);
+}
+
+body.immersive-player-open .action-sheet-page-heading strong,
+body.immersive-player-open .action-sheet-status-card strong,
+body.immersive-player-open .action-sheet-setting-row strong,
+body.immersive-player-open .action-sheet-choice-heading strong {
+  color: rgba(255, 246, 235, 0.96);
+}
+
+body.immersive-player-open .action-sheet-page-heading small,
+body.immersive-player-open .action-sheet-status-card span,
+body.immersive-player-open .action-sheet-setting-row small {
+  color: rgba(255, 244, 229, 0.58);
+}
+
+body.immersive-player-open .action-sheet-header-nav-button {
+  background: transparent;
+  color: rgba(255, 244, 229, 0.86);
+}
+
+body.immersive-player-open .action-sheet-card #trackActionSheetClose {
+  background: transparent;
+  color: rgba(255, 244, 229, 0.72);
+}
+
+body.immersive-player-open .action-sheet-card #trackActionSheetClose:not(:disabled):hover,
+body.immersive-player-open .action-sheet-card #trackActionSheetClose:not(:disabled):focus-visible {
+  background: transparent;
+  color: rgba(255, 246, 235, 0.96);
+}
+
+body.immersive-player-open .action-sheet-choice,
+body.immersive-player-open .action-sheet-setting-row,
+body.immersive-player-open .action-sheet-choice-option {
+  border-color: rgba(255, 244, 229, 0.1);
+  background: rgba(255, 244, 229, 0.055);
+  color: rgba(255, 244, 229, 0.9);
+}
+
+body.immersive-player-open .action-sheet-choice-option small {
+  color: rgba(255, 244, 229, 0.56);
+}
+
+body.immersive-player-open .action-sheet-choice-option i {
+  border-color: rgba(255, 244, 229, 0.24);
+}
+
+body.immersive-player-open .action-sheet-default-badge {
+  border-color: rgba(255, 244, 229, 0.16);
+  color: rgba(255, 244, 229, 0.62);
+}
+
+body.immersive-player-open .action-sheet-status-card,
+body.immersive-player-open .action-sheet-choice-card {
+  border-color: rgba(255, 244, 229, 0.12);
+  background: rgba(255, 244, 229, 0.07);
+}
+
+body.immersive-player-open .action-sheet-choice.active,
+body.immersive-player-open .action-sheet-choice-option.active {
+  border-color: rgba(255, 246, 235, 0.32);
+  background: rgba(255, 244, 229, 0.12);
+  color: rgba(255, 246, 235, 0.96);
+}
+
+body.immersive-player-open .action-sheet-choice-option.active i {
+  border-color: rgba(255, 246, 235, 0.94);
+  background: rgba(255, 246, 235, 0.94);
+  box-shadow: inset 0 0 0 2px rgba(13, 13, 15, 0.96);
+}
+
+body.immersive-player-open .action-sheet-choice-popover {
+  background: rgba(8, 8, 10, 0.84);
+}
+
+body.immersive-player-open .action-sheet-choice-card {
+  background: rgb(13, 13, 15);
+  box-shadow: -18px 0 54px rgba(0, 0, 0, 0.32);
+}
+
+body.immersive-player-open .action-sheet-choice-heading button {
+  background: rgba(255, 244, 229, 0.08);
+  color: rgba(255, 244, 229, 0.64);
+}
+
+body.immersive-player-open .action-sheet-save-button {
+  border-color: rgba(255, 246, 235, 0.22);
+  background: rgba(255, 246, 235, 0.92);
+  color: rgba(18, 15, 12, 0.96);
+}
+
+body.immersive-player-open #playerStyleModal:not([hidden]),
+body.immersive-player-open #lyricSettingsModal:not([hidden]) {
+  align-items: stretch;
+  justify-items: end;
+  place-items: stretch end;
+  padding: 0;
+  background: rgba(2, 3, 5, 0.04);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.immersive-player-open #playerStyleModal .player-style-card,
+body.immersive-player-open #lyricSettingsModal .lyric-settings-card {
+  width: min(29rem, 100vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 0.98rem;
+  border-radius: 0;
+  box-shadow:
+    -18px 0 54px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 244, 229, 0.12);
+}
+
+body.immersive-player-open #playerStyleModal .player-style-card,
+body.immersive-player-open #lyricSettingsModal .lyric-settings-card {
+  transform: translateX(1rem);
+}
+
+body.immersive-player-open #playerStyleModal.is-open .player-style-card,
+body.immersive-player-open #lyricSettingsModal.is-open .lyric-settings-card {
+  transform: translateX(0);
+}
+
+body.immersive-player-open #playerStyleModal.is-closing .player-style-card,
+body.immersive-player-open #lyricSettingsModal.is-closing .lyric-settings-card {
+  transform: translateX(1rem);
+}
+
 body.immersive-player-open .player-style-choice.active,
 body.immersive-player-open .player-style-choice[aria-pressed="true"],
 body.immersive-player-open .audio-quality-method-item.active,
@@ -8278,12 +9007,16 @@ body.immersive-player-open .player-style-choice[aria-pressed="true"] .player-sty
     0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
-body.immersive-player-open .action-sheet-icon,
 body.immersive-player-open .download-option-icon,
 body.immersive-player-open .audio-quality-method-icon,
 body.immersive-player-open .audio-quality-option-icon,
 body.immersive-player-open .audio-quality-option-state {
   background: rgba(var(--quality-tone-rgb, 255, 244, 229), 0.14);
+  color: rgba(255, 244, 229, 0.86);
+}
+
+body.immersive-player-open .action-sheet-icon {
+  background: transparent;
   color: rgba(255, 244, 229, 0.86);
 }
 
@@ -8314,10 +9047,46 @@ body.immersive-player-open .audio-quality-video-grid {
   background: rgba(255, 244, 229, 0.035);
 }
 
-body.immersive-player-open .lyric-settings-row select {
+body.immersive-player-open .lyric-settings-select-button {
   border-color: rgba(255, 244, 229, 0.12);
   background: rgba(255, 244, 229, 0.075);
   color: rgba(255, 246, 235, 0.94);
+}
+
+body.immersive-player-open .lyric-settings-choice-popover {
+  background: rgba(8, 8, 10, 0.34);
+}
+
+body.immersive-player-open .lyric-settings-choice-card {
+  border-color: rgba(255, 244, 229, 0.12);
+  background: rgb(13, 13, 15);
+  box-shadow: -18px 0 54px rgba(0, 0, 0, 0.32);
+}
+
+body.immersive-player-open .lyric-settings-choice-heading strong,
+body.immersive-player-open .lyric-settings-choice-option strong {
+  color: rgba(255, 246, 235, 0.96);
+}
+
+body.immersive-player-open .lyric-settings-choice-heading button {
+  background: transparent;
+  color: rgba(255, 244, 229, 0.68);
+}
+
+body.immersive-player-open .lyric-settings-choice-option {
+  border-color: rgba(255, 244, 229, 0.1);
+  background: rgba(255, 244, 229, 0.055);
+  color: rgba(255, 244, 229, 0.9);
+}
+
+body.immersive-player-open .lyric-settings-choice-option small {
+  color: rgba(255, 244, 229, 0.58);
+}
+
+body.immersive-player-open .lyric-settings-choice-option.active {
+  border-color: rgba(255, 246, 235, 0.32);
+  background: rgba(255, 244, 229, 0.12);
+  color: rgba(255, 246, 235, 0.96);
 }
 
 body.immersive-player-open .lyric-settings-offset-actions button {
@@ -8377,18 +9146,18 @@ body.immersive-player-open .audio-quality-test-button:not(:disabled):focus-visib
 
 .audio-quality-close-button {
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 1.9rem;
+  height: 1.9rem;
   flex: 0 0 auto;
+  align-self: flex-start;
   place-items: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: #9ca3af;
   transition:
     color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
+  transform 0.2s ease;
 }
 
 .audio-quality-close-button .line-icon {
@@ -8399,8 +9168,9 @@ body.immersive-player-open .audio-quality-test-button:not(:disabled):focus-visib
 
 .audio-quality-close-button:not(:disabled):hover,
 .audio-quality-close-button:not(:disabled):focus-visible {
-  background: rgba(17, 24, 39, 0.035);
+  background: transparent;
   color: #111827;
+  outline: 0;
   transform: scale(0.96);
 }
 
@@ -11402,6 +12172,7 @@ select:focus-visible {
 }
 
 .immersive-lyric-offset-controls {
+  display: none !important;
   gap: 0.34rem;
 }
 
@@ -11709,13 +12480,14 @@ select:focus-visible {
 .immersive-desktop-current-lyric {
   display: grid;
   max-width: min(100%, 64rem);
-  overflow: hidden;
+  overflow: visible;
   gap: 0.18em;
   background: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
   color: rgba(255, 246, 235, 0.94);
+  font-family: var(--immersive-lyric-font-family, inherit);
   font-size: clamp(1.85rem, 3.45vw, 3.35rem);
   font-weight: 850;
   line-height: 1.16;
@@ -11725,19 +12497,14 @@ select:focus-visible {
 .immersive-desktop-current-lyric span {
   display: block;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   background: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
-  text-overflow: ellipsis;
-}
-
-.immersive-desktop-current-lyric:not(.is-bilingual),
-.immersive-desktop-current-lyric-single,
-.immersive-desktop-current-lyric-original,
-.immersive-desktop-current-lyric-translated {
-  white-space: nowrap;
+  letter-spacing: var(--immersive-lyric-letter-spacing, 0px);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .immersive-desktop-current-lyric.is-bilingual {
@@ -11745,13 +12512,11 @@ select:focus-visible {
 }
 
 .immersive-desktop-current-lyric.is-bilingual .immersive-desktop-current-lyric-original {
-  display: none;
+  display: block;
 }
 
 .immersive-desktop-current-lyric-single {
-  display: -webkit-box !important;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  display: block !important;
 }
 
 .immersive-desktop-current-lyric-original {
@@ -11770,6 +12535,16 @@ select:focus-visible {
 
 .immersive-desktop-current-lyric.is-empty {
   color: rgba(255, 246, 235, 0.72);
+}
+
+.immersive-player-shell[data-desktop-view="visualizer"] .immersive-desktop-current-lyric,
+.immersive-player-shell[data-desktop-view="visualizer"] .immersive-desktop-current-lyric span {
+  background: none;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  filter: none;
+  text-shadow: none;
 }
 
 .immersive-desktop-current-lyric .word::after,
@@ -11882,22 +12657,31 @@ select:focus-visible {
 }
 
 .immersive-lyric-focus,
-.immersive-lyric-list .lyric-line.active,
-.immersive-lyric-list p.active,
-.immersive-lyric-list .lyric-line.active:hover,
-.immersive-lyric-list p.active:hover,
 .immersive-mobile-current-lyric,
 .immersive-mobile-current-lyric span {
   background: transparent;
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
   text-shadow: none;
+  white-space: normal;
+}
+
+.immersive-mobile-current-lyric,
+.immersive-mobile-current-lyric span {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .immersive-player-shell {
   --immersive-lyric-font-scale: 1;
   --immersive-lyric-font-family: inherit;
+  --immersive-lyric-letter-spacing: 0px;
   --immersive-lyric-base-size: clamp(1.85rem, 3.35vw, 3rem);
 }
 
@@ -11927,6 +12711,7 @@ select:focus-visible {
   font-family: var(--immersive-lyric-font-family);
   font-size: calc(var(--immersive-lyric-base-size) * var(--immersive-lyric-font-scale));
   font-weight: 850;
+  letter-spacing: var(--immersive-lyric-letter-spacing);
   line-height: 1.18;
   transform-origin: left center;
   transition:
@@ -11955,9 +12740,17 @@ select:focus-visible {
 .immersive-lyric-list .lyric-line.active,
 .immersive-lyric-list p.active {
   width: 100%;
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background:
+    linear-gradient(
+      90deg,
+      var(--immersive-lyric-active-bg-tail) 0%,
+      var(--immersive-lyric-active-bg-mid) 20%,
+      var(--immersive-lyric-active-bg) 50%,
+      var(--immersive-lyric-active-bg-mid) 80%,
+      var(--immersive-lyric-active-bg-tail) 100%
+    );
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-radius: 0;
   box-shadow: none;
   opacity: 1;
@@ -13645,8 +14438,18 @@ select:focus-visible {
 }
 
 ::selection {
-  background: rgba(var(--accent-color-rgb), 0.16);
+  background: rgba(255, 244, 229, 0.28);
+  color: rgba(28, 24, 21, 0.98);
+}
+
+body:not(.immersive-player-open) ::selection {
+  background: rgba(var(--accent-color-rgb), 0.18);
   color: var(--text);
+}
+
+body.immersive-player-open ::selection {
+  background: rgba(255, 244, 229, 0.34);
+  color: rgba(30, 24, 20, 0.98);
 }
 
 .sidebar,
@@ -14162,25 +14965,27 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
     .login-view {
-      align-items: stretch;
+      align-items: start;
       width: 100%;
       max-width: 100vw;
       min-height: 100svh;
       padding: 0;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .login-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto;
       gap: 0;
       width: 100% !important;
       max-width: 100% !important;
-      max-height: 100svh;
+      min-height: 100svh;
+      max-height: none;
       align-self: stretch;
       justify-self: stretch;
-      overflow: hidden;
+      overflow: visible;
       border-radius: 0;
       padding: 0;
     }
@@ -14261,12 +15066,24 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .login-card {
     justify-content: start;
     overflow: auto;
-    padding: 0.82rem;
+    padding: 1.25rem 1rem 2rem; /* More breathing room, safe bottom space */
     scrollbar-width: none;
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
   }
 
   .login-card::-webkit-scrollbar {
     display: none;
+  }
+
+  @media (max-height: 600px) {
+    .cover-showcase {
+      display: none;
+    }
+    .login-intro {
+      padding: 0.6rem 0.78rem;
+    }
   }
 
   .form-heading h2 {
@@ -14303,20 +15120,23 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .field input {
-    height: 2.36rem;
-    border-radius: 10px;
-    padding: 0 0.78rem;
+    height: 2.75rem;
+    border-radius: 12px;
+    padding: 0 1rem;
+    font-size: 1rem; /* Prevent iOS input zoom */
   }
 
   .login-actions {
     grid-template-columns: 1fr;
-    gap: 0.46rem;
-    margin-top: 0.62rem;
+    gap: 0.55rem;
+    margin-top: 0.8rem;
   }
 
   .primary-button,
   .secondary-login-button {
-    min-height: 2.44rem;
+    min-height: 2.85rem;
+    border-radius: 12px;
+    font-size: 0.95rem;
   }
 
   .login-tools {
@@ -14986,8 +15806,17 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .action-sheet-card {
     width: 100%;
     max-height: min(82dvh, 34rem);
+    height: auto;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
     overflow: auto;
+    scrollbar-width: none;
     border-radius: 18px 18px 14px 14px;
+    animation: actionSheetSlideFromBottom 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .action-sheet-card::-webkit-scrollbar {
+    display: none;
   }
 
   .action-sheet-grabber {
@@ -15012,6 +15841,35 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .action-sheet-list {
     gap: 0.28rem;
     margin-top: 0.72rem;
+    overflow: auto;
+    scrollbar-width: none;
+  }
+
+  .action-sheet-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .action-sheet-layout {
+    grid-template-columns: 1fr;
+    gap: 0.62rem;
+    margin-top: 0.72rem;
+    overflow: auto;
+    scrollbar-width: none;
+  }
+
+  .action-sheet-layout::-webkit-scrollbar {
+    display: none;
+  }
+
+  .action-sheet-layout .action-sheet-list {
+    margin-top: 0;
+    overflow: auto;
+  }
+
+  .action-sheet-detail {
+    order: -1;
+    max-height: 10.5rem;
+    padding: 0.68rem;
   }
 
   .action-sheet-item {
@@ -15022,6 +15880,22 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
   .action-sheet-copy small {
     max-width: 100%;
+  }
+
+  .action-sheet-live-summary {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.36rem;
+  }
+
+  .action-sheet-live-summary div {
+    display: grid;
+    align-content: center;
+    min-height: 2.35rem;
+    padding: 0.46rem 0.5rem;
+  }
+
+  .action-sheet-live-summary dd {
+    text-align: left;
   }
 
   .playerbar {
@@ -15173,20 +16047,22 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
   @media (max-width: 620px) {
     .login-view {
-      align-items: stretch;
+      align-items: start;
       width: 100%;
       max-width: 100vw;
       min-height: 100svh;
       padding: 0;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       background: var(--page);
     }
 
     .login-shell {
       border-radius: 0;
       gap: 0;
-      overflow-y: auto;
-      height: 100svh;
+      overflow: visible;
+      min-height: 100svh;
+      height: auto;
       padding-bottom: max(2rem, env(safe-area-inset-bottom));
     }
 
@@ -15213,26 +16089,33 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     .login-view .login-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto;
       gap: 0;
       width: 100% !important;
       max-width: 100% !important;
-      height: 100svh;
-      max-height: 100svh;
+      min-height: 100svh;
+      height: auto;
+      max-height: none;
       align-self: stretch;
       justify-self: stretch;
-      overflow: hidden;
+      overflow: visible;
       border-radius: 0;
       padding: 0;
     }
 
-    .login-view .login-intro,
-    .login-view .login-card {
+    .login-view .login-intro {
       width: 100% !important;
       max-width: 100% !important;
       min-height: 0;
       overflow: visible;
       border-radius: 0;
+    }
+
+    .login-view .login-card {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 0;
+      overflow: visible;
     }
 
     .login-view .login-intro {
@@ -15283,25 +16166,45 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     }
 
     .login-view .showcase-card {
-      width: auto !important;
+      width: 100% !important;
       max-width: none !important;
-      height: clamp(3.8rem, 22vw, 4.8rem);
+      aspect-ratio: 1 / 1.1;
+      height: auto;
       min-height: 0;
-      padding: 0.34rem;
-      border-radius: 14px;
+      padding: 0.5rem;
+      border-radius: 16px;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
     }
 
     .login-view .feature-icon {
-      width: clamp(2.8rem, 16vw, 3.8rem);
-      height: clamp(2.8rem, 16vw, 3.8rem);
+      width: clamp(2.2rem, 11vw, 2.8rem);
+      height: clamp(2.2rem, 11vw, 2.8rem);
       max-width: none;
       max-height: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+    }
+
+    .login-view .feature-icon svg.line-icon,
+    .login-view .feature-icon i {
+      transform: scale(0.85);
     }
 
     .login-view .login-feature-card > span:last-child {
-      display: none;
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      opacity: 0.8;
+      text-align: center;
+      position: static;
     }
 
     .login-view .login-card {
@@ -15310,13 +16213,13 @@ input[type="range"]:focus-visible::-moz-range-thumb {
       border-radius: 28px 28px 0 0;
       padding: 1.8rem 1.4rem max(2.4rem, env(safe-area-inset-bottom));
       box-shadow: 0 -8px 32px rgba(0,0,0,0.04);
-      margin-top: auto;
-      height: 100%;
+      margin-top: 0;
+      height: auto;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow: visible;
     }
 
     [data-theme="dark"] .login-view .login-card {
@@ -15448,6 +16351,244 @@ input[type="range"]:focus-visible::-moz-range-thumb {
       text-align: center;
     }
 
+    /* ===== 移动端登录入口屏 + 底部浮层 ===== */
+
+    /* 入口屏：撑满一屏，内容垂直排布，版本号沉底居中 */
+    .login-view .login-intro {
+      grid-template-rows: auto auto 1fr auto;
+      min-height: 100svh;
+      padding: max(1.6rem, env(safe-area-inset-top)) 1.4rem max(1.4rem, env(safe-area-inset-bottom));
+      gap: 1.1rem;
+    }
+
+    /* 入口屏恢复展示卡（覆盖早前隐藏 intro-copy 的逻辑，这里只藏文案段落） */
+    .login-view .intro-copy {
+      display: none;
+    }
+
+    /* 入口控件区：模式切换 + 登录按钮，垂直居中在卡片下方 */
+    .login-view .login-entry {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      align-self: center;
+      justify-self: stretch;
+      width: 100%;
+      margin-top: 0.4rem;
+    }
+
+    /* 入口模式切换：胶囊 + 滑动指示块 */
+    .login-view .login-entry-mode {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+      padding: 0.32rem;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.05);
+      border: none;
+      margin: 0;
+      touch-action: pan-y;
+      overflow: hidden;
+    }
+
+    [data-theme="dark"] .login-view .login-entry-mode {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .login-view .login-entry-mode button {
+      position: relative;
+      z-index: 1;
+      min-height: 2.7rem;
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 700;
+      transition: color 0.25s ease;
+    }
+
+    .login-view .login-entry-mode button.active {
+      background: transparent;
+      box-shadow: none;
+      color: var(--now-accent);
+    }
+
+    /* 滑动指示块：跟随选中模式平移 */
+    .login-view .login-entry-mode-thumb {
+      position: absolute;
+      z-index: 0;
+      top: 0.32rem;
+      bottom: 0.32rem;
+      left: 0.32rem;
+      width: calc(50% - 0.32rem);
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+      transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    [data-theme="dark"] .login-view .login-entry-mode-thumb {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* 第一个按钮是音源桥(默认)，第二个是 Emby */
+    .login-view .login-entry-mode[data-active-mode="emby"] .login-entry-mode-thumb {
+      transform: translateX(100%);
+    }
+
+    .login-view .login-entry-button {
+      width: 100%;
+      min-height: 3.1rem;
+      border-radius: 16px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(var(--now-accent-rgb), 0.28);
+    }
+
+    .login-view .login-entry-button:active {
+      transform: scale(0.98);
+    }
+
+    /* 版本号：入口屏底部居中，白色小字 */
+    .login-view .login-entry-version {
+      align-self: center;
+      justify-self: center;
+      margin: 0;
+      padding-top: 0.6rem;
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+      text-align: center;
+    }
+
+    /* 底部浮层：登录卡片默认沉到屏幕下方，点击登录后上滑 */
+    .login-view .login-card {
+      position: fixed;
+      z-index: 60;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      order: 0;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 92svh;
+      margin: 0;
+      padding: 0.4rem 1.3rem max(1.6rem, env(safe-area-inset-bottom));
+      border-radius: 26px 26px 0 0;
+      background: #fff;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.16);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      transform: translateY(110%);
+      transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+      will-change: transform;
+    }
+
+    [data-theme="dark"] .login-view .login-card {
+      background: rgba(20, 20, 22, 0.98);
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .login-view.login-sheet-open .login-card {
+      transform: translateY(0);
+    }
+
+    /* 浮层遮罩 */
+    .login-view .login-sheet-backdrop {
+      position: fixed;
+      z-index: 55;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.42);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.42s ease;
+    }
+
+    .login-view.login-sheet-open .login-sheet-backdrop {
+      display: block !important;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 浮层收起手柄 */
+    .login-view .login-sheet-handle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 1.6rem;
+      padding: 0.6rem 0 0.2rem;
+      background: transparent;
+      border: none;
+    }
+
+    .login-view .login-sheet-handle span {
+      display: block;
+      width: 2.6rem;
+      height: 0.28rem;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.16);
+    }
+
+    [data-theme="dark"] .login-view .login-sheet-handle span {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* 浮层内：紧凑化按钮与间距 */
+    .login-view .form-heading {
+      margin-bottom: 0.5rem;
+    }
+
+    .login-view .login-card .login-source-mode {
+      margin-top: 0.5rem;
+    }
+
+    .login-view .login-actions {
+      margin-top: 1rem;
+      gap: 0.6rem;
+    }
+
+    .login-view .primary-button,
+    .login-view .secondary-login-button {
+      min-height: 2.85rem;
+      font-size: 0.98rem;
+    }
+
+    /* 已保存账号：放大到能完整显示一条 */
+    .login-view .saved-accounts {
+      max-height: none;
+      margin-top: 0.7rem;
+      padding: 0.7rem;
+    }
+
+    .login-view .saved-account-main {
+      min-height: 3rem;
+      padding: 0.45rem 0.7rem;
+    }
+
+    .login-view .saved-account-avatar {
+      width: 2.35rem;
+      height: 2.35rem;
+    }
+
+    .login-view .saved-account-copy strong {
+      font-size: 0.95rem;
+    }
+
+    /* 浮层打开时锁定背景滚动 */
+    body.login-sheet-locked {
+      overflow: hidden;
+    }
+
+    /* 入口屏的展示卡保持可见、可呼吸 */
+    .login-view .cover-showcase {
+      margin-top: 0.2rem;
+    }
 
   .topbar {
     min-height: 3.32rem;
@@ -16507,12 +17648,13 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     }
 
     .login-view {
-      align-items: stretch;
+      align-items: start;
       width: 100%;
       max-width: 100vw;
       min-height: 100svh;
       padding: 0;
-      overflow: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       background: var(--page);
     }
 
@@ -16523,26 +17665,33 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     .login-view .login-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto;
       gap: 0;
       width: 100% !important;
       max-width: 100% !important;
-      height: 100svh;
-      max-height: 100svh;
+      min-height: 100svh;
+      height: auto;
+      max-height: none;
       align-self: stretch;
       justify-self: stretch;
-      overflow: hidden;
+      overflow: visible;
       border-radius: 0;
       padding: 0;
     }
 
-    .login-view .login-intro,
-    .login-view .login-card {
+    .login-view .login-intro {
       width: 100% !important;
       max-width: 100% !important;
       min-height: 0;
       overflow: visible;
       border-radius: 0;
+    }
+
+    .login-view .login-card {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 0;
+      overflow: visible;
     }
 
     .login-view .login-intro {
@@ -16593,25 +17742,45 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     }
 
     .login-view .showcase-card {
-      width: auto !important;
+      width: 100% !important;
       max-width: none !important;
-      height: clamp(3.8rem, 22vw, 4.8rem);
+      aspect-ratio: 1 / 1.1;
+      height: auto;
       min-height: 0;
-      padding: 0.34rem;
-      border-radius: 14px;
+      padding: 0.5rem;
+      border-radius: 16px;
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
     }
 
     .login-view .feature-icon {
-      width: clamp(2.8rem, 16vw, 3.8rem);
-      height: clamp(2.8rem, 16vw, 3.8rem);
+      width: clamp(2.2rem, 11vw, 2.8rem);
+      height: clamp(2.2rem, 11vw, 2.8rem);
       max-width: none;
       max-height: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+    }
+
+    .login-view .feature-icon svg.line-icon,
+    .login-view .feature-icon i {
+      transform: scale(0.85);
     }
 
     .login-view .login-feature-card > span:last-child {
-      display: none;
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      opacity: 0.8;
+      text-align: center;
+      position: static;
     }
 
     .login-view .login-card {
@@ -16620,13 +17789,13 @@ input[type="range"]:focus-visible::-moz-range-thumb {
       border-radius: 28px 28px 0 0;
       padding: 1.8rem 1.4rem max(2.4rem, env(safe-area-inset-bottom));
       box-shadow: 0 -8px 32px rgba(0,0,0,0.04);
-      margin-top: auto;
-      height: 100%;
+      margin-top: 0;
+      height: auto;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow: visible;
     }
 
     [data-theme="dark"] .login-view .login-card {
@@ -17279,9 +18448,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-top-actions .immersive-lyric-offset-controls,
-  #immersiveQualityButton,
-  #immersiveDownloadButton,
-  #immersiveMoreButton {
+  .immersive-top-actions #immersiveQualityButton,
+  .immersive-top-actions #immersiveDownloadButton,
+  .immersive-top-actions #immersiveMoreButton {
     display: none !important;
   }
 
@@ -17512,22 +18681,29 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     display: grid;
     justify-self: center;
     width: min(88vw, 24rem);
+    min-width: 0;
     gap: 0.48rem;
     color: rgba(255, 246, 235, 0.94);
     text-align: center;
   }
 
   #immersiveMobileDeckTitle {
+    display: -webkit-box;
     overflow: hidden;
-    font-size: clamp(1.28rem, 6vw, 1.72rem);
+    max-width: 100%;
+    font-size: clamp(1.16rem, 5.2vw, 1.52rem);
     font-weight: 860;
-    line-height: 1.16;
+    line-height: 1.14;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
   }
 
   #immersiveMobileDeckSubtitle {
     overflow: hidden;
+    max-width: 100%;
     color: rgba(255, 246, 235, 0.72);
     font-size: clamp(0.88rem, 3.8vw, 1.06rem);
     font-weight: 680;
@@ -17538,6 +18714,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
   .immersive-mobile-track-quality {
     overflow: hidden;
+    max-width: 100%;
     color: rgba(255, 246, 235, 0.56);
     font-size: clamp(0.72rem, 3vw, 0.86rem);
     font-weight: 720;
@@ -17552,7 +18729,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     width: min(88vw, 25rem);
     max-width: calc(100vw - 1.92rem);
     min-height: 3.1rem;
-    overflow: hidden;
+    overflow: visible;
     grid-auto-rows: min-content;
     align-content: center;
     gap: 0.18rem;
@@ -17561,6 +18738,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     backdrop-filter: none !important;
     box-shadow: none !important;
     color: rgba(255, 246, 235, 0.86);
+    font-family: var(--immersive-lyric-font-family, inherit);
     font-size: clamp(0.98rem, 4.2vw, 1.18rem);
     font-weight: 760;
     line-height: 1.34;
@@ -17571,19 +18749,20 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-mobile-current-lyric span {
     display: block;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     background: none !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    letter-spacing: var(--immersive-lyric-letter-spacing, 0px);
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .immersive-mobile-current-lyric-single {
-    display: -webkit-box !important;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    display: block !important;
+    overflow: visible;
     white-space: normal !important;
   }
 
@@ -17688,10 +18867,16 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
   .immersive-control-deck {
     gap: 0.76rem;
+    transition:
+      opacity 220ms cubic-bezier(0.25, 1, 0.5, 1),
+      transform 240ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   .immersive-progress {
     min-height: 1.55rem;
+    transition:
+      opacity 180ms ease,
+      transform 220ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   .immersive-player-shell .immersive-control-row {
@@ -17701,6 +18886,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     justify-items: center;
     column-gap: clamp(0.38rem, 3.2vw, 0.92rem);
     padding: 0 0.32rem;
+    transition:
+      opacity 220ms cubic-bezier(0.25, 1, 0.5, 1),
+      transform 240ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   #immersiveModeButton {
@@ -17724,6 +18912,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   #immersiveFavoriteButton,
+  #immersiveQualityButton,
+  #immersiveDownloadButton,
   #immersiveZenButton {
     display: none !important;
   }
@@ -17736,6 +18926,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     justify-items: center;
     column-gap: clamp(0.38rem, 3.2vw, 0.92rem);
     padding: 0 0.32rem;
+    transition:
+      opacity 220ms cubic-bezier(0.25, 1, 0.5, 1),
+      transform 240ms cubic-bezier(0.25, 1, 0.5, 1);
   }
 
   .immersive-mobile-tool-button {
@@ -17881,6 +19074,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-track-copy {
     width: min(100%, 24rem) !important;
     max-width: calc(100vw - 1.92rem) !important;
+    min-width: 0 !important;
     gap: 0.62rem !important;
     place-items: center !important;
     text-align: center;
@@ -17900,6 +19094,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-current-lyric {
     background: none !important;
     box-shadow: none !important;
+    overflow: visible !important;
     text-shadow: none !important;
     filter: none !important;
     -webkit-filter: none !important;
@@ -17909,8 +19104,12 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .immersive-player-shell[data-mobile-view="cover"] .immersive-mobile-current-lyric span {
     background: none !important;
     box-shadow: none !important;
+    overflow: visible !important;
+    overflow-wrap: anywhere !important;
     text-shadow: none !important;
+    text-overflow: clip !important;
     filter: none !important;
+    white-space: normal !important;
   }
 
   .immersive-player-shell .immersive-control-row .immersive-play-core.play-button,
@@ -17933,6 +19132,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     transform: scale(0.9);
   }
 
+  .immersive-player-shell.is-mobile-stage-entering-cover .immersive-control-deck,
+  .immersive-player-shell.is-mobile-stage-entering-lyrics .immersive-control-deck {
+    transform: translateY(0.12rem);
+  }
+
     .is-playback-buffering .immersive-player-shell .immersive-control-row .immersive-play-core.play-button::before {
       --play-loading-color: var(--immersive-play-glyph);
       width: 1.28rem !important;
@@ -17950,17 +19154,27 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     }
 
   .immersive-control-deck {
-    gap: 1.22rem !important;
-    padding-bottom: 0.32rem;
+    gap: 0.76rem !important;
+    padding-bottom: 0;
   }
 
   .immersive-progress {
-    min-height: 2.06rem;
+    min-height: 1.55rem;
   }
 
   .immersive-player-shell .immersive-control-row,
   .immersive-mobile-tool-row {
-    row-gap: 1.12rem;
+    row-gap: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .immersive-control-deck,
+    .immersive-progress,
+    .immersive-player-shell .immersive-control-row,
+    .immersive-mobile-tool-row,
+    .immersive-mobile-tool-button {
+      transition: none !important;
+    }
   }
 
   .immersive-player-shell :where(
@@ -17991,6 +19205,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     padding: 0.78rem 0.78rem max(0.78rem, env(safe-area-inset-bottom));
   }
 
+  body.immersive-player-open .action-sheet-backdrop:not([hidden]),
+  body.immersive-player-open #lyricSettingsModal:not([hidden]),
+  body.immersive-player-open #playerStyleModal:not([hidden]) {
+    align-items: end;
+    justify-items: stretch;
+    place-items: end stretch;
+  }
+
   body.immersive-player-open :is(
     .audio-quality-card,
     .download-options-card,
@@ -18003,6 +19225,99 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     padding: 1rem 1rem 1.08rem !important;
     border-radius: 24px 24px 18px 18px !important;
     overflow: hidden;
+  }
+
+  body.immersive-player-open .action-sheet-card {
+    width: 100vw !important;
+    height: min(66.666dvh, 34rem) !important;
+    max-height: min(66.666dvh, 34rem) !important;
+    grid-template-rows: auto auto minmax(0, 1fr) !important;
+    border-color: rgba(255, 244, 229, 0.07) !important;
+    border-radius: 0 !important;
+    box-shadow:
+      0 -6px 22px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgba(255, 244, 229, 0.06) !important;
+  }
+
+  body.immersive-player-open .action-sheet-backdrop:not([hidden]) {
+    padding: 0 !important;
+  }
+
+  body.immersive-player-open .action-sheet-card .modal-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center !important;
+    min-height: 2.4rem;
+    height: 2.4rem;
+    gap: 0.58rem;
+  }
+
+  body.immersive-player-open .action-sheet-card .modal-heading > div:first-child {
+    display: grid;
+    min-height: 2.4rem;
+    height: 2.4rem;
+    align-content: center;
+    align-self: center !important;
+  }
+
+  body.immersive-player-open .action-sheet-card .modal-heading h3 {
+    margin: 0;
+    line-height: 2.4rem !important;
+  }
+
+  body.immersive-player-open .action-sheet-heading-nav {
+    align-self: center !important;
+    height: 2.4rem;
+    padding-bottom: 0;
+    transform: none;
+  }
+
+  body.immersive-player-open .action-sheet-header-nav-button {
+    height: 2.4rem;
+  }
+
+  body.immersive-player-open .action-sheet-card #trackActionSheetClose {
+    align-self: center !important;
+    display: grid;
+    width: 2.4rem;
+    min-width: 2.4rem;
+    height: 2.4rem;
+    min-height: 2.4rem;
+    place-items: center;
+    font-size: 1.35rem;
+    line-height: 2.4rem;
+    transform: none;
+  }
+
+  body.immersive-player-open .action-sheet-layout {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.immersive-player-open .action-sheet-detail {
+    max-height: min(17dvh, 8.4rem);
+    overflow: auto;
+  }
+
+  body.immersive-player-open .action-sheet-layout .action-sheet-list {
+    min-height: 0;
+    overflow: auto;
+  }
+
+  body.immersive-player-open #playerStyleModal .player-style-card,
+  body.immersive-player-open #lyricSettingsModal .lyric-settings-card {
+    height: auto;
+    transform: translateY(0.9rem);
+  }
+
+  body.immersive-player-open #playerStyleModal.is-open .player-style-card,
+  body.immersive-player-open #lyricSettingsModal.is-open .lyric-settings-card {
+    transform: translateY(0);
+  }
+
+  body.immersive-player-open #playerStyleModal.is-closing .player-style-card,
+  body.immersive-player-open #lyricSettingsModal.is-closing .lyric-settings-card {
+    transform: translateY(0.9rem);
   }
 
   body.immersive-player-open :is(
@@ -18230,7 +19545,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   .immersive-control-deck {
-    gap: 1.02rem !important;
+    gap: 0.76rem !important;
   }
 }
 
@@ -18436,4 +19751,546 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .login-view .saved-account-avatar {
   width: 2.55rem;
   height: 2.55rem;
+}
+
+/* ========================================================================
+   移动端登录：入口屏 + 底部浮层 —— 权威收尾块
+   用 #loginView id 选择器拉高特异性，压过前面所有散落的 .login-view 规则，
+   并置于文件末尾以赢得源码顺序。仅在 max-width:620px 生效，桌面端零影响。
+   ======================================================================== */
+@media (max-width: 620px) {
+  /* —— 视图与外壳：自然高度，入口屏占满一屏 —— */
+  #loginView.login-view {
+    align-items: start;
+    min-height: 100svh;
+    padding: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background:
+      radial-gradient(circle at 18% 12%, rgba(var(--now-accent-rgb), 0.16), transparent 42%),
+      radial-gradient(circle at 84% 88%, rgba(37, 99, 235, 0.1), transparent 46%),
+      var(--page);
+  }
+
+  #loginView .login-shell {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100svh;
+    height: auto;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  /* —— 入口屏：紧凑分区，消除大片留白 —— */
+  #loginView .login-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100svh;
+    padding: max(1.7rem, env(safe-area-inset-top)) 1.35rem max(1.3rem, env(safe-area-inset-bottom));
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  #loginView .login-intro::after {
+    display: none !important;
+  }
+
+  /* 原桌面文案块隐藏，移动端用 .login-hero 代替 */
+  #loginView .intro-copy {
+    display: none !important;
+  }
+
+  #loginView .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin: 0;
+  }
+
+  #loginView .brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 12px;
+  }
+
+  #loginView .brand-row strong {
+    font-size: 1.06rem;
+    color: var(--text);
+  }
+
+  #loginView .brand-row .kicker {
+    color: var(--now-accent);
+    text-shadow: none;
+  }
+
+  /* —— 主视觉文案：红色强调，撑起视觉重心 —— */
+  #loginView .login-hero {
+    display: block;
+    margin-top: 0.4rem;
+  }
+
+  #loginView .login-hero-eyebrow {
+    margin: 0;
+    color: var(--now-accent);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  #loginView .login-hero-title {
+    margin: 0.5rem 0 0;
+    font-size: 1.92rem;
+    line-height: 1.18;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  #loginView .login-hero-title em {
+    font-style: normal;
+    color: var(--now-accent);
+  }
+
+  #loginView .login-hero-sub {
+    margin: 0.55rem 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  /* —— 趣味元素：旋转黑胶 + 跳动均衡条 —— */
+  #loginView .login-vinyl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 0.2rem 1rem;
+    margin-top: 0.5rem;
+    padding: 1rem 1.15rem;
+    border-radius: 22px;
+    background:
+      linear-gradient(135deg, rgba(var(--now-accent-rgb), 0.12), rgba(255, 255, 255, 0.45) 70%);
+    box-shadow:
+      0 12px 30px rgba(var(--now-accent-rgb), 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  [data-theme="dark"] #loginView .login-vinyl {
+    background: linear-gradient(135deg, rgba(var(--now-accent-rgb), 0.2), rgba(255, 255, 255, 0.05) 70%);
+  }
+
+  #loginView .login-vinyl-disc {
+    grid-row: 1 / 3;
+    display: grid;
+    place-items: center;
+    width: 3.6rem;
+    height: 3.6rem;
+    border-radius: 50%;
+    background:
+      repeating-radial-gradient(circle at center, #1b1b1f 0 2px, #2a2a30 2px 4px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+    animation: loginVinylSpin 4.5s linear infinite;
+  }
+
+  #loginView .login-vinyl-label {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--now-accent);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  #loginView .login-vinyl-meta {
+    align-self: end;
+  }
+
+  #loginView .login-vinyl-meta strong {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--now-accent);
+  }
+
+  #loginView .login-vinyl-meta span {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  #loginView .login-vinyl-eq {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.22rem;
+    height: 1.5rem;
+  }
+
+  #loginView .login-vinyl-eq i {
+    display: block;
+    width: 0.28rem;
+    border-radius: 999px;
+    background: var(--now-accent);
+    opacity: 0.85;
+    animation: loginEqBounce 0.9s ease-in-out infinite;
+    animation-delay: var(--d, 0s);
+  }
+
+  /* 展示卡：横向并排的精致功能入口 */
+  #loginView .cover-showcase {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 0.6rem;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 0.1rem;
+    overflow: visible;
+  }
+
+  #loginView .showcase-card {
+    width: 100% !important;
+    max-width: none !important;
+    aspect-ratio: 1 / 1.12;
+    height: auto;
+    min-height: 0;
+    padding: 0.7rem 0.5rem;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    box-shadow:
+      0 10px 26px rgba(31, 31, 36, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  }
+
+  #loginView .feature-icon {
+    width: clamp(2.4rem, 12.5vw, 3.1rem);
+    height: clamp(2.4rem, 12.5vw, 3.1rem);
+    max-width: none;
+    max-height: none;
+    margin: 0;
+  }
+
+  #loginView .login-feature-card > span:last-child {
+    position: static;
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 700;
+    opacity: 0.9;
+    text-align: center;
+  }
+
+  /* 入口控件：模式切换 + 登录按钮，贴近内容、不再用 auto 顶到底 */
+  #loginView .login-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    width: 100%;
+    margin-top: 1.1rem;
+  }
+
+  #loginView .login-entry-mode {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin: 0;
+    padding: 0.34rem;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    touch-action: pan-y;
+    overflow: hidden;
+  }
+
+  [data-theme="dark"] #loginView .login-entry-mode {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  #loginView .login-entry-mode button {
+    position: relative;
+    z-index: 1;
+    min-height: 2.7rem;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 800;
+    transition: color 0.25s ease;
+  }
+
+  #loginView .login-entry-mode button.active {
+    color: var(--now-accent);
+  }
+
+  #loginView .login-entry-mode-thumb {
+    position: absolute;
+    z-index: 0;
+    top: 0.34rem;
+    bottom: 0.34rem;
+    left: 0.34rem;
+    width: calc(50% - 0.34rem);
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    transition: transform 0.36s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  [data-theme="dark"] #loginView .login-entry-mode-thumb {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  /* 第一个按钮=音源桥(默认在左)，选中 Emby 时滑块右移 */
+  #loginView .login-entry-mode[data-active-mode="emby"] .login-entry-mode-thumb {
+    transform: translateX(100%);
+  }
+
+  #loginView .login-entry-button {
+    width: 100%;
+    min-height: 3.1rem;
+    border-radius: 16px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    box-shadow: 0 10px 24px rgba(var(--now-accent-rgb), 0.3);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  #loginView .login-entry-button:active {
+    transform: scale(0.98);
+  }
+
+  /* 版本号：底部居中红色小字 */
+  #loginView .login-entry-version {
+    display: block;
+    align-self: center;
+    margin: 0;
+    padding-top: 0.5rem;
+    color: var(--now-accent);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: center;
+    text-shadow: none;
+    opacity: 0.85;
+  }
+
+  /* —— 底部浮层：登录卡片 —— */
+  #loginView .login-sheet-backdrop {
+    display: block;
+    position: fixed;
+    z-index: 55;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.44);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.42s ease;
+  }
+
+  #loginView.login-sheet-open .login-sheet-backdrop {
+    display: block !important;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #loginView .login-card {
+    position: fixed;
+    z-index: 60;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 92svh !important;
+    margin: 0 !important;
+    padding: 0.3rem 1.3rem max(1.5rem, env(safe-area-inset-bottom)) !important;
+    border-radius: 26px 26px 0 0;
+    background: #fff;
+    box-shadow: 0 -12px 44px rgba(0, 0, 0, 0.18);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateY(112%);
+    transition: transform 0.44s cubic-bezier(0.32, 0.72, 0, 1);
+    will-change: transform;
+  }
+
+  [data-theme="dark"] #loginView .login-card {
+    background: rgba(20, 20, 22, 0.98);
+    box-shadow: 0 -12px 44px rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  #loginView.login-sheet-open .login-card {
+    transform: translateY(0);
+  }
+
+  /* 收起手柄 */
+  #loginView .login-sheet-handle {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 1.5rem;
+    padding: 0.55rem 0 0.35rem;
+    background: transparent;
+    border: none;
+  }
+
+  #loginView .login-sheet-handle span {
+    display: block;
+    width: 2.6rem;
+    height: 0.28rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.16);
+  }
+
+  [data-theme="dark"] #loginView .login-sheet-handle span {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* 浮层内排版：紧凑 */
+  #loginView .login-card .form-heading {
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+
+  #loginView .login-card .form-heading h2 {
+    font-size: 1.4rem;
+  }
+
+  #loginView .login-card .form-heading .kicker {
+    display: none;
+  }
+
+  #loginView .login-card .login-source-mode {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+  }
+
+  #loginView .login-card .field {
+    margin-top: 0.7rem;
+  }
+
+  #loginView .login-card .field input {
+    height: 2.85rem;
+    font-size: 1rem;
+  }
+
+  #loginView .login-card .login-actions {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  #loginView .login-card .primary-button,
+  #loginView .login-card .secondary-login-button {
+    min-height: 2.85rem;
+    border-radius: 14px;
+    font-size: 0.98rem;
+  }
+
+  #loginView .login-card .login-tools {
+    margin-top: 0.7rem;
+  }
+
+  /* 已保存账号：完整显示一条，多余的在内部滚动 */
+  #loginView .login-card .saved-accounts {
+    max-height: none;
+    margin-top: 0.7rem;
+    padding: 0.7rem;
+  }
+
+  #loginView .login-card .saved-account-list {
+    max-height: 8.4rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  #loginView .login-card .saved-account-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  #loginView .login-card .saved-account-item {
+    min-height: 3.1rem;
+  }
+
+  #loginView .login-card .saved-account-main {
+    min-height: 3.1rem;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    padding: 0.5rem 0.7rem;
+  }
+
+  #loginView .login-card .saved-account-avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  /* 浮层打开时锁背景滚动 */
+  body.login-sheet-locked {
+    overflow: hidden;
+  }
+}
+
+
+/* ===== 移动端登录入口屏：趣味元素动画 ===== */
+@keyframes loginVinylSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loginEqBounce {
+  0%,
+  100% {
+    height: 0.35rem;
+  }
+  50% {
+    height: 1.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #loginView .login-vinyl-disc {
+    animation: none !important;
+  }
+  #loginView .login-vinyl-eq i {
+    animation: none !important;
+    height: 0.8rem;
+  }
 }

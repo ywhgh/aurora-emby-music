@@ -241,9 +241,16 @@ const PLAYLIST_TRACK_PAGE_SIZE = 500;
 const DEFAULT_LYRIC_SETTINGS = Object.freeze({
   fontScale: 1,
   fontFamily: "system",
+  letterSpacing: 0,
   autoScroll: true,
   autoImmersiveLyrics: false,
 });
+const LYRIC_FONT_FAMILY_OPTIONS = Object.freeze([
+  { id: "system", label: "系统默认", detail: "跟随设备字体" },
+  { id: "rounded", label: "柔和圆体", detail: "更适合大字号歌词" },
+  { id: "serif", label: "温润衬线", detail: "阅读感更安静" },
+  { id: "mono", label: "等宽歌词", detail: "节奏分隔更清楚" },
+]);
 const LYRIC_FONT_FAMILY_MAP = Object.freeze({
   system: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   rounded: '"SF Pro Rounded", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", system-ui, sans-serif',
@@ -362,6 +369,23 @@ const EXTERNAL_SOURCE_VIDEO_QUALITY_OPTIONS = [
   },
 ];
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
+const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playback-display";
+const PLAYBACK_DISPLAY_DEFAULTS = {
+  volumeLeveling: false,
+  backgroundMix: false,
+  fadeInOut: false,
+  smartTransition: true,
+  soundEffect: "none",
+  playbackRate: 1,
+};
+const PLAYBACK_DISPLAY_SOUND_EFFECTS = [
+  { id: "none", label: "原始" },
+  { id: "warm", label: "暖声" },
+  { id: "vocal", label: "人声" },
+  { id: "night", label: "夜间" },
+  { id: "bass", label: "低频" },
+];
+const PLAYBACK_DISPLAY_RATE_OPTIONS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 2];
 const AUTO_DISMISS_STATUS_MS = 1800;
 const AUTO_DISMISS_NOTICE_MS = 1800;
 const PLAYBACK_PRELOAD_CACHE_NAME = "emby-music-web-playback-preload";
@@ -423,6 +447,10 @@ const clearLoginCacheButton = document.querySelector("#clearLoginCacheButton");
 const loginVersion = document.querySelector("#loginVersion");
 const savedAccountsSection = document.querySelector("#savedAccountsSection");
 const savedAccountList = document.querySelector("#savedAccountList");
+const openLoginSheetButton = document.querySelector("#openLoginSheetButton");
+const loginSheetCloseTargets = [...document.querySelectorAll("[data-close-login-sheet]")];
+const loginModeSwipeArea = document.querySelector("[data-login-mode-swipe]");
+const loginEntryVersion = document.querySelector(".login-entry-version");
 const clearSessionButton = document.querySelector("#clearSessionButton");
 const message = document.querySelector("#message");
 const loginView = document.querySelector("#loginView");
@@ -640,9 +668,12 @@ const createPlaylistSubmit = document.querySelector("#createPlaylistSubmit");
 const mobileMoreNavButton = document.querySelector("#mobileMoreNavButton");
 const trackActionSheet = document.querySelector("#trackActionSheet");
 const trackActionSheetClose = document.querySelector("#trackActionSheetClose");
+const trackActionSheetBack = document.querySelector("#trackActionSheetBack");
+const trackActionSheetForward = document.querySelector("#trackActionSheetForward");
 const trackActionSheetTitle = document.querySelector("#trackActionSheetTitle");
 const trackActionSheetSubtitle = document.querySelector("#trackActionSheetSubtitle");
 const trackActionSheetList = document.querySelector("#trackActionSheetList");
+const trackActionSheetDetail = document.querySelector("#trackActionSheetDetail");
 const quickQueuePopover = document.querySelector("#quickQueuePopover");
 const quickQueueTitle = document.querySelector("#quickQueueTitle");
 const quickQueueMeta = document.querySelector("#quickQueueMeta");
@@ -769,7 +800,10 @@ const lyricSettingsModal = document.querySelector("#lyricSettingsModal");
 const lyricSettingsClose = document.querySelector("#lyricSettingsClose");
 const lyricFontSizeRange = document.querySelector("#lyricFontSizeRange");
 const lyricFontSizeValue = document.querySelector("#lyricFontSizeValue");
-const lyricFontFamilySelect = document.querySelector("#lyricFontFamilySelect");
+const lyricFontFamilyButton = document.querySelector("#lyricFontFamilyButton");
+const lyricFontFamilyValue = document.querySelector("#lyricFontFamilyValue");
+const lyricLetterSpacingRange = document.querySelector("#lyricLetterSpacingRange");
+const lyricLetterSpacingValue = document.querySelector("#lyricLetterSpacingValue");
 const lyricAutoScrollToggle = document.querySelector("#lyricAutoScrollToggle");
 const lyricAutoImmersiveToggle = document.querySelector("#lyricAutoImmersiveToggle");
 const playerStyleModal = document.querySelector("#playerStyleModal");
@@ -890,6 +924,8 @@ let immersiveVisualizerFrequencyData = null;
 let immersiveVisualizerStream = null;
 let immersiveVisualizerSourceElement = null;
 let immersiveVisualizerFrame = 0;
+let immersiveVisualizerSyncFrame = 0;
+let immersiveVisualizerSyncTimer = 0;
 let immersiveVisualizerLevels = [];
 let immersiveVisualizerPhase = 0;
 let immersiveVisualizerLastStats = null;
@@ -1095,6 +1131,10 @@ const state = {
   playlistPickerTrack: null,
   trackActionSheetTrack: null,
   trackActionSheetReturnFocus: null,
+  actionSheetPage: "main",
+  actionSheetHistory: [],
+  actionSheetForward: [],
+  actionSheetDraft: null,
   queueUndoSnapshot: null,
   recentUndoSnapshot: null,
   isQuickQueueOpen: false,
@@ -1107,6 +1147,7 @@ const state = {
   desktopImmersiveView: "visualizer",
   immersiveTopActionsCollapsed: false,
   immersivePlayerStyle: initialImmersivePlayerStyle,
+  playbackDisplaySettings: loadPlaybackDisplaySettings(),
   immersiveBackgroundMode: initialImmersivePlayerStyle.theme,
   immersiveVisualizerStyle: initialImmersivePlayerStyle.visualizer,
   immersiveReturnView: "home",
@@ -1345,6 +1386,8 @@ function init() {
     }
   });
   trackActionSheetClose.addEventListener("click", closeTrackActionSheet);
+  trackActionSheetBack?.addEventListener("click", goBackActionSheetPage);
+  trackActionSheetForward?.addEventListener("click", goForwardActionSheetPage);
   mobileMoreNavButton.addEventListener("click", openMobileNavigationSheet);
   trackActionSheet.addEventListener("click", (event) => {
     if (isBackdropCloseEvent(event, trackActionSheet)) {
@@ -1413,8 +1456,12 @@ function init() {
   lyricFontSizeRange?.addEventListener("input", () => {
     updateLyricSetting("fontScale", Number(lyricFontSizeRange.value) / 100);
   });
-  lyricFontFamilySelect?.addEventListener("change", () => {
-    updateLyricSetting("fontFamily", lyricFontFamilySelect.value);
+  lyricFontFamilyButton?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openLyricFontChoicePopover();
+  });
+  lyricLetterSpacingRange?.addEventListener("input", () => {
+    updateLyricSetting("letterSpacing", Number(lyricLetterSpacingRange.value));
   });
   lyricAutoScrollToggle?.addEventListener("change", () => {
     updateLyricSetting("autoScroll", lyricAutoScrollToggle.checked);
@@ -1506,6 +1553,7 @@ function init() {
   bindLyricOffsetControls();
   applyLyricSettings();
   applyImmersivePlayerStyle();
+  applyPlaybackDisplaySettings();
   setDesktopImmersiveStageView("visualizer", { animate: false });
   immersiveArtist.addEventListener("click", () => {
     if (state.currentTrack) {
@@ -3707,8 +3755,76 @@ function bindLoginEvents() {
   copyLoginDiagnosticsButton.addEventListener("click", copyLoginDiagnostics);
   clearLoginCacheButton.addEventListener("click", clearLoginCacheAndReload);
   loginVersion.textContent = `v${APP_VERSION}`;
+  if (loginEntryVersion) {
+    loginEntryVersion.textContent = `v${APP_VERSION}`;
+  }
+  bindLoginSheetEvents();
+  bindLoginModeSwipe();
   syncLoginSourceMode();
   syncLoginActionButtons();
+}
+
+function openLoginSheet() {
+  loginView.classList.add("login-sheet-open");
+  document.body.classList.add("login-sheet-locked");
+}
+
+function closeLoginSheet() {
+  loginView.classList.remove("login-sheet-open");
+  document.body.classList.remove("login-sheet-locked");
+}
+
+function bindLoginSheetEvents() {
+  if (openLoginSheetButton) {
+    openLoginSheetButton.addEventListener("click", () => {
+      openLoginSheet();
+      renderSavedAccounts();
+    });
+  }
+
+  loginSheetCloseTargets.forEach((target) => {
+    target.addEventListener("click", closeLoginSheet);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && loginView.classList.contains("login-sheet-open")) {
+      closeLoginSheet();
+    }
+  });
+}
+
+function bindLoginModeSwipe() {
+  if (!loginModeSwipeArea) {
+    return;
+  }
+
+  let startX = null;
+
+  loginModeSwipeArea.addEventListener(
+    "touchstart",
+    (event) => {
+      startX = event.changedTouches[0]?.clientX ?? null;
+    },
+    { passive: true }
+  );
+
+  loginModeSwipeArea.addEventListener(
+    "touchend",
+    (event) => {
+      if (startX === null) {
+        return;
+      }
+      const endX = event.changedTouches[0]?.clientX ?? startX;
+      const delta = endX - startX;
+      startX = null;
+      if (Math.abs(delta) < 40) {
+        return;
+      }
+      // 左滑 → Emby，右滑 → 音源桥
+      setLoginSourceMode(delta < 0 ? "emby" : "external");
+    },
+    { passive: true }
+  );
 }
 
 function setLoginSourceMode(mode) {
@@ -3733,6 +3849,10 @@ function syncLoginSourceMode() {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
   });
+
+  if (loginModeSwipeArea) {
+    loginModeSwipeArea.dataset.activeMode = mode;
+  }
 
   embyLoginFields.forEach((field) => {
     field.hidden = mode === "external";
@@ -6802,12 +6922,16 @@ function openTrackActionSheet(track, items, options = {}) {
   trackActionSheetTitle.textContent = options.title || "歌曲操作";
   trackActionSheetSubtitle.textContent = options.subtitle || getTrackActionSheetSubtitle(track);
   trackActionSheetList.replaceChildren();
+  renderTrackActionSheetDetail(options.detailRenderer);
 
   enabledItems.forEach((item) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `action-sheet-item ${item.tone === "danger" ? "danger" : ""}`.trim();
     button.disabled = Boolean(item.disabled);
+    if (item.id) {
+      button.dataset.actionSheetItemId = item.id;
+    }
     const icon = document.createElement("span");
     icon.className = "action-sheet-icon";
     icon.append(createActionIcon(item.icon));
@@ -6828,6 +6952,16 @@ function openTrackActionSheet(track, items, options = {}) {
         return;
       }
 
+      if (item.keepOpen) {
+        item.handler();
+        if (!item.skipDetailRefresh) {
+          renderTrackActionSheetDetail(options.detailRenderer, item);
+        }
+        button.classList.add("is-live-updated");
+        window.setTimeout(() => button.classList.remove("is-live-updated"), 420);
+        return;
+      }
+
       closeTrackActionSheet();
       item.handler();
     });
@@ -6838,6 +6972,465 @@ function openTrackActionSheet(track, items, options = {}) {
   document.body.classList.add("action-sheet-open");
   const firstEnabledButton = trackActionSheetList.querySelector("button:not(:disabled)");
   (firstEnabledButton || trackActionSheetClose).focus();
+}
+
+function renderTrackActionSheetDetail(renderer, item = null) {
+  if (!trackActionSheetDetail) {
+    return;
+  }
+
+  trackActionSheetDetail.replaceChildren();
+  if (typeof renderer !== "function") {
+    trackActionSheetDetail.hidden = true;
+    syncActionSheetNavigationButtons();
+    return;
+  }
+
+  const content = renderer(item);
+  if (!content) {
+    trackActionSheetDetail.hidden = true;
+    syncActionSheetNavigationButtons();
+    return;
+  }
+
+  trackActionSheetDetail.hidden = false;
+  trackActionSheetDetail.append(content);
+  syncActionSheetNavigationButtons();
+}
+
+function openActionSheetPage(page, options = {}) {
+  if (!trackActionSheet || trackActionSheet.hidden) {
+    return;
+  }
+
+  if (!options.fromHistory && state.actionSheetPage && state.actionSheetPage !== page) {
+    state.actionSheetHistory.push(state.actionSheetPage);
+    state.actionSheetForward = [];
+  }
+
+  state.actionSheetPage = page;
+  renderTrackActionSheetDetail(createActionSheetPageDetail);
+}
+
+function syncActionSheetNavigationButtons() {
+  if (trackActionSheetBack) {
+    trackActionSheetBack.disabled = !state.actionSheetHistory?.length;
+  }
+  if (trackActionSheetForward) {
+    trackActionSheetForward.disabled = !state.actionSheetForward?.length;
+  }
+}
+
+function goBackActionSheetPage() {
+  if (!state.actionSheetHistory.length) {
+    return;
+  }
+
+  const previous = state.actionSheetHistory.pop();
+  state.actionSheetForward.push(state.actionSheetPage);
+  state.actionSheetPage = previous || "main";
+  renderTrackActionSheetDetail(createActionSheetPageDetail);
+}
+
+function goForwardActionSheetPage() {
+  if (!state.actionSheetForward.length) {
+    return;
+  }
+
+  const next = state.actionSheetForward.pop();
+  state.actionSheetHistory.push(state.actionSheetPage);
+  state.actionSheetPage = next || "main";
+  renderTrackActionSheetDetail(createActionSheetPageDetail);
+}
+
+function createActionSheetPageDetail() {
+  const page = state.actionSheetPage || "main";
+  if (page === "sleep") {
+    return createSleepTimerActionSheetPage();
+  }
+  if (page === "playback-display") {
+    return createPlaybackDisplayActionSheetPage();
+  }
+  if (page === "sound-effect") {
+    return createSoundEffectActionSheetPage();
+  }
+  if (page === "playback-rate") {
+    return createPlaybackRateActionSheetPage();
+  }
+  return createImmersiveMoreActionDetail();
+}
+
+function createActionSheetPageShell(title, subtitle) {
+  const panel = document.createElement("div");
+  panel.className = "action-sheet-page";
+
+  const heading = document.createElement("div");
+  heading.className = "action-sheet-page-heading";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const small = document.createElement("small");
+  small.textContent = subtitle;
+  heading.append(strong, small);
+
+  const body = document.createElement("div");
+  body.className = "action-sheet-page-body";
+
+  panel.append(heading, body);
+  return { panel, body };
+}
+
+function createSleepTimerActionSheetPage() {
+  const { panel, body } = createActionSheetPageShell("睡眠模式", "到点后自动暂停播放。");
+  const remaining = getSleepTimerRemainingSeconds();
+
+  body.append(createActionSheetStatusCard(
+    remaining > 0 ? formatSleepTimerDetail(remaining) : "关闭",
+    remaining > 0 ? "当前睡眠定时" : "未开启睡眠定时",
+  ));
+
+  const grid = document.createElement("div");
+  grid.className = "action-sheet-choice-grid";
+  SLEEP_TIMER_OPTIONS.forEach((minutes) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "action-sheet-choice";
+    button.classList.toggle("active", state.sleepTimerPresetMinutes === minutes && (minutes === 0 || remaining > 0));
+    button.textContent = minutes ? `${minutes} 分钟` : "关闭";
+    button.addEventListener("click", () => {
+      setSleepTimer(minutes);
+      renderTrackActionSheetDetail(createActionSheetPageDetail);
+    });
+    grid.append(button);
+  });
+  body.append(grid);
+  return panel;
+}
+
+function createPlaybackDisplayActionSheetPage() {
+  const draft = state.actionSheetDraft || normalizePlaybackDisplaySettings(state.playbackDisplaySettings);
+  state.actionSheetDraft = { ...draft };
+  const { panel, body } = createActionSheetPageShell("播放与显示", "保存后应用播放偏好，倍速会立即作用于当前播放器。");
+
+  const rows = [
+    ["volumeLeveling", "音量均衡", "降低曲目之间的响度落差"],
+    ["backgroundMix", "与其他应用同时播放", "保留并播偏好，系统是否支持取决于浏览器"],
+    ["fadeInOut", "淡入淡出", "切歌和暂停时使用柔和过渡"],
+    ["smartTransition", "智能过渡", "根据曲目状态优化切换体验"],
+  ];
+
+  rows.forEach(([key, label, detail]) => {
+    body.append(createActionSheetToggleRow(label, detail, Boolean(draft[key]), (checked) => {
+      state.actionSheetDraft = { ...state.actionSheetDraft, [key]: checked };
+    }));
+  });
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "action-sheet-save-button";
+  save.textContent = "保存播放与显示";
+  save.addEventListener("click", () => {
+    savePlaybackDisplaySettings(state.actionSheetDraft);
+    setLibraryStatus("播放与显示偏好已保存。");
+    renderTrackActionSheetDetail(createActionSheetPageDetail);
+  });
+  body.append(save);
+  return panel;
+}
+
+function createSoundEffectActionSheetPage() {
+  const defaultLabel = getSoundEffectLabel(PLAYBACK_DISPLAY_DEFAULTS.soundEffect);
+  const { panel, body } = createActionSheetPageShell("音效", `选择当前播放音效。默认：${defaultLabel}`);
+  const currentValue = state.playbackDisplaySettings.soundEffect;
+
+  body.append(createActionSheetStatusCard(getSoundEffectLabel(currentValue), "当前音效"));
+  body.append(createActionSheetChoiceList(
+    PLAYBACK_DISPLAY_SOUND_EFFECTS.map((option) => ({
+      id: option.id,
+      label: option.label,
+      detail: option.id === PLAYBACK_DISPLAY_DEFAULTS.soundEffect ? "不改变原始声音走向" : getSoundEffectDetail(option.id),
+      isDefault: option.id === PLAYBACK_DISPLAY_DEFAULTS.soundEffect,
+    })),
+    currentValue,
+    (value) => {
+      const nextSettings = normalizePlaybackDisplaySettings({
+        ...state.playbackDisplaySettings,
+        soundEffect: value,
+      });
+      state.actionSheetDraft = { ...nextSettings };
+      savePlaybackDisplaySettings(nextSettings);
+      refreshActionSheetMainItem("sound-effect");
+      setLibraryStatus(`音效：${getSoundEffectLabel(value)}。`);
+      renderTrackActionSheetDetail(createActionSheetPageDetail);
+    },
+  ));
+  return panel;
+}
+
+function createPlaybackRateActionSheetPage() {
+  const defaultRate = PLAYBACK_DISPLAY_DEFAULTS.playbackRate;
+  const { panel, body } = createActionSheetPageShell("倍速", `选择播放速度。默认：${defaultRate}x`);
+  const currentRate = Number(state.playbackDisplaySettings.playbackRate);
+
+  body.append(createActionSheetStatusCard(`${currentRate}x`, "当前倍速"));
+  body.append(createActionSheetChoiceList(
+    PLAYBACK_DISPLAY_RATE_OPTIONS.map((rate) => ({
+      id: rate,
+      label: `${rate}x`,
+      detail: rate === defaultRate ? "保持歌曲原速播放" : getPlaybackRateDetail(rate),
+      isDefault: rate === defaultRate,
+    })),
+    currentRate,
+    (value) => {
+      const nextRate = Number(value);
+      const nextSettings = normalizePlaybackDisplaySettings({
+        ...state.playbackDisplaySettings,
+        playbackRate: nextRate,
+      });
+      state.actionSheetDraft = { ...nextSettings };
+      savePlaybackDisplaySettings(nextSettings);
+      refreshActionSheetMainItem("playback-rate");
+      setLibraryStatus(`倍速：${nextSettings.playbackRate}x。`);
+      renderTrackActionSheetDetail(createActionSheetPageDetail);
+    },
+  ));
+  return panel;
+}
+
+function createActionSheetChoiceList(options, value, onSelect) {
+  const list = document.createElement("div");
+  list.className = "action-sheet-choice-list";
+
+  options.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "action-sheet-choice-option";
+    button.classList.toggle("active", String(option.id) === String(value));
+
+    const copy = document.createElement("span");
+    const titleRow = document.createElement("span");
+    titleRow.className = "action-sheet-choice-title";
+    const strong = document.createElement("strong");
+    strong.textContent = option.label;
+    titleRow.append(strong);
+    if (option.isDefault) {
+      const badge = document.createElement("em");
+      badge.className = "action-sheet-default-badge";
+      badge.textContent = "默认";
+      titleRow.append(badge);
+    }
+    copy.append(titleRow);
+    if (option.detail) {
+      const detail = document.createElement("small");
+      detail.textContent = option.detail;
+      copy.append(detail);
+    }
+
+    const marker = document.createElement("i");
+    marker.setAttribute("aria-hidden", "true");
+    button.append(copy, marker);
+    button.addEventListener("click", () => onSelect(option.id));
+    list.append(button);
+  });
+
+  return list;
+}
+
+function createActionSheetStatusCard(value, label) {
+  const card = document.createElement("div");
+  card.className = "action-sheet-status-card";
+  const strong = document.createElement("strong");
+  strong.textContent = value;
+  const span = document.createElement("span");
+  span.textContent = label;
+  card.append(strong, span);
+  return card;
+}
+
+function createActionSheetToggleRow(label, detail, checked, onChange) {
+  const row = document.createElement("label");
+  row.className = "action-sheet-setting-row";
+  const copy = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = label;
+  const small = document.createElement("small");
+  small.textContent = detail;
+  copy.append(strong, small);
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.addEventListener("change", () => onChange(input.checked));
+  row.append(copy, input);
+  return row;
+}
+
+function createActionSheetSelectRow(label, valueLabel, options, value, onSelect) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "action-sheet-setting-row action-sheet-select-row";
+  const copy = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = label;
+  const small = document.createElement("small");
+  small.textContent = valueLabel;
+  copy.append(strong, small);
+  const marker = document.createElement("em");
+  marker.textContent = "选择";
+  button.append(copy, marker);
+  button.addEventListener("click", () => openActionSheetChoicePopover(label, options, value, onSelect));
+  return button;
+}
+
+function openActionSheetInlineChoice(title, options, value, onSelect) {
+  openActionSheetPage("main");
+  openActionSheetChoicePopover(title, options, value, onSelect);
+}
+
+function refreshActionSheetMainItem(id) {
+  const button = trackActionSheetList?.querySelector(`[data-action-sheet-item-id="${id}"]`);
+  if (!button) {
+    return;
+  }
+
+  let labelText = "";
+  let detailText = "";
+  if (id === "sound-effect") {
+    labelText = `音效：${getSoundEffectLabel(state.playbackDisplaySettings.soundEffect)}`;
+    detailText = "右侧选择音效";
+  } else if (id === "playback-rate") {
+    labelText = `倍速：${state.playbackDisplaySettings.playbackRate}x`;
+    detailText = "右侧选择倍速，立即作用于当前播放器";
+  } else {
+    return;
+  }
+
+  const title = button.querySelector(".action-sheet-copy strong");
+  const detail = button.querySelector(".action-sheet-copy small");
+  if (title) {
+    title.textContent = labelText;
+  }
+  if (detail) {
+    detail.textContent = detailText;
+  }
+}
+
+function removeActionSheetChoicePopover() {
+  trackActionSheetDetail?.querySelector(".action-sheet-choice-popover")?.remove();
+}
+
+function openActionSheetChoicePopover(title, options, value, onSelect) {
+  removeActionSheetChoicePopover();
+
+  const popover = document.createElement("div");
+  popover.className = "action-sheet-choice-popover";
+  const card = document.createElement("div");
+  card.className = "action-sheet-choice-card";
+  const heading = document.createElement("div");
+  heading.className = "action-sheet-choice-heading";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "关闭";
+  close.addEventListener("click", () => popover.remove());
+  heading.append(strong, close);
+  card.append(heading);
+
+  options.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "action-sheet-choice-option";
+    button.classList.toggle("active", String(option.id) === String(value));
+    button.textContent = option.label;
+    button.addEventListener("click", () => {
+      onSelect(option.id);
+      popover.remove();
+    });
+    card.append(button);
+  });
+
+  popover.append(card);
+  trackActionSheetDetail?.append(popover);
+}
+
+function getSoundEffectLabel(value) {
+  return PLAYBACK_DISPLAY_SOUND_EFFECTS.find((option) => option.id === value)?.label || "原始";
+}
+
+function getSoundEffectDetail(value) {
+  switch (value) {
+    case "warm":
+      return "略微柔化高频，适合长时间听";
+    case "vocal":
+      return "突出人声轮廓";
+    case "night":
+      return "降低刺激感，适合低音量";
+    case "bass":
+      return "增强低频存在感";
+    default:
+      return "不改变原始声音走向";
+  }
+}
+
+function getPlaybackRateDetail(value) {
+  const rate = Number(value);
+  if (rate < 1) {
+    return "放慢播放速度";
+  }
+  if (rate > 1) {
+    return "加快播放速度";
+  }
+  return "保持歌曲原速播放";
+}
+
+function createImmersiveMoreActionDetail(lastAction = null) {
+  const panel = document.createElement("div");
+  panel.className = "action-sheet-live-panel";
+
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "action-sheet-live-eyebrow";
+  eyebrow.textContent = lastAction ? "刚刚更新" : "实时状态";
+
+  const title = document.createElement("strong");
+  title.textContent = lastAction?.label || "沉浸播放";
+
+  const status = document.createElement("p");
+  status.textContent = lastAction
+    ? getImmersiveMoreActionStatus(lastAction)
+    : "点击左侧操作后，当前歌词、样式和播放状态会在这里同步更新。";
+
+  const summary = document.createElement("dl");
+  summary.className = "action-sheet-live-summary";
+  [
+    ["歌词同步", formatLyricOffsetLabel(state.lyricOffsetSeconds)],
+    ["播放器样式", getImmersivePlayerStyleSummary()],
+    ["纯享模式", immersiveZenButton?.getAttribute("aria-pressed") === "true" ? "已开启" : "未开启"],
+    ["歌词滚动", state.lyricSettings?.autoScroll ? "自动跟随" : "手动浏览"],
+  ].forEach(([label, value]) => {
+    const row = document.createElement("div");
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = label;
+    dd.textContent = value;
+    row.append(dt, dd);
+    summary.append(row);
+  });
+
+  panel.append(eyebrow, title, status, summary);
+  return panel;
+}
+
+function getImmersiveMoreActionStatus(action) {
+  if (action?.id === "lyric-earlier" || action?.id === "lyric-later" || action?.id === "lyric-reset") {
+    return `歌词同步已更新为 ${formatLyricOffsetLabel(state.lyricOffsetSeconds)}。`;
+  }
+
+  if (action?.id === "zen") {
+    return immersiveZenButton?.getAttribute("aria-pressed") === "true"
+      ? "纯享模式已开启，非必要信息会收起。"
+      : "纯享模式已关闭，完整沉浸信息已恢复。";
+  }
+
+  return "操作已应用。";
 }
 
 function getTrackActionSheetSubtitle(track) {
@@ -6928,50 +7521,100 @@ function openMobilePlayerActions() {
 }
 
 function openImmersiveMoreActions() {
+  state.actionSheetPage = "main";
+  state.actionSheetHistory = [];
+  state.actionSheetForward = [];
+  state.actionSheetDraft = null;
+
   openTrackActionSheet(
     state.currentTrack,
     [
       {
+        id: "artist",
+        icon: "artist",
+        label: "歌手",
+        detail: getArtists(state.currentTrack) || "当前歌曲没有歌手信息",
+        handler: () => {
+          if (state.currentTrack) {
+            openTrackArtist(state.currentTrack);
+          }
+        },
+        disabled: !state.currentTrack,
+      },
+      {
+        id: "album",
+        icon: "album",
+        label: "专辑",
+        detail: state.currentTrack?.Album || "当前歌曲没有专辑信息",
+        handler: () => {
+          if (state.currentTrack) {
+            openTrackAlbum(state.currentTrack);
+          }
+        },
+        disabled: !state.currentTrack,
+      },
+      {
+        id: "sound-effect",
+        icon: "wave",
+        label: `音效：${getSoundEffectLabel(state.playbackDisplaySettings.soundEffect)}`,
+        detail: "右侧选择音效",
+        handler: () => openActionSheetPage("sound-effect"),
+        keepOpen: true,
+        skipDetailRefresh: true,
+      },
+      {
+        id: "playback-rate",
+        icon: "playNext",
+        label: `倍速：${state.playbackDisplaySettings.playbackRate}x`,
+        detail: "右侧选择倍速，立即作用于当前播放器",
+        handler: () => openActionSheetPage("playback-rate"),
+        keepOpen: true,
+        skipDetailRefresh: true,
+      },
+      {
+        id: "style",
         icon: "palette",
         label: "播放器样式",
         detail: `主题与可视化：${getImmersivePlayerStyleSummary()}`,
         handler: openPlayerStyleModal,
       },
       {
-        icon: "moveUp",
-        label: "歌词慢了",
-        detail: "让逐字歌词提前 0.1 秒",
-        handler: () => adjustLyricOffset(LYRIC_OFFSET_STEP_SECONDS),
-      },
-      {
-        icon: "moveDown",
-        label: "歌词快了",
-        detail: "让逐字歌词延后 0.1 秒",
-        handler: () => adjustLyricOffset(-LYRIC_OFFSET_STEP_SECONDS),
-      },
-      {
-        icon: "repeat",
-        label: "重置歌词同步",
-        detail: `恢复默认偏移 ${formatLyricOffsetLabel(DEFAULT_LYRIC_OFFSET_SECONDS)}`,
-        handler: resetLyricOffset,
-      },
-      {
+        id: "lyrics",
         icon: "spark",
         label: "歌词设置",
         detail: "字体、同步时间、自动滚动和自动展示",
         handler: openLyricSettingsModal,
       },
       {
+        id: "sleep",
+        icon: "recent",
+        label: "睡眠模式",
+        detail: state.sleepTimerEndAt ? `${formatSleepTimerDetail(getSleepTimerRemainingSeconds())}后停止` : "定时暂停播放",
+        handler: () => openActionSheetPage("sleep"),
+        keepOpen: true,
+      },
+      {
+        id: "playback-display",
+        icon: "wave",
+        label: "播放与显示",
+        detail: "音量均衡、同时播放、淡入淡出和智能过渡",
+        handler: () => openActionSheetPage("playback-display"),
+        keepOpen: true,
+      },
+      {
+        id: "zen",
         icon: "spark",
         label: immersiveZenButton?.getAttribute("aria-pressed") === "true" ? "关闭纯享模式" : "开启纯享模式",
-        detail: "隐藏非必要信息，保留沉浸播放",
+        detail: "在播放与显示页也可以看到状态",
         handler: toggleImmersiveZenMode,
+        keepOpen: true,
       },
     ],
     {
       title: "更多操作",
-      subtitle: `歌词同步 ${formatLyricOffsetLabel(state.lyricOffsetSeconds)}`,
+      subtitle: "控制沉浸播放、跳转当前音乐信息和保存播放偏好",
       emptyMessage: "暂无更多沉浸播放操作。",
+      detailRenderer: createActionSheetPageDetail,
     },
   );
   state.trackActionSheetTrack = null;
@@ -7218,9 +7861,22 @@ function closeTrackActionSheet(options = {}) {
   trackActionSheet.hidden = true;
   document.body.classList.remove("action-sheet-open");
   state.trackActionSheetTrack = null;
+  state.actionSheetPage = "main";
+  state.actionSheetHistory = [];
+  state.actionSheetForward = [];
+  state.actionSheetDraft = null;
   trackActionSheetTitle.textContent = "歌曲操作";
   trackActionSheetSubtitle.textContent = "";
   trackActionSheetList.replaceChildren();
+  trackActionSheetDetail?.replaceChildren();
+  if (trackActionSheetDetail) {
+    trackActionSheetDetail.hidden = true;
+  }
+  state.actionSheetPage = "main";
+  state.actionSheetHistory = [];
+  state.actionSheetForward = [];
+  state.actionSheetDraft = null;
+  syncActionSheetNavigationButtons();
   if (options.restoreFocus !== false && state.trackActionSheetReturnFocus?.isConnected) {
     state.trackActionSheetReturnFocus.focus();
   }
@@ -8656,7 +9312,7 @@ function setMobileImmersiveStageView(view = "cover", options = {}) {
     });
   } else {
     shell?.classList.remove("is-lyrics-expanding");
-    renderIdleImmersiveWaveform();
+    renderImmersiveVisualizerForCurrentPlaybackState();
   }
 }
 
@@ -8678,6 +9334,9 @@ function setDesktopImmersiveStageView(view = "visualizer", options = {}) {
     });
   } else if (shell && previousView !== nextView && options.animate !== false) {
     shell.classList.remove("is-lyrics-expanding");
+  }
+  if (nextView === "visualizer") {
+    renderImmersiveVisualizerForCurrentPlaybackState();
   }
 }
 
@@ -9868,10 +10527,12 @@ function flushLyricSettingsSave() {
 function normalizeLyricSettings(settings = {}) {
   const fontScale = Number(settings?.fontScale);
   const fontFamily = LYRIC_FONT_FAMILY_MAP[settings?.fontFamily] ? settings.fontFamily : DEFAULT_LYRIC_SETTINGS.fontFamily;
+  const letterSpacing = Number(settings?.letterSpacing);
 
   return {
     fontScale: Math.round(clamp(Number.isFinite(fontScale) ? fontScale : DEFAULT_LYRIC_SETTINGS.fontScale, 0.85, 1.25) * 100) / 100,
     fontFamily,
+    letterSpacing: Math.round(clamp(Number.isFinite(letterSpacing) ? letterSpacing : DEFAULT_LYRIC_SETTINGS.letterSpacing, 0, 12) * 10) / 10,
     autoScroll: settings?.autoScroll !== false,
     autoImmersiveLyrics: settings?.autoImmersiveLyrics === true,
   };
@@ -9881,6 +10542,7 @@ function applyLyricSettings(options = {}) {
   state.lyricSettings = normalizeLyricSettings(state.lyricSettings);
   const lyricFontScale = state.lyricSettings.fontScale.toFixed(2);
   const lyricFontFamily = LYRIC_FONT_FAMILY_MAP[state.lyricSettings.fontFamily] || LYRIC_FONT_FAMILY_MAP.system;
+  const lyricLetterSpacing = `${state.lyricSettings.letterSpacing.toFixed(1)}px`;
   const targets = [
     document.body,
     immersivePlayerPanel,
@@ -9890,6 +10552,7 @@ function applyLyricSettings(options = {}) {
   targets.forEach((target) => {
     target.style?.setProperty("--immersive-lyric-font-scale", lyricFontScale);
     target.style?.setProperty("--immersive-lyric-font-family", lyricFontFamily);
+    target.style?.setProperty("--immersive-lyric-letter-spacing", lyricLetterSpacing);
   });
   document.body.classList.toggle("lyric-auto-scroll-off", !state.lyricSettings.autoScroll);
 
@@ -9907,8 +10570,19 @@ function renderLyricSettingsControls() {
   if (lyricFontSizeValue) {
     lyricFontSizeValue.textContent = `${Math.round(state.lyricSettings.fontScale * 100)}%`;
   }
-  if (lyricFontFamilySelect) {
-    lyricFontFamilySelect.value = state.lyricSettings.fontFamily;
+  if (lyricFontFamilyValue) {
+    lyricFontFamilyValue.textContent = getLyricFontFamilyLabel(state.lyricSettings.fontFamily);
+  }
+  if (lyricFontFamilyButton) {
+    lyricFontFamilyButton.setAttribute("aria-expanded", "false");
+  }
+  if (lyricLetterSpacingRange) {
+    lyricLetterSpacingRange.value = String(state.lyricSettings.letterSpacing);
+  }
+  if (lyricLetterSpacingValue) {
+    lyricLetterSpacingValue.textContent = state.lyricSettings.letterSpacing
+      ? `${state.lyricSettings.letterSpacing.toFixed(1)}px`
+      : "标准";
   }
   if (lyricAutoScrollToggle) {
     lyricAutoScrollToggle.checked = state.lyricSettings.autoScroll;
@@ -9924,7 +10598,7 @@ function updateLyricSetting(key, value) {
     [key]: value,
   });
 
-  const shouldCoalesceSave = key === "fontScale";
+  const shouldCoalesceSave = key === "fontScale" || key === "letterSpacing";
   applyLyricSettings({ save: !shouldCoalesceSave });
   if (shouldCoalesceSave) {
     scheduleLyricSettingsSave();
@@ -9936,9 +10610,83 @@ function updateLyricSetting(key, value) {
   if (key === "autoScroll" && state.lyricSettings.autoScroll) {
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   }
-  if ((key === "fontScale" || key === "fontFamily") && state.lyricSettings.autoScroll) {
+  if ((key === "fontScale" || key === "fontFamily" || key === "letterSpacing") && state.lyricSettings.autoScroll) {
     refreshLyricLayoutAfterSettingsChange();
   }
+  if (key === "fontFamily" || key === "fontScale" || key === "letterSpacing") {
+    renderImmersiveMobileCurrentLyric(getCurrentTopLyricLine());
+    renderImmersiveDesktopCurrentLyric(getCurrentTopLyricLine());
+  }
+}
+
+function getLyricFontFamilyLabel(value) {
+  return LYRIC_FONT_FAMILY_OPTIONS.find((option) => option.id === value)?.label || "系统默认";
+}
+
+function openLyricFontChoicePopover() {
+  if (!lyricSettingsModal || lyricSettingsModal.hidden) {
+    return;
+  }
+
+  const existing = lyricSettingsModal.querySelector(".lyric-settings-choice-popover");
+  existing?.remove();
+  lyricFontFamilyButton?.setAttribute("aria-expanded", "true");
+
+  const popover = document.createElement("div");
+  popover.className = "lyric-settings-choice-popover";
+  popover.addEventListener("click", (event) => {
+    if (event.target === popover) {
+      closeLyricFontChoicePopover();
+    }
+  });
+
+  const card = document.createElement("div");
+  card.className = "lyric-settings-choice-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-label", "选择歌词字体");
+
+  const heading = document.createElement("div");
+  heading.className = "lyric-settings-choice-heading";
+  const title = document.createElement("strong");
+  title.textContent = "歌词字体";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.setAttribute("aria-label", "关闭字体选择");
+  close.append(createActionIcon("check"));
+  close.addEventListener("click", closeLyricFontChoicePopover);
+  heading.append(title, close);
+  card.append(heading);
+
+  LYRIC_FONT_FAMILY_OPTIONS.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "lyric-settings-choice-option";
+    button.classList.toggle("active", option.id === state.lyricSettings.fontFamily);
+    button.setAttribute("aria-pressed", option.id === state.lyricSettings.fontFamily ? "true" : "false");
+
+    const copy = document.createElement("span");
+    const label = document.createElement("strong");
+    label.textContent = option.label;
+    const detail = document.createElement("small");
+    detail.textContent = option.detail;
+    copy.append(label, detail);
+    button.append(copy);
+
+    button.addEventListener("click", () => {
+      updateLyricSetting("fontFamily", option.id);
+      closeLyricFontChoicePopover();
+    });
+    card.append(button);
+  });
+
+  popover.append(card);
+  lyricSettingsModal.querySelector(".lyric-settings-card")?.append(popover);
+  card.querySelector("button")?.focus({ preventScroll: true });
+}
+
+function closeLyricFontChoicePopover() {
+  lyricSettingsModal?.querySelector(".lyric-settings-choice-popover")?.remove();
+  lyricFontFamilyButton?.setAttribute("aria-expanded", "false");
 }
 
 function refreshLyricLayoutAfterSettingsChange() {
@@ -9980,6 +10728,7 @@ function closeLyricSettingsModal() {
     return;
   }
 
+  closeLyricFontChoicePopover();
   flushLyricSettingsSave();
   lyricSettingsModal.classList.remove("is-open");
   lyricSettingsModal.classList.add("is-closing");
@@ -10013,6 +10762,48 @@ function loadImmersivePlayerStyle() {
   } catch {
     return { ...DEFAULT_IMMERSIVE_PLAYER_STYLE };
   }
+}
+
+function loadPlaybackDisplaySettings() {
+  try {
+    const raw = localStorage.getItem(IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY);
+    return normalizePlaybackDisplaySettings(raw ? JSON.parse(raw) : null);
+  } catch {
+    return { ...PLAYBACK_DISPLAY_DEFAULTS };
+  }
+}
+
+function normalizePlaybackDisplaySettings(settings = {}) {
+  const playbackRate = PLAYBACK_DISPLAY_RATE_OPTIONS.includes(Number(settings?.playbackRate))
+    ? Number(settings.playbackRate)
+    : PLAYBACK_DISPLAY_DEFAULTS.playbackRate;
+  const soundEffect = PLAYBACK_DISPLAY_SOUND_EFFECTS.some((option) => option.id === settings?.soundEffect)
+    ? settings.soundEffect
+    : PLAYBACK_DISPLAY_DEFAULTS.soundEffect;
+
+  return {
+    volumeLeveling: Boolean(settings?.volumeLeveling),
+    backgroundMix: Boolean(settings?.backgroundMix),
+    fadeInOut: Boolean(settings?.fadeInOut),
+    smartTransition: settings?.smartTransition === undefined ? PLAYBACK_DISPLAY_DEFAULTS.smartTransition : Boolean(settings.smartTransition),
+    soundEffect,
+    playbackRate,
+  };
+}
+
+function savePlaybackDisplaySettings(settings = state.playbackDisplaySettings) {
+  state.playbackDisplaySettings = normalizePlaybackDisplaySettings(settings);
+  localStorage.setItem(IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY, JSON.stringify(state.playbackDisplaySettings));
+  applyPlaybackDisplaySettings();
+}
+
+function applyPlaybackDisplaySettings() {
+  const settings = normalizePlaybackDisplaySettings(state.playbackDisplaySettings);
+  state.playbackDisplaySettings = settings;
+  audioPlayer.playbackRate = settings.playbackRate;
+  audioPlayer.preservesPitch = true;
+  audioPlayer.mozPreservesPitch = true;
+  audioPlayer.webkitPreservesPitch = true;
 }
 
 function saveImmersivePlayerStyle() {
@@ -18386,6 +19177,7 @@ async function playTrack(track, queue, options = {}) {
         if (isExternalSourceTrack(track)) {
           saveQueueState(getQueuePositionSeconds());
         }
+        scheduleImmersiveVisualizerSync();
         setLibraryStatus("");
         addRecentTrack(track);
         preloadNextTrack();
@@ -21719,6 +22511,7 @@ function handleAudioPlay() {
   setPlaybackBuffering(false);
   syncLyricPlaybackClock({ running: true });
   updatePlaybackState();
+  scheduleImmersiveVisualizerSync();
   refreshLyricsForPlaybackResume();
 
   if (state.currentTrack && !state.isChangingTrack) {
@@ -21730,6 +22523,7 @@ function handleAudioPause() {
   setPlaybackBuffering(false);
   pauseLyricPlaybackClock();
   updatePlaybackState();
+  syncImmersiveVisualizer();
   stopLyricProgressLoop();
   persistPlaybackPosition({ force: true });
 
@@ -21742,6 +22536,9 @@ function handleAudioTimeUpdate() {
   maybeSyncLyricPlaybackClock();
   updateProgress();
   persistPlaybackPosition();
+  if (isImmersiveVisualizerPlaybackActive() && !immersiveVisualizerFrame) {
+    scheduleImmersiveVisualizerSync({ followUp: false });
+  }
 
   if (Date.now() - state.lastProgressReportAt > 15000) {
     reportPlaybackProgress();
@@ -21755,6 +22552,7 @@ function handleAudioSeeked() {
   state.activeLyricTimelineIndex = -1;
   updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   syncLyricProgressLoop();
+  scheduleImmersiveVisualizerSync();
 
   if (state.currentTrack && !state.isChangingTrack && audioPlayer.src) {
     if (Date.now() - state.lastProgressReportAt > 500) {
@@ -21778,6 +22576,7 @@ function handleAudioBufferingStart() {
 function handleAudioBufferingEnd() {
   setPlaybackBuffering(false);
   syncLyricPlaybackClock();
+  scheduleImmersiveVisualizerSync();
   refreshLyricsForPlaybackResume();
 }
 
@@ -22104,8 +22903,42 @@ function releaseImmersiveVisualizerAnalyser() {
   immersiveVisualizerLastStats = null;
 }
 
+function isImmersiveVisualizerPlaybackActive() {
+  return Boolean(state.currentTrack && !audioPlayer.paused && !audioPlayer.ended);
+}
+
+function scheduleImmersiveVisualizerSync(options = {}) {
+  if (!immersiveVisualizerSyncFrame) {
+    immersiveVisualizerSyncFrame = requestAnimationFrame(() => {
+      immersiveVisualizerSyncFrame = 0;
+      syncImmersiveVisualizer();
+    });
+  }
+
+  if (options.followUp === false) {
+    return;
+  }
+
+  if (immersiveVisualizerSyncTimer) {
+    window.clearTimeout(immersiveVisualizerSyncTimer);
+  }
+  immersiveVisualizerSyncTimer = window.setTimeout(() => {
+    immersiveVisualizerSyncTimer = 0;
+    syncImmersiveVisualizer();
+  }, Number(options.delayMs) || 180);
+}
+
+function renderImmersiveVisualizerForCurrentPlaybackState() {
+  if (isImmersiveVisualizerPlaybackActive()) {
+    scheduleImmersiveVisualizerSync();
+    return;
+  }
+
+  renderIdleImmersiveWaveform();
+}
+
 function syncImmersiveVisualizer() {
-  const isPlaying = Boolean(state.currentTrack && !audioPlayer.paused && !audioPlayer.ended);
+  const isPlaying = isImmersiveVisualizerPlaybackActive();
   if (!isPlaying) {
     stopImmersiveVisualizer();
     return;
@@ -22155,7 +22988,7 @@ function updateImmersiveVisualizerFrame() {
   immersiveVisualizerFrame = 0;
 
   const waveform = getImmersiveWaveformParts();
-  const isPlaying = Boolean(state.currentTrack && !audioPlayer.paused && !audioPlayer.ended);
+  const isPlaying = isImmersiveVisualizerPlaybackActive();
   if (!waveform.line || !waveform.fill || !isPlaying) {
     stopImmersiveVisualizer();
     return;
@@ -22525,7 +23358,7 @@ function switchView(view, options = {}) {
       immersiveShell?.classList.remove("is-page-entering");
     }, 520);
     setMobileImmersiveStageView("cover", { animate: false });
-    renderIdleImmersiveWaveform();
+    renderImmersiveVisualizerForCurrentPlaybackState();
     updateImmersiveFullscreenLabel();
   }
   if (nextView !== "library") {
@@ -22884,7 +23717,8 @@ function normalizeSourceMode(mode) {
 }
 
 function loadSourceMode() {
-  return normalizeSourceMode(localStorage.getItem(SOURCE_MODE_KEY) || "emby");
+  // 没有历史选择的新用户默认进入「音源桥」模式
+  return normalizeSourceMode(localStorage.getItem(SOURCE_MODE_KEY) || "external");
 }
 
 function saveSourceMode(mode) {

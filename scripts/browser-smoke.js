@@ -683,8 +683,8 @@ function checkPageState(check, page) {
   const isWarmDarkCard = (layer) => /rgba?\(\s*(?:[0-2]?\d|3[0-5])\s*,\s*(?:[0-2]?\d|3[0-5])\s*,\s*(?:[0-2]?\d|3[0-5])(?:\s*,|\s*\))/i.test(layer?.cardBackgroundColor || "");
   const isAboveImmersivePanel = (layer) => Boolean(layer)
     && layer.visible === true
-    && Number(layer.zIndex || 0) > Number(layer.panelZIndex || 0)
-    && /blur/i.test(layer.backdropFilter || "");
+    && Number(layer.zIndex || 0) > Number(layer.panelZIndex || 0);
+  const hasNoBackdropBlur = (layer) => !/blur/i.test(layer?.backdropFilter || "");
 
   assert(page.title === "Aurora Music", `${label} expected title Aurora Music, got ${page.title || "-"}`);
   assert(["interactive", "complete"].includes(page.readyState), `${label} document did not become interactive`);
@@ -947,6 +947,7 @@ function checkPageState(check, page) {
   assert(audioQualityOptions.closedByOutside === true, `${label} audio quality modal should close on outside click: ${JSON.stringify(audioQualityOptions)}`);
   assert(moreActionSheet.openedByClick === true, `${label} immersive more action sheet should open from a real button click: ${JSON.stringify(moreActionSheet)}`);
   assert(isAboveImmersivePanel(moreActionSheet.layer), `${label} immersive more sheet should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(hasNoBackdropBlur(moreActionSheet.layer), `${label} immersive more sheet should not blur the original player view: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.layer), `${label} immersive more sheet should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("播放器样式"), `${label} immersive more action sheet should include player style settings: ${JSON.stringify(moreActionSheet)}`);
   assert(/^(?:rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent)$/i.test(moreActionSheet.focusedItemTapHighlight || ""), `${label} immersive more focused row should not keep a blue tap highlight: ${JSON.stringify(moreActionSheet)}`);
@@ -960,10 +961,12 @@ function checkPageState(check, page) {
   assert(moreActionSheet.playerStyleFluidCurrent === true && moreActionSheet.playerStyleRibbonCurrent === true, `${label} selected player style choices should expose current markers: ${JSON.stringify(moreActionSheet)}`);
   assert(/当前播放器主题：流体光雾/.test(moreActionSheet.playerStyleFluidAriaLabel || "") && /当前可视化音乐样式：柔光丝带/.test(moreActionSheet.playerStyleRibbonAriaLabel || ""), `${label} selected player style choices should expose clear aria labels: ${JSON.stringify(moreActionSheet)}`);
   assert(isAboveImmersivePanel(moreActionSheet.playerStyleLayer), `${label} player style modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(hasNoBackdropBlur(moreActionSheet.playerStyleLayer), `${label} player style side panel should not blur the original player view: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.playerStyleLayer), `${label} player style modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.labels?.includes("歌词设置"), `${label} immersive more action sheet should include lyric settings: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsOpened === true, `${label} lyric settings modal should open from the immersive more sheet: ${JSON.stringify(moreActionSheet)}`);
   assert(isAboveImmersivePanel(moreActionSheet.lyricSettingsLayer), `${label} lyric settings modal should render above the immersive player layer: ${JSON.stringify(moreActionSheet)}`);
+  assert(hasNoBackdropBlur(moreActionSheet.lyricSettingsLayer), `${label} lyric settings side panel should not blur the original player view: ${JSON.stringify(moreActionSheet)}`);
   assert(isWarmDarkCard(moreActionSheet.lyricSettingsLayer), `${label} lyric settings modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoScrollChecked === true, `${label} lyric auto-scroll setting should default on: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoImmersiveChecked === false, `${label} lyric auto immersive setting should default off: ${JSON.stringify(moreActionSheet)}`);
@@ -1010,7 +1013,7 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.before?.playButtonLoadingAnimationDuration !== "0s", `${label} mobile immersive play loading animation should keep a non-zero duration: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(/(?:conic-gradient|radial-gradient)/i.test(mobileImmersiveLayout.before?.playButtonLoadingBackgroundImage || ""), `${label} mobile immersive play loading should use ring gradient: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(!/rotate\(0deg\)/i.test(mobileImmersiveLayout.before?.playButtonLoadingTransform || ""), `${label} mobile immersive play loading should not be locked to a static rotate transform: ${JSON.stringify(mobileImmersiveLayout.before)}`);
-    assert((mobileImmersiveLayout.before?.controlDeckGapPx || 0) >= 14, `${label} mobile immersive control deck vertical gap should be roomy: ${JSON.stringify(mobileImmersiveLayout.before)}`);
+    assert((mobileImmersiveLayout.before?.controlDeckGapPx || 0) >= 8 && (mobileImmersiveLayout.before?.controlDeckGapPx || 0) <= 13, `${label} mobile immersive control deck vertical gap should stay compact without collapsing: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.before?.oldVisualizerBarCount === 0, `${label} mobile immersive should not keep old bar visualizer DOM: ${JSON.stringify(mobileImmersiveLayout.before)}`);
     assert(mobileImmersiveLayout.afterToggle?.view === "lyrics", `${label} tapping mobile immersive center should switch to lyrics: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
     assert(mobileImmersiveLayout.afterToggle?.lyricVisible === true, `${label} mobile immersive lyrics should show after tap: ${JSON.stringify(mobileImmersiveLayout.afterToggle)}`);
