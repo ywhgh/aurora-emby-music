@@ -11349,7 +11349,6 @@ function renderNowLyricFocus() {
     nowLyricFocus.classList.remove("synced");
     renderTopLyricFocus(null);
     renderImmersiveMobileCurrentLyric(null);
-    renderImmersiveDesktopCurrentLyric(null);
     return;
   }
 
@@ -11361,7 +11360,6 @@ function renderNowLyricFocus() {
     nowLyricFocus.classList.remove("synced");
     renderTopLyricFocus(null);
     renderImmersiveMobileCurrentLyric(null);
-    renderImmersiveDesktopCurrentLyric(null);
     return;
   }
 
@@ -21914,12 +21912,35 @@ function formatByteSize(value) {
   return `${size.toFixed(precision)} ${units[unitIndex]}`;
 }
 
+function applyPlayerMetaMarquee(titleText, subtitleText) {
+  if (!playerMetaButton) {
+    return;
+  }
+
+  // 文本较长时启用跑马灯：复制一份内容首尾相接以实现无缝循环（与首页智能中枢一致）。
+  const titleMarquee = (titleText || "").length > 14;
+  const subtitleMarquee = (subtitleText || "").length > 18;
+
+  if (playerTitle) {
+    playerTitle.dataset.text = titleText || "";
+  }
+  if (playerSubtitle) {
+    playerSubtitle.dataset.text = subtitleText || "";
+  }
+
+  playerMetaButton.classList.toggle("is-title-marquee", titleMarquee);
+  playerMetaButton.classList.toggle("is-subtitle-marquee", subtitleMarquee);
+}
+
 function updatePlayerMeta(track) {
   applyTrackAccent(track);
   document.body.classList.toggle("has-current-track", Boolean(track));
   updateMediaElementPresentation(track);
-  playerTitle.textContent = track.Name || "未命名歌曲";
-  playerSubtitle.textContent = [getArtists(track), track.Album].filter(Boolean).join(" · ") || "Aurora Music";
+  const playerTitleText = track.Name || "未命名歌曲";
+  const playerSubtitleText = [getArtists(track), track.Album].filter(Boolean).join(" · ") || "Aurora Music";
+  playerTitle.textContent = playerTitleText;
+  playerSubtitle.textContent = playerSubtitleText;
+  applyPlayerMetaMarquee(playerTitleText, playerSubtitleText);
   renderPlayerPlaybackMeta(track);
   playerCover.replaceChildren();
   playerCover.className = "mini-cover";
@@ -22153,6 +22174,7 @@ function resetPlayerMeta() {
   }
   playerTitle.textContent = "等待选择音乐";
   playerSubtitle.textContent = "Aurora Music";
+  applyPlayerMetaMarquee("等待选择音乐", "Aurora Music");
   renderPlayerPlaybackMeta(null);
   playerCover.replaceChildren();
   playerCover.className = "mini-cover";
@@ -22644,6 +22666,7 @@ function setProgressDisplay(current, duration) {
   progressRenderSignature = signature;
   setStylePropertyIfChanged(progressFill, "width", width);
   setCssVariableIfChanged(progressFill, "--progress-ratio", ratio);
+  setCssVariableIfChanged(playButton, "--progress-ratio", ratio);
   setStylePropertyIfChanged(nowPlayingProgressFill, "width", width);
   setStylePropertyIfChanged(immersiveProgressFill, "width", width);
   setTextIfChanged(currentTime, currentLabel);

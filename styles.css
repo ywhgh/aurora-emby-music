@@ -10652,12 +10652,6 @@ select:focus-visible {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme="dark"] .topbar {
-  background: rgba(30, 41, 59, 0.95);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-}
-
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
@@ -13567,7 +13561,6 @@ body.immersive-player-open .content {
   overflow: hidden;
 }
 
-body.immersive-player-open .topbar,
 body.immersive-player-open .sidebar,
 body.immersive-player-open .mobile-bottom-nav,
 body.immersive-player-open .mobile-nav,
