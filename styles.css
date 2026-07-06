@@ -21067,3 +21067,124 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     width: 100%;
   }
 }
+
+@media (max-width: 620px) {
+  [data-theme="dark"] .topbar,
+  [data-theme="dark"] .playerbar,
+  [data-theme="dark"] .mobile-bottom-nav {
+    border-color: var(--line);
+    background: var(--surface);
+  }
+
+  [data-theme="dark"] .search-pill,
+  [data-theme="dark"] .top-actions .top-icon-button,
+  [data-theme="dark"] .top-actions .account-button,
+  [data-theme="dark"] .account-button span,
+  [data-theme="dark"] .mobile-player-button,
+  [data-theme="dark"] .mobile-nav-item {
+    border-color: var(--line);
+    background: var(--soft-panel);
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .search-pill input {
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .search-pill input::placeholder {
+    color: var(--muted);
+  }
+
+  [data-theme="dark"] .mobile-nav-item.active {
+    background: var(--surface);
+    color: var(--now-accent);
+  }
+
+  [data-theme="dark"] .library-filter-toolbar .select-pill,
+  [data-theme="dark"] .enhanced-select-trigger,
+  [data-theme="dark"] .advanced-filter-toggle,
+  [data-theme="dark"] .settings-select {
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .select-prefix,
+  [data-theme="dark"] .select-chevron,
+  [data-theme="dark"] .settings-card dt {
+    color: var(--muted);
+  }
+
+  [data-theme="dark"] .select-value,
+  [data-theme="dark"] .settings-card dd,
+  [data-theme="dark"] .settings-toggle {
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .page-heading h2,
+  [data-theme="dark"] .section-heading h3,
+  [data-theme="dark"] .library-quick-summary strong,
+  [data-theme="dark"] .queue-overview-copy h3,
+  [data-theme="dark"] .queue-next-copy h3,
+  [data-theme="dark"] .track-meta strong {
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .library-quick-summary .kicker,
+  [data-theme="dark"] .queue-overview-copy p:not(.kicker),
+  [data-theme="dark"] .queue-next-copy p:not(.kicker),
+  [data-theme="dark"] .track-meta span {
+    color: var(--muted);
+  }
+
+  [data-theme="dark"] .advanced-filter-panel,
+  [data-theme="dark"] .enhanced-select-menu,
+  [data-theme="dark"] .library-quick-panel,
+  [data-theme="dark"] .queue-now-card,
+  [data-theme="dark"] .queue-next-card,
+  [data-theme="dark"] .settings-card,
+  [data-theme="dark"] .settings-section,
+  [data-theme="dark"] .empty-state,
+  [data-theme="dark"] .loading-state,
+  [data-theme="dark"] .track-list,
+  [data-theme="dark"] .album-detail-hero {
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .queue-now-card::before,
+  [data-theme="dark"] .queue-next-card::before {
+    opacity: 0.42;
+  }
+
+  [data-theme="dark"] .library-quick-icon,
+  [data-theme="dark"] .quick-filter-chip,
+  [data-theme="dark"] .mobile-player-button:disabled,
+  [data-theme="dark"] .player-controls button:disabled {
+    background: var(--soft-panel);
+    color: var(--muted);
+  }
+
+  [data-theme="dark"] .library-quick-actions .primary-mini-button {
+    background: var(--now-accent);
+    color: var(--surface-solid);
+  }
+
+  [data-theme="dark"] .library-quick-actions .secondary-mini-button,
+  [data-theme="dark"] .queue-overview-actions .secondary-mini-button,
+  [data-theme="dark"] .queue-next-actions .secondary-mini-button {
+    border-color: var(--line);
+    background: var(--soft-panel);
+    color: var(--text);
+  }
+
+  [data-theme="dark"] .progress-track {
+    background: var(--soft-panel);
+  }
+
+  [data-theme="dark"] .progress-fill::after {
+    border-color: var(--line);
+    background: var(--text);
+  }
+}
