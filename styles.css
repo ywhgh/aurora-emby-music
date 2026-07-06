@@ -20991,6 +20991,30 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 }
 
+@media (min-width: 381px) and (max-width: 620px) {
+  #libraryPanel .library-filter-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  #libraryPanel .library-filter-controls .select-pill {
+    width: auto;
+  }
+
+  #libraryPanel .library-filter-controls .advanced-filter-menu {
+    grid-column: 1 / -1;
+  }
+
+  #libraryPanel .library-filter-controls .select-prefix,
+  #libraryPanel .library-filter-controls .select-value {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 380px) {
   .mobile-nav-item {
     min-height: 2.75rem;

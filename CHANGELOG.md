@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.93.222
+
+- 压缩常规手机宽度的音乐库筛选区，将“音乐库”和“排序”控件在 381px–620px 并排展示。
+- 高级筛选继续保留整行 44px 触控高度，360px 窄屏仍保持单列，避免挤压标签和值。
+- 同步 390px 与 360px 浅色/暗色截图复核，确认无横向溢出且快速筛选卡更早露出。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
 ## v0.93.221
 
 - 修复手机端暗色模式下音乐库和队列歌曲行仍沿用浅色卡片、标题可读性不足的问题。
