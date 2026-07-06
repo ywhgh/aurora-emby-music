@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.93.223
+
+- 修复手机端暗色模式正在播放页唱片舞台仍大面积发亮的问题，降低夜间浏览眩光。
+- 清理正在播放页艺人和专辑链接、进度条按钮被全局暗色按钮背景覆盖出的矩形色块。
+- 同步当前歌词卡暗色背景与文字颜色，逐字高亮保留红色播放身份，主歌词恢复可读对比。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
 ## v0.93.222
 
 - 压缩常规手机宽度的音乐库筛选区，将“音乐库”和“排序”控件在 381px–620px 并排展示。
