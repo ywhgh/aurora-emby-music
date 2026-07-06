@@ -21289,6 +21289,40 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     height: 2.75rem;
     min-height: 2.75rem;
   }
+
+  :is(
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state {
+    min-height: clamp(11rem, 30dvh, 14rem);
+    align-content: center;
+    gap: 0.85rem;
+    padding: 1.35rem 1rem;
+  }
+
+  :is(
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state p {
+    max-width: min(24rem, 100%);
+    line-height: 1.45;
+  }
+
+  :is(
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-actions {
+    gap: 0.5rem;
+  }
 }
 
 @media (max-width: 620px) {

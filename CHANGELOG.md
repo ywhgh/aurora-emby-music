@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.93.225
+
+- 压缩手机端专辑、艺人、歌单、收藏和最近播放空状态虚线框高度，减少首屏占用。
+- 空状态说明文字收窄行长并提升行距，提示更轻但仍保持可读。
+- 操作按钮间距同步收敛，保留刷新、新建和重新加载等触控目标。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
+
 ## v0.93.224
 
 - 优化手机端最近播放页标题操作区，统计文本独占一行，不再被操作按钮挤断。
