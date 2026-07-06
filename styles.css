@@ -20287,3 +20287,735 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     height: 0.8rem;
   }
 }
+
+/* ========================================================================
+   手机端主界面精准适配收尾块
+   范围：仅 max-width:620px 和 max-width:380px。避开 homePanel 与 immersivePlayerPanel。
+   ======================================================================== */
+@media (max-width: 620px) {
+  .top-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(2.75rem, auto) minmax(2.75rem, auto);
+  }
+
+  .top-actions .top-icon-button,
+  .top-actions .account-button {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .content {
+    padding-bottom: calc(var(--mobile-bottom-control-stack) + 1rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-control-stack) + 1rem);
+  }
+
+  .playerbar {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .playerbar :where(button:not(:disabled)),
+  .mobile-player-button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .player-controls button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .player-controls .play-button {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  #libraryPanel .library-heading .heading-actions.library-filter-toolbar {
+    align-items: stretch;
+  }
+
+  #libraryPanel .library-filter-controls {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  #libraryPanel .library-filter-controls .select-pill,
+  #libraryPanel .library-filter-controls .advanced-filter-menu {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #libraryPanel .enhanced-select-trigger,
+  #libraryPanel .advanced-filter-toggle {
+    width: 100%;
+    min-height: 2.75rem;
+    justify-content: space-between;
+  }
+
+  #libraryPanel .select-value {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #libraryPanel .advanced-filter-panel {
+    right: auto;
+    left: 0;
+    width: min(100%, calc(100vw - 1.5rem));
+    min-width: 0;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  #libraryPanel .library-quick-actions {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  #libraryPanel .library-quick-actions button {
+    min-width: 0;
+    min-height: 2.75rem;
+    flex: 1 1 0;
+  }
+
+  #libraryPanel .library-quick-chips,
+  #queuePanel .heading-actions,
+  #favoritesPanel .heading-actions,
+  #searchPanel .search-source-filters {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, var(--text) 82%, transparent);
+    mask-image: linear-gradient(to right, var(--text) 82%, transparent);
+  }
+
+  #libraryPanel .library-quick-chips::-webkit-scrollbar,
+  #queuePanel .heading-actions::-webkit-scrollbar,
+  #favoritesPanel .heading-actions::-webkit-scrollbar,
+  #searchPanel .search-source-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  #queuePanel .heading-actions,
+  #favoritesPanel .heading-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding-bottom: 0.25rem;
+  }
+
+  #queuePanel .heading-actions > *,
+  #favoritesPanel .heading-actions > *,
+  #searchPanel .search-source-filters > *,
+  #libraryPanel .library-quick-chips > * {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  #queuePanel .queue-now-card {
+    grid-template-columns: 5rem minmax(0, 1fr);
+  }
+
+  #albumDetailPanel .album-detail-cover {
+    width: min(60vw, 14rem);
+    margin: 0 auto;
+  }
+
+  #artistDetailPanel .artist-detail-cover {
+    width: min(50vw, 10rem);
+    margin: 0 auto;
+  }
+
+  #albumDetailPanel .hero-actions,
+  #artistDetailPanel .hero-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  #albumDetailPanel .hero-actions > button,
+  #artistDetailPanel .hero-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+  }
+
+  #albumDetailPanel .detail-favorite-button,
+  #artistDetailPanel .detail-favorite-button {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: fit-content;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  #nowPlayingPanel .now-playing-shell {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #nowPlayingPanel .lyrics-list {
+    max-height: max(16rem, 30vh);
+  }
+
+  #searchPanel .search-source-filters {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.42rem;
+    padding-bottom: 0.1rem;
+  }
+
+  #searchPanel .search-result-actions {
+    display: flex;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  #searchPanel .search-result-actions button {
+    min-width: 0;
+    min-height: 2.75rem;
+    flex: 1 1 0;
+  }
+
+  #favoritesPanel .favorite-section + .favorite-section {
+    margin-top: 1.5rem;
+  }
+
+  #audioQualityModal .audio-quality-card {
+    max-height: min(88dvh, calc(100dvh - 1.5rem));
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  #audioQualityModal :where(
+    .audio-quality-close-button,
+    .audio-quality-test-button,
+    .audio-quality-method-item,
+    .audio-quality-option,
+    .audio-quality-video-option
+  ) {
+    min-height: 2.75rem;
+  }
+
+  :where(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel
+  ) :where(
+    .text-button,
+    .primary-mini-button,
+    .secondary-mini-button,
+    .track-action-button,
+    .favorite-button,
+    .quick-filter-chip,
+    .load-more-button
+  ) {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  #libraryPanel .track-action-button,
+  #libraryPanel .favorite-button,
+  #searchPanel .track-action-button,
+  #searchPanel .favorite-button,
+  #favoritesPanel .track-action-button,
+  #favoritesPanel .favorite-button,
+  #recentPanel .track-action-button,
+  #recentPanel .favorite-button,
+  #albumDetailPanel .track-action-button,
+  #albumDetailPanel .favorite-button,
+  #artistDetailPanel .track-action-button,
+  #artistDetailPanel .favorite-button,
+  #playlistDetailPanel .track-action-button,
+  #playlistDetailPanel .favorite-button,
+  #queuePanel .track-action-button,
+  #queuePanel .favorite-button,
+  #nowPlayingPanel .track-action-button,
+  #nowPlayingPanel .favorite-button {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  #albumDetailPanel .back-button,
+  #artistDetailPanel .back-button,
+  #playlistDetailPanel .back-button {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--page);
+    padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
+  }
+
+  :where(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel
+  ) > .page-heading .kicker,
+  :where(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel
+  ) .section-heading .kicker {
+    display: none;
+  }
+
+  :where(
+    .top-actions,
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel,
+    .playerbar,
+    .mobile-bottom-nav,
+    #audioQualityModal,
+    .quick-queue-card
+  ) :where(button:not(:disabled)):not(.now-progress-wrap),
+  body:not(.immersive-player-open) .action-sheet-card :where(button:not(:disabled)) {
+    touch-action: manipulation;
+    transition-property: transform, opacity, filter;
+    transition-duration: 200ms;
+    transition-timing-function: var(--spring-300-20);
+  }
+
+  :where(
+    .top-actions,
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel,
+    .playerbar,
+    .mobile-bottom-nav,
+    #audioQualityModal,
+    .quick-queue-card
+  ) :where(button:not(:disabled)):not(.now-progress-wrap):active,
+  body:not(.immersive-player-open) .action-sheet-card :where(button:not(:disabled)):active {
+    transform: scale(0.94);
+    opacity: 0.82;
+  }
+
+  :where(
+    #libraryPanel,
+    #searchPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel,
+    .quick-queue-card
+  ) :where(.primary-mini-button, .primary-button):not(:disabled):active {
+    transform: scale(0.92);
+  }
+
+  :where(
+    .top-actions,
+    #libraryPanel,
+    #searchPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    .playerbar
+  ) :where(
+    .icon-button,
+    .top-icon-button,
+    .now-icon-button,
+    .mobile-player-button,
+    .track-action-button,
+    .favorite-button
+  ):not(:disabled):active,
+  .mobile-bottom-nav .mobile-nav-item:not(:disabled):active {
+    transform: scale(0.88);
+  }
+
+  @keyframes mobileTrackRowEnter {
+    from {
+      opacity: 0;
+      transform: translateY(0.42rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes mobileCardEnter {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(0.5rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes mobilePanelFadeSlide {
+    from {
+      opacity: 0;
+      transform: translateY(0.65rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes mobileSheetSlideOut {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    to {
+      opacity: 0;
+      transform: translateY(2.5rem);
+    }
+  }
+
+  #libraryPanel .track-row,
+  #searchPanel .track-row,
+  #favoritesPanel .track-row,
+  #recentPanel .track-row,
+  #albumDetailPanel .track-row,
+  #artistDetailPanel .track-row,
+  #playlistDetailPanel .track-row,
+  #queuePanel .track-row,
+  #nowPlayingPanel .track-row {
+    animation: mobileTrackRowEnter 220ms var(--spring-settle) both;
+  }
+
+  #libraryPanel .track-row:nth-child(1),
+  #searchPanel .track-row:nth-child(1),
+  #favoritesPanel .track-row:nth-child(1),
+  #recentPanel .track-row:nth-child(1),
+  #albumDetailPanel .track-row:nth-child(1),
+  #artistDetailPanel .track-row:nth-child(1),
+  #playlistDetailPanel .track-row:nth-child(1),
+  #queuePanel .track-row:nth-child(1),
+  #nowPlayingPanel .track-row:nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  #libraryPanel .track-row:nth-child(2),
+  #searchPanel .track-row:nth-child(2),
+  #favoritesPanel .track-row:nth-child(2),
+  #recentPanel .track-row:nth-child(2),
+  #albumDetailPanel .track-row:nth-child(2),
+  #artistDetailPanel .track-row:nth-child(2),
+  #playlistDetailPanel .track-row:nth-child(2),
+  #queuePanel .track-row:nth-child(2),
+  #nowPlayingPanel .track-row:nth-child(2) {
+    animation-delay: 24ms;
+  }
+
+  #libraryPanel .track-row:nth-child(3),
+  #searchPanel .track-row:nth-child(3),
+  #favoritesPanel .track-row:nth-child(3),
+  #recentPanel .track-row:nth-child(3),
+  #albumDetailPanel .track-row:nth-child(3),
+  #artistDetailPanel .track-row:nth-child(3),
+  #playlistDetailPanel .track-row:nth-child(3),
+  #queuePanel .track-row:nth-child(3),
+  #nowPlayingPanel .track-row:nth-child(3) {
+    animation-delay: 48ms;
+  }
+
+  #libraryPanel .track-row:nth-child(4),
+  #searchPanel .track-row:nth-child(4),
+  #favoritesPanel .track-row:nth-child(4),
+  #recentPanel .track-row:nth-child(4),
+  #albumDetailPanel .track-row:nth-child(4),
+  #artistDetailPanel .track-row:nth-child(4),
+  #playlistDetailPanel .track-row:nth-child(4),
+  #queuePanel .track-row:nth-child(4),
+  #nowPlayingPanel .track-row:nth-child(4) {
+    animation-delay: 72ms;
+  }
+
+  #libraryPanel .track-row:nth-child(n+5),
+  #searchPanel .track-row:nth-child(n+5),
+  #favoritesPanel .track-row:nth-child(n+5),
+  #recentPanel .track-row:nth-child(n+5),
+  #albumDetailPanel .track-row:nth-child(n+5),
+  #artistDetailPanel .track-row:nth-child(n+5),
+  #playlistDetailPanel .track-row:nth-child(n+5),
+  #queuePanel .track-row:nth-child(n+5),
+  #nowPlayingPanel .track-row:nth-child(n+5) {
+    animation-delay: 96ms;
+  }
+
+  #albumsPanel .album-card,
+  #favoritesPanel .album-card,
+  #searchPanel .album-card,
+  #artistDetailPanel .album-card,
+  #artistsPanel .artist-card,
+  #favoritesPanel .artist-card,
+  #searchPanel .artist-card,
+  #playlistsPanel .playlist-card,
+  #favoritesPanel .playlist-card,
+  #searchPanel .playlist-card {
+    animation: mobileCardEnter 240ms var(--spring-300-20) both;
+  }
+
+  #albumsPanel .album-card:nth-child(even),
+  #favoritesPanel .album-card:nth-child(even),
+  #searchPanel .album-card:nth-child(even),
+  #artistDetailPanel .album-card:nth-child(even),
+  #artistsPanel .artist-card:nth-child(even),
+  #favoritesPanel .artist-card:nth-child(even),
+  #searchPanel .artist-card:nth-child(even),
+  #playlistsPanel .playlist-card:nth-child(even),
+  #favoritesPanel .playlist-card:nth-child(even),
+  #searchPanel .playlist-card:nth-child(even) {
+    animation-delay: 40ms;
+  }
+
+  body:not(.immersive-player-open) .modal-backdrop:not([hidden]) .modal-card,
+  body:not(.immersive-player-open) .modal-backdrop:not([hidden]) .audio-quality-card {
+    animation: actionSheetSlideFromBottom 260ms var(--spring-settle) both;
+  }
+
+  .quick-queue-card {
+    animation: actionSheetSlideFromBottom 240ms var(--spring-300-20) both;
+  }
+
+  #libraryPanel.view-panel.active,
+  #searchPanel.view-panel.active,
+  #albumsPanel.view-panel.active,
+  #favoritesPanel.view-panel.active,
+  #recentPanel.view-panel.active,
+  #artistsPanel.view-panel.active,
+  #playlistsPanel.view-panel.active,
+  #albumDetailPanel.view-panel.active,
+  #artistDetailPanel.view-panel.active,
+  #playlistDetailPanel.view-panel.active,
+  #queuePanel.view-panel.active,
+  #nowPlayingPanel.view-panel.active,
+  #settingsPanel.view-panel.active {
+    animation: mobilePanelFadeSlide 220ms var(--spring-settle) both;
+  }
+
+  .mobile-nav-item {
+    transition-property: transform, opacity, filter;
+    transition-duration: 200ms;
+    transition-timing-function: var(--spring-settle);
+  }
+
+  .mobile-nav-item .nav-icon,
+  .mobile-nav-item .nav-line-icon {
+    transition: transform 220ms var(--spring-300-20);
+  }
+
+  .mobile-nav-item.active .nav-icon,
+  .mobile-nav-item.active .nav-line-icon {
+    transform: scale(1.12);
+  }
+}
+
+@media (max-width: 380px) {
+  .mobile-nav-item {
+    min-height: 2.75rem;
+  }
+
+  .mobile-nav-item span {
+    display: none;
+  }
+
+  .mobile-nav-item.active {
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
+  #libraryPanel .track-row,
+  #searchPanel .track-row,
+  #favoritesPanel .track-row,
+  #recentPanel .track-row,
+  #albumDetailPanel .track-row,
+  #artistDetailPanel .track-row,
+  #playlistDetailPanel .track-row,
+  #queuePanel .track-row,
+  #nowPlayingPanel .track-row,
+  #albumsPanel .album-card,
+  #favoritesPanel .album-card,
+  #searchPanel .album-card,
+  #artistDetailPanel .album-card,
+  #artistsPanel .artist-card,
+  #favoritesPanel .artist-card,
+  #searchPanel .artist-card,
+  #playlistsPanel .playlist-card,
+  #favoritesPanel .playlist-card,
+  #searchPanel .playlist-card,
+  #libraryPanel.view-panel.active,
+  #searchPanel.view-panel.active,
+  #albumsPanel.view-panel.active,
+  #favoritesPanel.view-panel.active,
+  #recentPanel.view-panel.active,
+  #artistsPanel.view-panel.active,
+  #playlistsPanel.view-panel.active,
+  #albumDetailPanel.view-panel.active,
+  #artistDetailPanel.view-panel.active,
+  #playlistDetailPanel.view-panel.active,
+  #queuePanel.view-panel.active,
+  #nowPlayingPanel.view-panel.active,
+  #settingsPanel.view-panel.active,
+  .quick-queue-card {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  :where(
+    .top-actions,
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel,
+    .playerbar,
+    .mobile-bottom-nav,
+    #audioQualityModal,
+    .quick-queue-card
+  ) :where(button:not(:disabled)):not(.now-progress-wrap),
+  body:not(.immersive-player-open) .action-sheet-card :where(button:not(:disabled)) {
+    transition: none !important;
+  }
+
+  :where(
+    .top-actions,
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel,
+    .playerbar,
+    .mobile-bottom-nav,
+    #audioQualityModal,
+    .quick-queue-card
+  ) :where(button:not(:disabled)):not(.now-progress-wrap):active,
+  body:not(.immersive-player-open) .action-sheet-card :where(button:not(:disabled)):active {
+    transform: none;
+    opacity: 0.75;
+  }
+}
+
+@media (max-width: 620px) {
+  :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #favoritesPanel,
+    #recentPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #albumDetailPanel,
+    #artistDetailPanel,
+    #playlistDetailPanel,
+    #queuePanel,
+    #nowPlayingPanel,
+    #settingsPanel
+  ) :is(
+    .text-button,
+    .primary-mini-button,
+    .secondary-mini-button,
+    .quick-filter-chip,
+    .load-more-button
+  ) {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  #queuePanel .heading-actions :is(button, .text-button),
+  #favoritesPanel .heading-actions :is(button, .text-button),
+  #settingsPanel :is(button.text-button, .text-button) {
+    min-height: 2.75rem;
+  }
+
+  #nowPlayingPanel .now-icon-button {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
