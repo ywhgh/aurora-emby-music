@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.93.220
+
+- 收敛本地浏览器截图、运行日志、AI 诊断报告和临时验证脚本的忽略规则，避免调试产物污染发布工作区。
+- 将新增规则限定在仓库根目录或明确的临时目录，降低误忽略未来正式源码文件的风险。
+- 同步应用版本、静态资源查询参数和 Service Worker 缓存版本到 0.93.220。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
 ## v0.93.219
 
 - 修复手机端暗色模式搜索胶囊内部 input 被全局暗色输入框背景覆盖成矩形色块的问题。
