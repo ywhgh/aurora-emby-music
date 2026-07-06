@@ -21088,6 +21088,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 
   [data-theme="dark"] .search-pill input {
+    background: transparent;
+    border-color: transparent;
     color: var(--text);
   }
 

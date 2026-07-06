@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.93.219
+
+- 修复手机端暗色模式搜索胶囊内部 input 被全局暗色输入框背景覆盖成矩形色块的问题。
+- 搜索框内部恢复透明背景，保留外层圆角胶囊的完整视觉。
+- 补充 375px 暗色模式截图审计，确认搜索框无内部方块且无横向溢出。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+```
 ## v0.93.218
 
 - 修复手机端暗色模式下顶部栏、筛选控件、快捷筛选卡、空状态、播放器和底部导航仍显示浅色表面的问题。
