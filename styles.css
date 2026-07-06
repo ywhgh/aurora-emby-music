@@ -21019,3 +21019,51 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     min-height: 2.75rem;
   }
 }
+
+@media (max-width: 620px) {
+  #settingsPanel .settings-grid {
+    gap: 0.75rem;
+  }
+
+  #settingsPanel .settings-card {
+    padding: 0.85rem;
+  }
+
+  #settingsPanel .settings-card dl {
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  #settingsPanel .settings-card dl > div {
+    display: grid;
+    grid-template-columns: minmax(5.4rem, 0.42fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  #settingsPanel .settings-card dt {
+    min-width: 0;
+    line-height: 1.3;
+  }
+
+  #settingsPanel .settings-card dd {
+    min-width: 0;
+    margin: 0;
+    text-align: right;
+  }
+
+  #settingsPanel .settings-card dd:has(.settings-select),
+  #settingsPanel .settings-card dd:has(.settings-toggle) {
+    text-align: left;
+  }
+
+  #settingsPanel .settings-select,
+  #settingsPanel .settings-toggle {
+    min-height: 2.75rem;
+  }
+
+  #settingsPanel .settings-toggle {
+    width: 100%;
+  }
+}
