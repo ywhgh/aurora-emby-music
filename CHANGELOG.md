@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.93.224
+
+- 优化手机端最近播放页标题操作区，统计文本独占一行，不再被操作按钮挤断。
+- 播放全部、加入队列、清空记录在手机端改为三列等宽排列，保持 44px 触控目标。
+- 同步 390px 与 360px 浅色/暗色截图复核，确认空状态无横向溢出。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
 ## v0.93.223
 
 - 修复手机端暗色模式正在播放页唱片舞台仍大面积发亮的问题，降低夜间浏览眩光。

@@ -20628,6 +20628,38 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     padding-bottom: 0.25rem;
   }
 
+  #recentPanel > .page-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 0.55rem;
+  }
+
+  #recentPanel > .page-heading .heading-actions {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  #recentPanel #recentMeta {
+    grid-column: 1 / -1;
+    justify-self: start;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.95rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #recentPanel .heading-actions .text-button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0.55rem;
+  }
+
   #queuePanel .heading-actions > *,
   #favoritesPanel .heading-actions > *,
   #searchPanel .search-source-filters > *,
