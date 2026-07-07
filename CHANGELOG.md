@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.93.226
+
+- 优化手机端应用设置页的窗口标题长文本展示，避免挤成多行占用首屏。
+- 窗口标题在手机设置卡内改为两行截断并左对齐，阅读路径更稳定。
+- 保留设置页两列键值结构、选择器触控高度和暗色模式对比。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+git diff --check
+```
+
 ## v0.93.225
 
 - 压缩手机端专辑、艺人、歌单、收藏和最近播放空状态虚线框高度，减少首屏占用。

@@ -21358,6 +21358,22 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     text-align: right;
   }
 
+  #settingsPanel .settings-card dl > div:has(#settingsWindowTitle) {
+    align-items: start;
+  }
+
+  #settingsPanel #settingsWindowTitle {
+    justify-self: stretch;
+    text-align: left;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.32;
+    font-size: 0.96rem;
+    font-weight: 760;
+  }
+
   #settingsPanel .settings-card dd:has(.settings-select),
   #settingsPanel .settings-card dd:has(.settings-toggle) {
     text-align: left;
