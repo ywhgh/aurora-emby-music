@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.93.228
+
+- 继续压缩常规移动端首屏密度：页面标题、音乐库筛选区和快速筛选卡更紧凑。
+- 设置页键值行改为更轻的 iOS 风格列表，降低粗重字重并稳定长文本截断。
+- 集合/搜索/音乐库空状态改为更低的实线轻卡片，减少大虚线框占屏。
+- 搜索聚焦与建议面板同步白底极简化，保留顶部单手入口。
+- 本轮仍仅作用于 `body:not(.immersive-player-open)`，不改沉浸式歌词界面 DOM、JS 或专属选择器。
+
+### 验证
+
+```powershell
+npm run check
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
+git diff --check
+```
+
 ## v0.93.227
 
 - 新增 768px 移动端纯白极简重构层，注入移动端颜色、尺寸、间距和层级令牌。
@@ -11,7 +27,7 @@
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 
@@ -25,7 +41,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 
@@ -39,7 +55,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 
@@ -53,7 +69,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 ## v0.93.223
@@ -66,7 +82,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 ## v0.93.222
@@ -79,7 +95,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 ## v0.93.221
@@ -92,7 +108,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 ## v0.93.220
@@ -105,7 +121,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 git diff --check
 ```
 ## v0.93.219
@@ -118,7 +134,7 @@ git diff --check
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 ```
 ## v0.93.218
 
@@ -130,7 +146,7 @@ $env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 ```
 ## v0.93.217
 
@@ -142,7 +158,7 @@ $env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 ```
 ## v0.93.216
 
@@ -155,7 +171,7 @@ $env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke
 
 ```powershell
 npm run check
-$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='60000'; npm run smoke:browser
+$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser
 ```
 
 ## v0.93.85

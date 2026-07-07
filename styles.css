@@ -22426,3 +22426,604 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     border-radius: var(--border-radius-lg);
   }
 }
+
+
+/* Mobile Minimal Density Polish v0.93.228 */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .content {
+    padding-top: calc(var(--header-height) + 12px) !important;
+  }
+
+  body:not(.immersive-player-open) .page-heading,
+  body:not(.immersive-player-open) .section-heading {
+    gap: 6px;
+    padding-right: var(--spacing-md);
+    padding-left: var(--spacing-md);
+  }
+
+  body:not(.immersive-player-open) .page-heading h2,
+  body:not(.immersive-player-open) .section-heading h3,
+  [data-theme="dark"] body:not(.immersive-player-open) .page-heading h2,
+  [data-theme="dark"] body:not(.immersive-player-open) .section-heading h3 {
+    margin: 0;
+    font-size: clamp(28px, 8vw, 34px);
+    line-height: 1.05;
+    letter-spacing: -0.045em;
+    font-weight: 760;
+  }
+
+  body:not(.immersive-player-open) .page-heading .kicker,
+  body:not(.immersive-player-open) .section-heading .kicker {
+    margin: 0;
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+  }
+
+  body:not(.immersive-player-open) .page-heading > span,
+  body:not(.immersive-player-open) .page-heading p:not(.kicker),
+  body:not(.immersive-player-open) .section-heading p:not(.kicker) {
+    font-size: 15px;
+    line-height: 20px;
+  }
+
+  body:not(.immersive-player-open) .library-heading {
+    display: grid;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  body:not(.immersive-player-open) .library-filter-toolbar {
+    display: grid;
+    gap: 9px;
+  }
+
+  body:not(.immersive-player-open) .library-filter-meta,
+  [data-theme="dark"] body:not(.immersive-player-open) .library-filter-meta {
+    margin: 0;
+    color: var(--mobile-text-sub) !important;
+    font-size: 14px;
+    line-height: 18px;
+    font-weight: 500;
+  }
+
+  body:not(.immersive-player-open) .library-filter-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body:not(.immersive-player-open) .library-filter-controls .advanced-filter-menu {
+    grid-column: 1 / -1;
+  }
+
+  body:not(.immersive-player-open) :is(.select-pill, .enhanced-select-trigger, .advanced-filter-toggle),
+  [data-theme="dark"] body:not(.immersive-player-open) :is(.select-pill, .enhanced-select-trigger, .advanced-filter-toggle) {
+    min-height: 40px;
+    border-radius: 20px !important;
+  }
+
+  body:not(.immersive-player-open) .enhanced-select-trigger {
+    padding: 0 12px;
+    gap: 7px;
+  }
+
+  body:not(.immersive-player-open) .advanced-filter-toggle {
+    justify-content: space-between;
+    padding: 0 14px;
+  }
+
+  body:not(.immersive-player-open) .select-prefix,
+  body:not(.immersive-player-open) .select-value {
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  body:not(.immersive-player-open) .select-value {
+    font-weight: 660;
+  }
+
+  body:not(.immersive-player-open) .library-quick-panel,
+  [data-theme="dark"] body:not(.immersive-player-open) .library-quick-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px !important;
+    border-radius: 14px !important;
+  }
+
+  body:not(.immersive-player-open) .library-quick-summary {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  body:not(.immersive-player-open) .library-quick-icon,
+  [data-theme="dark"] body:not(.immersive-player-open) .library-quick-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  body:not(.immersive-player-open) .library-quick-icon .line-icon {
+    width: 17px;
+    height: 17px;
+  }
+
+  body:not(.immersive-player-open) .library-quick-summary .kicker {
+    margin: 0 0 1px;
+    font-size: 11px;
+    line-height: 13px;
+  }
+
+  body:not(.immersive-player-open) .library-quick-summary strong,
+  [data-theme="dark"] body:not(.immersive-player-open) .library-quick-summary strong {
+    display: block;
+    overflow: hidden;
+    color: var(--mobile-text-main) !important;
+    font-size: 18px;
+    line-height: 22px;
+    font-weight: 720;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  body:not(.immersive-player-open) .library-quick-chips {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 0 0 1px;
+    scroll-snap-type: x proximity;
+  }
+
+  body:not(.immersive-player-open) .quick-filter-chip,
+  [data-theme="dark"] body:not(.immersive-player-open) .quick-filter-chip {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 0 13px;
+    border-radius: 999px !important;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 650;
+    scroll-snap-align: start;
+  }
+
+  body:not(.immersive-player-open) .library-quick-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+    gap: 8px;
+  }
+
+  body:not(.immersive-player-open) :is(.primary-mini-button, .secondary-mini-button),
+  [data-theme="dark"] body:not(.immersive-player-open) :is(.primary-mini-button, .secondary-mini-button) {
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 999px !important;
+    font-size: 14px;
+    line-height: 18px;
+    font-weight: 680;
+  }
+
+  body:not(.immersive-player-open) :is(.primary-mini-button, .secondary-mini-button) .line-icon {
+    width: 17px;
+    height: 17px;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-grid {
+    gap: 10px;
+    padding-right: var(--spacing-md);
+    padding-left: var(--spacing-md);
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-card {
+    overflow: hidden;
+    padding: 0 !important;
+    border-radius: 14px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card > .kicker {
+    margin: 0;
+    padding: 12px 14px 6px;
+    color: var(--mobile-theme-red) !important;
+    font-size: 12px;
+    line-height: 15px;
+    font-weight: 760;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dl {
+    gap: 0;
+    margin: 0;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dl > div {
+    display: grid;
+    grid-template-columns: minmax(4.85rem, 0.38fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--mobile-border);
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dl > div:first-child {
+    border-top-color: rgba(229, 229, 234, 0.58);
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dt,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-card dt {
+    min-width: 0;
+    color: var(--mobile-text-sub) !important;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dd,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-card dd {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--mobile-text-main) !important;
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 620;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dd:has(.settings-select),
+  body:not(.immersive-player-open) #settingsPanel .settings-card dd:has(.settings-toggle) {
+    overflow: visible;
+    text-align: left;
+    white-space: normal;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel #settingsWindowTitle {
+    display: -webkit-box;
+    max-height: 40px;
+    overflow: hidden;
+    text-align: left;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-select,
+  body:not(.immersive-player-open) #settingsPanel .settings-toggle,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-select,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-toggle {
+    min-height: 38px;
+    border-radius: 11px !important;
+    font-size: 14px;
+    line-height: 18px;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-select {
+    padding-right: 30px;
+    padding-left: 10px;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-toggle {
+    padding: 0 10px;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-toggle strong {
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 620;
+  }
+
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state,
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .loading-state,
+  [data-theme="dark"] body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state,
+  [data-theme="dark"] body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .loading-state {
+    min-height: clamp(128px, 23dvh, 176px);
+    align-content: center;
+    gap: 8px;
+    padding: 18px 16px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 14px;
+    background: var(--mobile-bg) !important;
+    box-shadow: none;
+  }
+
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state p,
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .loading-state p {
+    max-width: 22rem;
+    color: var(--mobile-text-main);
+    font-size: 15px;
+    line-height: 1.38;
+  }
+
+  body:not(.immersive-player-open) :is(.empty-state-title, .empty-state-message) {
+    margin: 0;
+  }
+
+  body:not(.immersive-player-open) :is(.empty-actions, .now-playing-empty-actions) {
+    gap: 8px;
+  }
+
+  body:not(.immersive-player-open) .search-box:focus-within .search-pill,
+  [data-theme="dark"] body:not(.immersive-player-open) .search-box:focus-within .search-pill {
+    height: 36px;
+    border-color: transparent !important;
+    border-radius: 18px !important;
+    background: var(--mobile-hover-bg) !important;
+  }
+
+  body:not(.immersive-player-open) .search-suggest-popover,
+  [data-theme="dark"] body:not(.immersive-player-open) .search-suggest-popover {
+    position: fixed;
+    top: calc(var(--header-height) + 6px);
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: min(420px, calc(100dvh - var(--header-height) - var(--nav-height) - var(--mini-player-height) - 24px));
+    border: 1px solid var(--mobile-border);
+    border-radius: 14px;
+    background: var(--mobile-bg) !important;
+    box-shadow: 0 10px 24px rgba(28, 28, 30, 0.08);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+
+/* Mobile Minimal Density Tightening v0.93.228 */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) #libraryPanel .library-heading,
+  body:not(.immersive-player-open) #settingsPanel > .page-heading {
+    gap: 8px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .page-heading h2,
+  body:not(.immersive-player-open) #settingsPanel .page-heading h2,
+  body:not(.immersive-player-open) :is(#albumsPanel, #artistsPanel, #playlistsPanel, #favoritesPanel, #recentPanel, #searchPanel) .page-heading h2 {
+    font-size: clamp(26px, 7.2vw, 30px) !important;
+    line-height: 1.03 !important;
+    letter-spacing: -0.05em;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-filter-toolbar {
+    display: grid !important;
+    gap: 7px !important;
+    margin-top: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-filter-controls {
+    display: grid !important;
+    width: 100% !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    overflow: visible !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-filter-controls .advanced-filter-menu {
+    grid-column: 1 / -1 !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel :is(.select-pill, .advanced-filter-menu) {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel :is(.enhanced-select-trigger, .advanced-filter-toggle),
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel :is(.enhanced-select-trigger, .advanced-filter-toggle) {
+    min-height: 36px !important;
+    height: 36px !important;
+    padding-right: 12px !important;
+    padding-left: 12px !important;
+    border-radius: 18px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel :is(.select-prefix, .select-value, .advanced-filter-toggle span) {
+    font-size: 13px !important;
+    line-height: 16px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .advanced-filter-toggle .line-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-panel,
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel .library-quick-panel {
+    gap: 8px !important;
+    padding: 10px !important;
+    border-radius: 13px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-summary {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-icon,
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel .library-quick-icon {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 9px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-icon .line-icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-summary .kicker {
+    font-size: 10px;
+    line-height: 12px;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .library-quick-summary strong,
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel .library-quick-summary strong {
+    font-size: 16px !important;
+    line-height: 20px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel .quick-filter-chip,
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel .quick-filter-chip {
+    min-height: 30px !important;
+    padding: 0 12px !important;
+    font-size: 12px !important;
+    line-height: 15px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel :is(.primary-mini-button, .secondary-mini-button),
+  [data-theme="dark"] body:not(.immersive-player-open) #libraryPanel :is(.primary-mini-button, .secondary-mini-button) {
+    min-height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    line-height: 16px !important;
+  }
+
+  body:not(.immersive-player-open) #libraryPanel :is(.primary-mini-button, .secondary-mini-button) .line-icon {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-grid {
+    gap: 9px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card > .kicker {
+    padding: 9px 12px 5px !important;
+    font-size: 11px !important;
+    line-height: 14px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dl > div {
+    grid-template-columns: minmax(4.55rem, 0.36fr) minmax(0, 1fr) !important;
+    min-height: 36px !important;
+    padding: 5px 12px !important;
+    gap: 8px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dt,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-card dt {
+    font-size: 12px !important;
+    line-height: 16px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-card dd,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-card dd {
+    font-size: 14px !important;
+    line-height: 18px !important;
+    font-weight: 560 !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel #settingsWindowTitle {
+    max-height: 36px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-select,
+  body:not(.immersive-player-open) #settingsPanel .settings-toggle,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-select,
+  [data-theme="dark"] body:not(.immersive-player-open) #settingsPanel .settings-toggle {
+    min-height: 34px !important;
+    height: 34px !important;
+    font-size: 13px !important;
+    line-height: 16px !important;
+  }
+
+  body:not(.immersive-player-open) #settingsPanel .settings-toggle strong {
+    font-size: 12px !important;
+    line-height: 15px !important;
+  }
+
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state,
+  body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .loading-state,
+  [data-theme="dark"] body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .empty-state,
+  [data-theme="dark"] body:not(.immersive-player-open) :is(
+    #libraryPanel,
+    #searchPanel,
+    #albumsPanel,
+    #artistsPanel,
+    #playlistsPanel,
+    #favoritesPanel,
+    #recentPanel
+  ) .loading-state {
+    min-height: clamp(112px, 18dvh, 136px) !important;
+    padding: 14px 16px !important;
+  }
+}

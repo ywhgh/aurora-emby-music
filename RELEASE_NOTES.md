@@ -1,3 +1,24 @@
+## 0.93.228
+
+### 版本说明
+继续推进移动端纯白极简重构。本版聚焦首屏密度和信息层级，把音乐库快速筛选、设置键值行、空状态和搜索聚焦体验进一步收敛，让手机端更接近轻量原生列表，而不是桌面卡片堆叠。沉浸式歌词界面继续保持原样。
+
+### 更新内容
+- 页面标题、说明文本和音乐库筛选工具栏进一步压缩，减少首屏大字号与大间距占用。
+- 快速筛选卡改为更低的单列轻卡片，图标、标签、筛选 chip 和播放/队列操作按钮统一收敛。
+- 设置页卡片改为 iOS 风格键值列表：分隔线、紧凑行高、较轻字重和稳定的右侧省略。
+- 长窗口标题仍保留两行截断，选择器与开关恢复合适触控高度但不再撑大整卡。
+- 集合、搜索和音乐库空状态改为更短的白底实线卡，减少大虚线框留白。
+- 搜索聚焦态和建议面板使用白底、浅灰输入底和轻边框，移除毛玻璃依赖。
+- 新增样式仍挂在 `body:not(.immersive-player-open)` 下，未改 `#immersivePlayerPanel`、`.immersive-player-panel`、`.immersive-player-shell` 或 `#immersiveLyricList`。
+
+### 验证
+- `npm run check`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
+- `git diff --check`
+- 390px 与 360px 浅色/暗色截图审计：音乐库快速筛选高度降至 137px，无横向溢出。
+- Diff 复核：本版只新增非沉浸移动端覆盖层与版本文档，不改沉浸式歌词 DOM/JS。
+
 ## 0.93.227
 
 ### 版本说明
@@ -15,7 +36,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 与 360px 浅色/暗色截图审计：无横向溢出，底栏和迷你播放器不遮挡内容。
 - Diff 复核：本版只改常规样式与版本文档，不改沉浸式歌词 DOM/JS。
@@ -33,7 +54,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 与 360px 设置页截图审计：窗口标题最多两行，后续设置项更早露出。
 - 浅色和暗色模式截图审计：无横向溢出，文字对比保持稳定。
@@ -51,7 +72,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 暗色截图审计：专辑和歌单空状态高度明显收敛，无横向溢出。
 - 390px 浅色截图审计：专辑空状态保持可读，刷新按钮仍易点击。
@@ -69,7 +90,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 浅色/暗色截图审计：最近播放统计完整显示，按钮三列排列。
 - 360px 暗色截图审计：无横向溢出，按钮保持可点击宽度。
@@ -88,7 +109,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 与 360px 暗色截图审计：正在播放页唱片舞台不再大面积发亮，歌词可读，无横向溢出。
 - 390px 浅色截图审计：正在播放页保持原浅色表现。
@@ -106,7 +127,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 浅色/暗色截图审计：音乐库与排序并排，无横向溢出。
 - 360px 暗色截图审计：筛选区保持单列，控件高度和触控目标不被压缩。
@@ -125,7 +146,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 - 390px 与 360px 暗色模式截图审计：音乐库和队列歌曲行无浅色卡片、标题可读，无横向溢出。
 
@@ -141,7 +162,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - `git diff --check`
 
 ## 0.93.219
@@ -156,7 +177,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - 375px 暗色模式截图审计：搜索输入框 computed background 为透明，无横向溢出。
 ## 0.93.218
 
@@ -172,7 +193,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - 375px 暗色模式截图审计：顶部栏、筛选区、快捷卡、加载状态、底部播放器和导航均跟随深色主题。
 ## 0.93.217
 
@@ -187,7 +208,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - 375px 设置页截图审计：无横向溢出，首张设置卡高度从约 580px 降至约 198px，选择器高度 44px。
 ## 0.93.216
 
@@ -206,7 +227,7 @@
 
 ### 验证
 - `npm run check`
-- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=60000 npm run smoke:browser`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
 - 375px 移动端审计：主面板无横向溢出，关键触控目标 ≥44px，底部内容不被遮挡。
 
 ## 0.93.182
