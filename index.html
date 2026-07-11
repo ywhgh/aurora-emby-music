@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Aurora Music" />
     <title>Aurora Music</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.228" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.228" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.228" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.93.229" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.229" />
+    <link rel="stylesheet" href="./styles.css?v=0.93.229" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -110,7 +110,7 @@
             </button>
           </div>
 
-          <p class="login-entry-version" aria-hidden="true">v0.93.228</p>
+          <p class="login-entry-version" aria-hidden="true">v0.93.229</p>
         </section>
 
         <div class="login-sheet-backdrop" data-close-login-sheet hidden></div>
@@ -198,7 +198,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.228</span>
+            <span id="loginVersion">v0.93.229</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1837,6 +1837,49 @@
             </section>
           </section>
 
+          <section id="profilePanel" class="view-panel profile-mobile-panel" data-panel="profile">
+            <section class="mobile-profile-page" aria-label="我的">
+              <section class="mobile-profile-hero" aria-label="账号与听歌记录">
+                <div class="mobile-profile-avatar" aria-hidden="true">
+                  <span id="mobileProfileAvatarInitial">A</span>
+                  <img
+                    id="mobileProfileAvatarImage"
+                    src="https://api.dicebear.com/9.x/notionists/svg?seed=Aurora%20Music&backgroundColor=ffccd5,ffd6de,fff1f2&radius=50"
+                    alt=""
+                    loading="lazy"
+                    referrerpolicy="no-referrer"
+                  />
+                </div>
+                <div class="mobile-profile-name-row">
+                  <h2 id="mobileProfileName">Aurora Music</h2>
+                  <span id="mobileProfileSourceBadge" class="mobile-profile-vip">Emby</span>
+                </div>
+                <p id="mobileProfileSubtitle" class="mobile-profile-signature">登录后同步你的私人音乐库</p>
+                <p id="mobileProfileServerLine" class="mobile-profile-status-row" aria-label="连接状态与累计听歌时间">
+                  <span id="mobileProfileStatusDot" class="mobile-profile-status-dot offline" aria-hidden="true"></span>
+                  <span id="mobileProfileStatusText">离线</span>
+                  <span class="mobile-profile-status-divider" aria-hidden="true">·</span>
+                  <span class="mobile-profile-listen-inline">累计听歌 <strong id="mobileProfileListenTime">0分钟</strong></span>
+                </p>
+              </section>
+
+              <section class="mobile-profile-library-card" aria-label="我的内容">
+                <div class="mobile-profile-main-tabs" role="tablist" aria-label="内容分类">
+                  <button class="active" type="button" data-profile-main-tab="music" aria-selected="true">音乐</button>
+                  <button type="button" data-profile-main-tab="playlists" aria-selected="false">歌单</button>
+                  <button type="button" data-profile-main-tab="albums" aria-selected="false">专辑</button>
+                </div>
+                <div class="mobile-profile-sub-tabs" role="tablist" aria-label="音乐分类">
+                  <button class="active" type="button" data-profile-sub-tab="overview" aria-selected="true">总览</button>
+                  <button type="button" data-profile-sub-tab="recent" aria-selected="false">最近</button>
+                  <button type="button" data-profile-sub-tab="favorites" aria-selected="false">收藏</button>
+                </div>
+
+                <div id="mobileProfileContentList" class="mobile-profile-playlists" aria-live="polite"></div>
+              </section>
+            </section>
+          </section>
+
           <section id="settingsPanel" class="view-panel" data-panel="settings">
             <div class="page-heading">
               <div>
@@ -2656,19 +2699,32 @@
         </main>
       </div>
 
-      <footer class="playerbar" aria-label="播放器">
+      <div id="playerbar" class="playerbar mini-player-mobile ios-clickable" role="region" aria-label="迷你播放器">
         <span id="playerbarSweepLayer" class="playerbar-sweep-layer" aria-hidden="true"></span>
-        <button id="playerMetaButton" class="track-meta" type="button" disabled>
-          <div id="playerCover" class="mini-cover"></div>
-          <div class="track-meta-copy">
-            <strong id="playerTitle">等待选择音乐</strong>
-            <span id="playerSubtitle">Aurora Music</span>
+        <button id="playerMetaButton" class="track-meta mini-player-meta" type="button" disabled>
+          <span class="mini-player-cover-wrapper" id="miniPlayerCoverContainer" aria-hidden="true">
+            <img id="playerCover" class="mini-cover mini-player-cover" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" alt="封面" />
+            <svg class="mini-player-progress-ring" viewBox="0 0 100 100" focusable="false" aria-hidden="true">
+              <circle class="ring-bg" cx="50" cy="50" r="46"></circle>
+              <circle id="miniPlayerProgress" class="ring-fill" cx="50" cy="50" r="46"></circle>
+            </svg>
+          </span>
+          <span class="track-meta-copy mini-player-info">
+            <span class="mini-player-meta-stack">
+              <span class="mini-player-title-viewport">
+                <span class="mini-player-title-scroll">
+                  <strong id="playerTitle" class="mini-player-title">等待选择音乐</strong>
+                </span>
+              </span>
+              <span id="playerSubtitle" class="mini-player-artist">Aurora Music</span>
+            </span>
+            <span id="miniPlayerLyric" class="mini-player-lyric" hidden>这里显示单行歌词...</span>
             <span id="playerPlaybackMeta" class="player-playback-meta" hidden></span>
-          </div>
+          </span>
         </button>
 
         <div class="player-center">
-          <div class="player-controls">
+          <div class="player-controls mini-player-controls">
             <button id="playModeButton" class="player-line-button mode-button" type="button" aria-label="播放模式" data-mode="order">
               <svg class="line-icon player-mode-icon mode-order" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 6h11"></path>
@@ -2696,14 +2752,21 @@
                 <path d="M12 10.5v5"></path>
               </svg>
             </button>
+            <span id="playerQualityBadge" class="quality-badge mini-player-quality-badge" aria-label="当前音质">HQ</span>
+            <button id="playerFavoriteButton" class="player-line-button playerbar-mobile-favorite icon-button" type="button" aria-label="收藏" title="收藏" disabled>
+              <svg class="line-icon favorite-line-icon mini-favorite-line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 1 0-7.2 7.2l1 1L12 21l7.2-7 1-1a5.1 5.1 0 0 0 0-7.2Z"></path>
+              </svg>
+              <span class="sr-only">收藏</span>
+            </button>
             <button id="prevButton" class="player-line-button" type="button" aria-label="上一首" disabled>
               <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6v12"></path>
                 <path d="m18 6-8.5 6L18 18V6Z"></path>
               </svg>
             </button>
-            <button id="playButton" class="play-button" type="button" aria-label="播放" disabled></button>
-            <button id="nextButton" class="player-line-button" type="button" aria-label="下一首" disabled>
+            <button id="playButton" class="play-button icon-button play-btn" type="button" aria-label="播放" disabled></button>
+            <button id="nextButton" class="player-line-button icon-button" type="button" aria-label="下一首" disabled>
               <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 6v12"></path>
                 <path d="m6 6 8.5 6L6 18V6Z"></path>
@@ -2844,64 +2907,36 @@
           <strong id="playerNextTitle">暂无待播</strong>
         </button>
 
-      </footer>
+      </div>
       <video id="audioPlayer" class="media-player-element" playsinline preload="metadata" controls></video>
-      <nav class="mobile-bottom-nav" aria-label="底部导航">
-        <button class="mobile-nav-item active" type="button" data-view="home" aria-current="page">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 10.5 12 3.5l8.5 7"></path>
-            <path d="M5.5 9.5V20h13V9.5"></path>
-            <path d="M9.5 20v-5.5h5V20"></path>
-          </svg>
+      <nav class="mobile-bottom-nav" aria-label="移动端导航">
+        <button class="nav-item active" type="button" data-view="home" aria-current="page">
+          <svg class="line-icon nav-home-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.4 10.3 12 3.4l8.6 6.9v9.2a1.9 1.9 0 0 1-1.9 1.9h-4.3v-5.8H9.6v5.8H5.3a1.9 1.9 0 0 1-1.9-1.9v-9.2Z"></path></svg>
           <span>首页</span>
         </button>
-        <button class="mobile-nav-item" type="button" data-view="library">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 4.5h10a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z"></path>
-            <path d="M8 4.5V17a3 3 0 0 0 3 3"></path>
-            <path d="M9 8h5"></path>
-          </svg>
+        <button class="nav-item" type="button" data-view="library">
+          <svg class="line-icon nav-music-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17.8V6.2l10.6-2v11.4"></path><circle cx="6.4" cy="17.8" r="2.7"></circle><circle cx="17" cy="15.6" r="2.7"></circle></svg>
           <span>音乐库</span>
         </button>
-        <button class="mobile-nav-item" type="button" data-view="favorites">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.2 5.8a5.1 5.1 0 0 0-7.2 0L12 6.8l-1-1a5.1 5.1 0 1 0-7.2 7.2l1 1L12 21l7.2-7 1-1a5.1 5.1 0 0 0 0-7.2Z"></path>
-          </svg>
+        <button class="nav-item" type="button" id="mobileRadarButton" aria-haspopup="dialog" aria-label="雷达与更多导航">
+          <svg class="line-icon nav-radar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5.5"></circle><circle class="nav-radar-dot" cx="12" cy="12" r="1.7"></circle></svg>
+          <span>雷达</span>
+        </button>
+        <button class="nav-item" type="button" data-view="favorites">
+          <svg class="line-icon nav-heart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.7-4.7-9.3-10.1C1.8 7.6 3.7 4.5 7 4.2c1.9-.2 3.6.7 5 2.5 1.4-1.8 3.1-2.7 5-2.5 3.3.3 5.2 3.4 4.3 6.7C19.7 16.3 12 21 12 21Z"></path></svg>
           <span>收藏</span>
         </button>
-        <button class="mobile-nav-item" type="button" data-view="queue">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 6h14"></path>
-            <path d="M5 12h14"></path>
-            <path d="M5 18h9"></path>
-          </svg>
-          <span>队列</span>
-        </button>
-        <button class="mobile-nav-item" type="button" data-view="settings">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 7h10"></path>
-            <path d="M18 7h2"></path>
-            <circle cx="16" cy="7" r="2"></circle>
-            <path d="M4 17h3"></path>
-            <path d="M11 17h9"></path>
-            <circle cx="9" cy="17" r="2"></circle>
-          </svg>
-          <span>设置</span>
-        </button>
-        <button id="mobileMoreNavButton" class="mobile-nav-item" type="button" aria-haspopup="dialog" aria-label="更多导航">
-          <svg class="line-icon nav-line-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="5" cy="12" r="1.2"></circle>
-            <circle cx="12" cy="12" r="1.2"></circle>
-            <circle cx="19" cy="12" r="1.2"></circle>
-          </svg>
-          <span>更多</span>
+        <button class="nav-item" type="button" data-view="profile">
+          <svg class="line-icon nav-user-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.4" r="3.6"></circle><path d="M4.8 20.8v-1.2c0-3.2 2.9-5.6 7.2-5.6s7.2 2.4 7.2 5.6v1.2"></path></svg>
+          <span>我的</span>
         </button>
       </nav>
+      <button id="mobileMoreNavButton" class="mobile-nav-item mobile-more-nav-compat" type="button" aria-hidden="true" tabindex="-1" hidden></button>
     </section>
 
     <script>
       (() => {
-        const version = "0.93.228";
+        const version = "0.93.229";
         const appName = "Aurora Music";
         const sessionKey = "emby-music-web/session";
         const accountProfilesKey = "emby-music-web/account-profiles";
@@ -3279,21 +3314,19 @@
         bindFallbackLogin();
       })();
     </script>
-    <script src="./src/config.js?v=0.93.228" defer></script>
-    <script src="./src/format.js?v=0.93.228" defer></script>
-    <script src="./src/lyrics.js?v=0.93.228" defer></script>
-    <script src="./src/emby-api.js?v=0.93.228" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.228" defer></script>
-    <script src="./src/storage.js?v=0.93.228" defer></script>
-    <script src="./src/ui-helpers.js?v=0.93.228" defer></script>
-    <script src="./src/performance.js?v=0.93.228" defer></script>
-    <script src="./src/accessibility.js?v=0.93.228" defer></script>
-    <script src="./src/state-management.js?v=0.93.228" defer></script>
-    <script src="./src/theme.js?v=0.93.228" defer></script>
-    <script src="./src/color-extractor.js?v=0.93.228" defer></script>
-    <script src="./app.js?v=0.93.228" defer></script>
+    <script src="./src/config.js?v=0.93.229" defer></script>
+    <script src="./src/format.js?v=0.93.229" defer></script>
+    <script src="./src/lyrics.js?v=0.93.229" defer></script>
+    <script src="./src/emby-api.js?v=0.93.229" defer></script>
+    <script src="./src/external-source-api.js?v=0.93.229" defer></script>
+    <script src="./src/storage.js?v=0.93.229" defer></script>
+    <script src="./src/ui-helpers.js?v=0.93.229" defer></script>
+    <script src="./src/performance.js?v=0.93.229" defer></script>
+    <script src="./src/accessibility.js?v=0.93.229" defer></script>
+    <script src="./src/state-management.js?v=0.93.229" defer></script>
+    <script src="./src/theme.js?v=0.93.229" defer></script>
+    <script src="./src/color-extractor.js?v=0.93.229" defer></script>
+    <script src="./app.js?v=0.93.229" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
   </body>
 </html>
-
-
