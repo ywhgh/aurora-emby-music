@@ -50,6 +50,27 @@
 - `npm run smoke:bridge`
 - `git diff --check`
 
+
+### M2 · 插件签名与 worker 隔离（S3 / S4 / S5）
+
+### 版本说明
+音源插件清单与代码改为可信公钥签名校验，持久快照只允许恢复当前已验证清单中的插件；插件执行迁移到独立 worker，并限制 RPC、内存、调用时长、依赖和网络目标。
+
+### 更新内容
+- 支持 `EMBY_BRIDGE_TRUSTED_KEYS` 多公钥校验；manifest 根对象与每个插件代码分别验签，任一失败即拒绝整张清单。
+- 保留显式 `--allow-unsigned-plugins` / `SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS` 开关，默认关闭并输出启动警告。
+- 删除按快照 `pluginUrl` 动态加载代码的路径；重启后必须重新由当前签名清单确认插件 URL 与 key。
+- 每插件使用独立 `worker_threads` worker，RPC 仅开放 `search`、`getMediaSource`、`getLyric`，单次调用 3 秒、旧生代内存 256 MB，超时终止。
+- worker 仅注入安全网络与依赖白名单，并对 HTTP/HTTPS 目标执行 DNS 与私网地址拦截。
+- bridge smoke 使用运行时 RSA fixture 验证正常签名、缺失签名、篡改清单和重启快照失效。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ---
 
 ## 0.93.230

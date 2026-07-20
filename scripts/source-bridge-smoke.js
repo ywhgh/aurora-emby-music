@@ -2,6 +2,7 @@
 "use strict";
 
 const childProcess = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -26,16 +27,18 @@ async function main() {
       manifestUrl: fixture.urls.manifest,
       pluginCachePath,
       apiToken: "smoke-config-token",
+      trustedKey: fixture.publicKey,
     });
 
     await checkConfigureAuthentication(firstBridge, fixture.urls.manifest);
     await checkRemoteStreamGuards(bridgePort);
     await checkCorsPolicy(bridgePort);
 
+    const sourcePayload = await fetchJson(`http://127.0.0.1:${bridgePort}/sources`);
     const searchPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/search?q=resume&limit=5`);
     const track = searchPayload.items?.find((item) => item.source === "plugin");
 
-    assert(track, "source bridge search did not return a plugin track");
+    assert(track, `source bridge search did not return a plugin track: ${JSON.stringify(searchPayload)}; sources=${JSON.stringify(sourcePayload)}; output=${firstBridge.output.join("").trim()}`);
     assert(track.restore?.raw?.id === "resume-song", "plugin search result did not expose a restore snapshot");
 
     const mediaPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/media?id=${encodeURIComponent(track.id)}&quality=standard`);
@@ -48,6 +51,13 @@ async function main() {
     const firstStream = await fetchHead(streamUrl);
     assert(firstStream.status === 403, `private fixture stream should be blocked, got HTTP ${firstStream.status}`);
 
+    const localPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/tracks?limit=10`);
+    const localTrack = localPayload.items?.find((item) => item.source === "local");
+    assert(localTrack, "source bridge fixture should expose a local track for lyric matching");
+    const matchedLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric?id=${encodeURIComponent(localTrack.id)}`);
+    assert(matchedLyric.matched === true, "local track without sidecar lyrics should use plugin lyric matching");
+    assert(String(matchedLyric.lrc || "").includes("[00:01.00]Bridge lyric line"), `matched lyric text mismatch: ${matchedLyric.lrc || "-"}`);
+
     await stopBridge(firstBridge);
     firstBridge = null;
 
@@ -58,14 +68,7 @@ async function main() {
     });
 
     const restoredStream = await fetchHead(streamUrl);
-    assert(restoredStream.status === 403, `restored private fixture stream should remain blocked, got HTTP ${restoredStream.status}`);
-
-    const localPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/tracks?limit=10`);
-    const localTrack = localPayload.items?.find((item) => item.source === "local");
-    assert(localTrack, "source bridge fixture should expose a local track for lyric matching");
-    const matchedLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric?id=${encodeURIComponent(localTrack.id)}`);
-    assert(matchedLyric.matched === true, "local track without sidecar lyrics should use plugin lyric matching");
-    assert(String(matchedLyric.lrc || "").includes("[00:01.00]Bridge lyric line"), `matched lyric text mismatch: ${matchedLyric.lrc || "-"}`);
+    assert(restoredStream.status === 404, `snapshot without a currently verified manifest should be invalid, got HTTP ${restoredStream.status}`);
 
     const sidecarTrackPath = createBilingualSidecarFixture(path.dirname(pluginCachePath));
     const sidecarLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?path=${encodeURIComponent(sidecarTrackPath)}`);
@@ -83,6 +86,11 @@ async function main() {
     const cachePayload = JSON.parse(fs.readFileSync(pluginCachePath, "utf8"));
     assert(cachePayload.tracks?.some((item) => item.sourceId === "resume-song"), "plugin track cache did not persist the searched track");
 
+    await stopBridge(secondBridge);
+    secondBridge = null;
+    await checkRejectedManifest(fixture.urls.unsignedManifest, fixture.publicKey, pluginCachePath, "unsigned");
+    await checkRejectedManifest(fixture.urls.tamperedManifest, fixture.publicKey, pluginCachePath, "tampered");
+
     console.log("source-bridge-smoke ok");
   } finally {
     await stopBridge(firstBridge);
@@ -93,24 +101,12 @@ async function main() {
 }
 
 function createFixtureServer() {
-  return new Promise((resolve) => {
-    const server = http.createServer((request, response) => {
-      const url = new URL(request.url, `http://${request.headers.host}`);
-
-      if (url.pathname === "/manifest.json") {
-        sendJson(response, {
-          plugins: [{
-            name: "Smoke Plugin",
-            url: `http://${request.headers.host}/plugin.js`,
-            version: "1.0.0",
-          }],
-        });
-        return;
-      }
-
-      if (url.pathname === "/plugin.js") {
-        const origin = `http://${request.headers.host}`;
-        const body = `
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  const pluginCodeForOrigin = (origin) => `
 module.exports = {
   platform: "Smoke",
   supportedSearchType: ["music"],
@@ -135,16 +131,46 @@ module.exports = {
     };
   },
   async getLyric() {
-    return {
-      lrc: "[00:01.00]Bridge lyric line\\n[00:02.00]Smoke lyric line"
-    };
+    return { lrc: "[00:01.00]Bridge lyric line\\n[00:02.00]Smoke lyric line" };
   }
 };
 `;
-        sendText(response, body, "application/javascript; charset=utf-8");
+
+  return new Promise((resolve) => {
+    const server = http.createServer((request, response) => {
+      const url = new URL(request.url, `http://${request.headers.host}`);
+      const origin = `http://${request.headers.host}`;
+      const pluginCode = pluginCodeForOrigin(origin);
+      const codeSignature = crypto.sign("sha256", Buffer.from(pluginCode), privateKey).toString("base64");
+      const manifestBody = {
+        plugins: [{
+          name: "Smoke Plugin",
+          url: `${origin}/plugin.js`,
+          version: "1.0.0",
+          signature: codeSignature,
+        }],
+      };
+      const manifest = {
+        ...manifestBody,
+        signature: crypto.sign("sha256", Buffer.from(stableStringify(manifestBody)), privateKey).toString("base64"),
+      };
+
+      if (url.pathname === "/manifest.json") {
+        sendJson(response, manifest);
         return;
       }
-
+      if (url.pathname === "/unsigned-manifest.json") {
+        sendJson(response, manifestBody);
+        return;
+      }
+      if (url.pathname === "/tampered-manifest.json") {
+        sendJson(response, { ...manifest, plugins: [{ ...manifest.plugins[0], version: "1.0.1" }] });
+        return;
+      }
+      if (url.pathname === "/plugin.js") {
+        sendText(response, pluginCode, "application/javascript; charset=utf-8");
+        return;
+      }
       if (url.pathname === "/media/resume-song.mp3") {
         response.writeHead(200, {
           "Content-Type": "audio/mpeg",
@@ -155,11 +181,9 @@ module.exports = {
           response.end();
           return;
         }
-
         response.end(FIXTURE_MEDIA);
         return;
       }
-
       sendJson(response, { error: "fixture not found" }, 404);
     });
 
@@ -167,12 +191,45 @@ module.exports = {
       const { port } = server.address();
       resolve({
         server,
+        publicKey,
         urls: {
           manifest: `http://127.0.0.1:${port}/manifest.json`,
+          unsignedManifest: `http://127.0.0.1:${port}/unsigned-manifest.json`,
+          tamperedManifest: `http://127.0.0.1:${port}/tampered-manifest.json`,
         },
       });
     });
   });
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+
+async function checkRejectedManifest(manifestUrl, trustedKey, pluginCachePath, label) {
+  const port = await getFreePort();
+  const bridge = await startBridge({
+    port,
+    manifestUrl,
+    pluginCachePath,
+    trustedKey,
+    noDefaultManifest: true,
+  });
+  try {
+    const payload = await fetchJson(`http://127.0.0.1:${port}/sources`);
+    const manifest = payload.manifests?.[0];
+    assert(manifest?.executable === false, `${label} manifest should not be executable`);
+    assert(manifest?.error === "plugin manifest rejected", `${label} manifest rejection reason mismatch`);
+  } finally {
+    await stopBridge(bridge);
+  }
 }
 
 async function startBridge(options) {
@@ -204,6 +261,7 @@ async function startBridge(options) {
     env: {
       ...process.env,
       ...(options.apiToken ? { SOURCE_BRIDGE_API_TOKEN: options.apiToken } : {}),
+      ...(options.trustedKey ? { EMBY_BRIDGE_TRUSTED_KEYS: options.trustedKey } : {}),
     },
   });
   child.musicDir = musicDir;
