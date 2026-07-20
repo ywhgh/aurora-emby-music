@@ -66,6 +66,7 @@ const {
   queue: queueOps,
   search: searchOps,
   settings: settingsOps,
+  store: storeOps,
 } = window.EmbyMusicModules;
 const {
   clamp,
@@ -1028,7 +1029,7 @@ const externalSearchQualityResolveQueue = [];
 const externalSearchQualityResolveInFlight = new Set();
 const externalSearchQualityResolveDone = new Set();
 
-const state = {
+const store = storeOps.createStore({
   session: initialSession,
   sourceMode: getSessionSourceMode(initialSession) || loadSourceMode(),
   externalSourceApiUrl: getInitialExternalSourceApiUrl(initialSession),
@@ -1202,7 +1203,11 @@ const state = {
   immersiveVisualizerStyle: initialImmersivePlayerStyle.visualizer,
   immersiveReturnView: "home",
   videoFloatingMode: "hidden",
-};
+}, {
+  requestIdle: window.requestIdleCallback?.bind(window),
+  cancelIdle: window.cancelIdleCallback?.bind(window),
+});
+const state = store.state;
 
 const MINI_PLAYER_LYRIC_REVEAL_DELAY_MS = 30000;
 const MINI_PLAYER_PROGRESS_LYRIC_TAIL_GUARD_SECONDS = 0.85;
@@ -19100,18 +19105,20 @@ function applyFilters() {
   const year = state.yearFilter;
   const quality = state.qualityFilter;
   const favorite = state.favoriteFilter;
-  state.availableGenres = getAvailableGenres();
-  state.availableYears = getAvailableYears();
-  state.availableQualities = getAvailableQualities();
-
-  state.filteredAlbums = sortAlbums(state.albums.filter((album) => matchesQuery(album, query) && matchesGenre(album, genre) && matchesYear(album, year) && matchesAlbumQuality(album, quality) && matchesFavoriteFilter(album, favorite)));
-  state.filteredArtists = sortArtists(state.artists.filter((artist) => matchesQuery(artist, query) && matchesFavoriteFilter(artist, favorite)));
-  state.filteredPlaylists = sortPlaylists(state.playlists.filter((playlist) => matchesQuery(playlist, query) && matchesFavoriteFilter(playlist, favorite)));
-  state.filteredFavoriteAlbums = sortAlbums(state.albums.filter((album) => isFavorite(album) && matchesQuery(album, query) && matchesGenre(album, genre) && matchesYear(album, year) && matchesAlbumQuality(album, quality) && matchesFavoriteFilter(album, favorite)));
-  state.filteredFavoriteArtists = sortArtists(state.artists.filter((artist) => isFavorite(artist) && matchesQuery(artist, query) && matchesFavoriteFilter(artist, favorite)));
-  state.filteredFavoritePlaylists = sortPlaylists(state.playlists.filter((playlist) => isFavorite(playlist) && matchesQuery(playlist, query) && matchesFavoriteFilter(playlist, favorite)));
-  state.filteredFavoriteTracks = sortTracks(state.favoriteTracks.filter((track) => matchesQuery(track, query) && matchesGenre(track, genre) && matchesYear(track, year) && matchesQuality(track, quality) && matchesFavoriteFilter(track, favorite)));
-  state.filteredTracks = sortTracks(state.tracks.filter((track) => matchesTrackFilters(track)));
+  const filterDeps = [query, genre, year, quality, favorite, state.sortKey, state.sortOrder];
+  store.set({
+    availableGenres: getAvailableGenres(),
+    availableYears: getAvailableYears(),
+    availableQualities: getAvailableQualities(),
+    filteredAlbums: store.derive("filteredAlbums", [state.albums, ...filterDeps], () => sortAlbums(state.albums.filter((album) => matchesQuery(album, query) && matchesGenre(album, genre) && matchesYear(album, year) && matchesAlbumQuality(album, quality) && matchesFavoriteFilter(album, favorite)))),
+    filteredArtists: store.derive("filteredArtists", [state.artists, query, favorite, state.sortKey, state.sortOrder], () => sortArtists(state.artists.filter((artist) => matchesQuery(artist, query) && matchesFavoriteFilter(artist, favorite)))),
+    filteredPlaylists: store.derive("filteredPlaylists", [state.playlists, query, favorite, state.sortKey, state.sortOrder], () => sortPlaylists(state.playlists.filter((playlist) => matchesQuery(playlist, query) && matchesFavoriteFilter(playlist, favorite)))),
+    filteredFavoriteAlbums: store.derive("filteredFavoriteAlbums", [state.albums, ...filterDeps], () => sortAlbums(state.albums.filter((album) => isFavorite(album) && matchesQuery(album, query) && matchesGenre(album, genre) && matchesYear(album, year) && matchesAlbumQuality(album, quality) && matchesFavoriteFilter(album, favorite)))),
+    filteredFavoriteArtists: store.derive("filteredFavoriteArtists", [state.artists, query, favorite, state.sortKey, state.sortOrder], () => sortArtists(state.artists.filter((artist) => isFavorite(artist) && matchesQuery(artist, query) && matchesFavoriteFilter(artist, favorite)))),
+    filteredFavoritePlaylists: store.derive("filteredFavoritePlaylists", [state.playlists, query, favorite, state.sortKey, state.sortOrder], () => sortPlaylists(state.playlists.filter((playlist) => isFavorite(playlist) && matchesQuery(playlist, query) && matchesFavoriteFilter(playlist, favorite)))),
+    filteredFavoriteTracks: store.derive("filteredFavoriteTracks", [state.favoriteTracks, ...filterDeps], () => sortTracks(state.favoriteTracks.filter((track) => matchesQuery(track, query) && matchesGenre(track, genre) && matchesYear(track, year) && matchesQuality(track, quality) && matchesFavoriteFilter(track, favorite)))),
+    filteredTracks: store.derive("filteredTracks", [state.tracks, state.albumFilter, state.artistFilter, ...filterDeps], () => sortTracks(state.tracks.filter((track) => matchesTrackFilters(track)))),
+  });
 }
 
 function getAvailableGenres() {

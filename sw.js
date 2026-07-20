@@ -17,6 +17,7 @@ const APP_SHELL = [
   versioned("./src/idb-queue.js"),
   versioned("./src/settings.js"),
   versioned("./src/storage.js"),
+  versioned("./src/store.js"),
   versioned("./src/library.js"),
   versioned("./src/player.js"),
   versioned("./src/queue.js"),

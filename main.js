@@ -4,6 +4,7 @@ import * as player from "./src/player.js";
 import * as queue from "./src/queue.js";
 import * as search from "./src/search.js";
 import * as settings from "./src/settings.js";
+import * as store from "./src/store.js";
 
 window.EmbyMusicModules = Object.freeze({
   ...(window.EmbyMusicModules || {}),
@@ -13,6 +14,7 @@ window.EmbyMusicModules = Object.freeze({
   queue,
   search,
   settings,
+  store,
 });
 
 await import("./app.js?v=0.93.230");

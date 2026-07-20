@@ -132,6 +132,24 @@
 - `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
 - `git diff --check`
 
+### M6 · 小型状态层收敛（R6）
+
+### 版本说明
+新增不依赖框架的小型 pub/sub store，在保持现有稳定 `state` 对象读取兼容的同时，集中更新派生筛选结果并通过 idle callback 防抖通知。
+
+### 更新内容
+- 新增不超过 100 行的 `src/store.js`，提供 `set`、`subscribe`、`derive` 与销毁接口。
+- `app.js` 初始状态由 store 创建；媒体库与收藏筛选结果通过依赖缓存按需派生并一次性 `store.set`。
+- subscriber 通知使用 `requestIdleCallback`，不支持时回退到异步定时器。
+- smoke 覆盖同步状态更新、idle 防抖、订阅通知、派生缓存和行数约束。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.230
 
 ### 版本说明

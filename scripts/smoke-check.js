@@ -1319,6 +1319,29 @@ function checkStorageQueuePersistence() {
   assert(browserSmoke.includes("createIndexedDbQueuePersistenceSmokeScript"), "Browser smoke should verify IndexedDB queue persistence across adapter recreation");
 }
 
+async function checkStoreModule() {
+  const source = read("src/store.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const { createStore } = await import(moduleUrl);
+  const idleQueue = [];
+  const store = createStore({ count: 1 }, {
+    requestIdle(callback) { idleQueue.push(callback); return idleQueue.length; },
+    cancelIdle() {},
+  });
+  let notifications = 0;
+  store.subscribe(() => { notifications += 1; });
+  store.set({ count: 2 });
+  assert(store.state.count === 2, "Store set should update the stable state object synchronously");
+  assert(notifications === 0 && idleQueue.length === 1, "Store notifications should be debounced through requestIdleCallback");
+  idleQueue.shift()?.();
+  assert(notifications === 1, "Store subscriber should run after the idle callback");
+  let derivedRuns = 0;
+  const first = store.derive("double", [store.state.count], () => { derivedRuns += 1; return store.state.count * 2; });
+  const second = store.derive("double", [store.state.count], () => { derivedRuns += 1; return 0; });
+  assert(first === 4 && second === 4 && derivedRuns === 1, "Store derive should cache values until dependencies change");
+  assert(source.split("\n").length <= 100, "src/store.js should stay within the 100-line audit limit");
+}
+
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const main = read("main.js");
@@ -1328,8 +1351,10 @@ function checkAppFunctionReferences() {
   const queueModule = read("src/queue.js");
   const searchModule = read("src/search.js");
   const settingsModule = read("src/settings.js");
+  const storeModule = read("src/store.js");
   assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
   assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
+  assert(main.includes('import * as store from "./src/store.js"'), "main.js should wire the store ESM module");
   assert(main.includes('import * as library from "./src/library.js"'), "main.js should wire the library ESM module");
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
@@ -1341,9 +1366,11 @@ function checkAppFunctionReferences() {
   assert(searchModule.includes("export function addHistory"), "search module should own history normalization");
   assert(bridgeModule.includes("export function normalizeHttpUrl"), "bridge module should own HTTP bridge URL normalization");
   assert(settingsModule.includes("export function normalizeLyricSettings"), "settings module should own lyric preference normalization");
+  assert(storeModule.includes("export function createStore"), "store module should expose the small pub/sub state layer");
   assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
   assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
   assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
+  assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
@@ -1695,6 +1722,7 @@ async function main() {
   checkLyrics();
   await checkExternalSourceLyrics();
   checkStorageQueuePersistence();
+  await checkStoreModule();
   checkAppFunctionReferences();
   checkDomReferences();
 
