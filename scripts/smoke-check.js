@@ -1322,10 +1322,14 @@ function checkStorageQueuePersistence() {
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const main = read("main.js");
+  const bridgeModule = read("src/bridge.js");
   const libraryModule = read("src/library.js");
   const playerModule = read("src/player.js");
   const queueModule = read("src/queue.js");
   const searchModule = read("src/search.js");
+  const settingsModule = read("src/settings.js");
+  assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
+  assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
   assert(main.includes('import * as library from "./src/library.js"'), "main.js should wire the library ESM module");
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
@@ -1335,8 +1339,11 @@ function checkAppFunctionReferences() {
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
   assert(searchModule.includes("export function addHistory"), "search module should own history normalization");
+  assert(bridgeModule.includes("export function normalizeHttpUrl"), "bridge module should own HTTP bridge URL normalization");
+  assert(settingsModule.includes("export function normalizeLyricSettings"), "settings module should own lyric preference normalization");
   assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
   assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
+  assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
@@ -1452,7 +1459,7 @@ function checkAppFunctionReferences() {
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
-  assert(/function normalizeLyricsSourceBridgeApiUrl\(value\) \{[\s\S]*?new URL\(rawApiUrl\);[\s\S]*?\["http:", "https:"\]\.includes\(url\.protocol\)[\s\S]*?!url\.hostname[\s\S]*?return "";/.test(app), "Emby lyrics bridge should reject malformed or non-HTTP service URLs");
+  assert(/export function normalizeHttpUrl\(value, normalizer\) \{[\s\S]*?new URL\(raw\);[\s\S]*?\["http:", "https:"\]\.includes\(url\.protocol\)[\s\S]*?!url\.hostname[\s\S]*?return "";/.test(bridgeModule), "Bridge module should reject malformed or non-HTTP service URLs");
   assert(/function loadLyricsSourceBridgeApiUrl\(\) \{\s*return normalizeLyricsSourceBridgeApiUrl\(localStorage\.getItem\(LYRICS_SOURCE_BRIDGE_API_KEY\) \|\| ""\);\s*\}/.test(app), "Emby lyrics bridge should load only from its dedicated localStorage key");
   assert(/function saveLyricsSourceBridgeApiUrl\(apiUrl\) \{[\s\S]*?localStorage\.setItem\(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl\);[\s\S]*?localStorage\.removeItem\(LYRICS_SOURCE_BRIDGE_API_KEY\);[\s\S]*?\}/.test(app), "Emby lyrics bridge should save and clear only its dedicated localStorage key");
   assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{\s*return loadLyricsSourceBridgeApiUrl\(\);\s*\}/.test(app), "Emby lyrics bridge should not fall back to a concrete host");

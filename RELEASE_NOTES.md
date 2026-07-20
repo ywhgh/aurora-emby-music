@@ -114,6 +114,24 @@
 
 ---
 
+### M5 · 原生 ESM 模块拆分（R5a / R5b / R5c）
+
+### 版本说明
+播放器、队列、媒体库、搜索、设置与音源桥的纯逻辑从 `app.js` 分阶段迁移到原生 ESM，由 `main.js` 统一 wiring，保持无构建部署与原有服务契约。
+
+### 更新内容
+- `src/player.js` 与 `src/queue.js` 接管音量、seek、队列移动、删除、乱序与顺序比较。
+- `src/library.js` 与 `src/search.js` 接管过滤、排序、聚合、查询和搜索历史。
+- `src/settings.js` 与 `src/bridge.js` 接管歌词/播放设置正规化以及桥 URL 分类与 HTTP 校验。
+- Service Worker app shell、静态语法检查和 smoke wiring 断言覆盖全部新增模块。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.230
 
 ### 版本说明

@@ -60,10 +60,12 @@ const {
   setStaticMarkup,
 } = window.EmbyMusicDomHelpers;
 const {
+  bridge: bridgeOps,
   library: libraryOps,
   player: playerOps,
   queue: queueOps,
   search: searchOps,
+  settings: settingsOps,
 } = window.EmbyMusicModules;
 const {
   clamp,
@@ -10959,17 +10961,11 @@ function flushLyricSettingsSave() {
 }
 
 function normalizeLyricSettings(settings = {}) {
-  const fontScale = Number(settings?.fontScale);
-  const fontFamily = LYRIC_FONT_FAMILY_MAP[settings?.fontFamily] ? settings.fontFamily : DEFAULT_LYRIC_SETTINGS.fontFamily;
-  const letterSpacing = Number(settings?.letterSpacing);
-
-  return {
-    fontScale: Math.round(clamp(Number.isFinite(fontScale) ? fontScale : DEFAULT_LYRIC_SETTINGS.fontScale, 0.85, 1.25) * 100) / 100,
-    fontFamily,
-    letterSpacing: Math.round(clamp(Number.isFinite(letterSpacing) ? letterSpacing : DEFAULT_LYRIC_SETTINGS.letterSpacing, 0, 12) * 10) / 10,
-    autoScroll: settings?.autoScroll !== false,
-    autoImmersiveLyrics: settings?.autoImmersiveLyrics === true,
-  };
+  return settingsOps.normalizeLyricSettings(settings, {
+    defaults: DEFAULT_LYRIC_SETTINGS,
+    fontFamilies: LYRIC_FONT_FAMILY_MAP,
+    clamp,
+  });
 }
 
 function applyLyricSettings(options = {}) {
@@ -11208,21 +11204,11 @@ function loadPlaybackDisplaySettings() {
 }
 
 function normalizePlaybackDisplaySettings(settings = {}) {
-  const playbackRate = PLAYBACK_DISPLAY_RATE_OPTIONS.includes(Number(settings?.playbackRate))
-    ? Number(settings.playbackRate)
-    : PLAYBACK_DISPLAY_DEFAULTS.playbackRate;
-  const soundEffect = PLAYBACK_DISPLAY_SOUND_EFFECTS.some((option) => option.id === settings?.soundEffect)
-    ? settings.soundEffect
-    : PLAYBACK_DISPLAY_DEFAULTS.soundEffect;
-
-  return {
-    volumeLeveling: Boolean(settings?.volumeLeveling),
-    backgroundMix: Boolean(settings?.backgroundMix),
-    fadeInOut: Boolean(settings?.fadeInOut),
-    smartTransition: settings?.smartTransition === undefined ? PLAYBACK_DISPLAY_DEFAULTS.smartTransition : Boolean(settings.smartTransition),
-    soundEffect,
-    playbackRate,
-  };
+  return settingsOps.normalizePlaybackDisplaySettings(settings, {
+    defaults: PLAYBACK_DISPLAY_DEFAULTS,
+    rates: PLAYBACK_DISPLAY_RATE_OPTIONS,
+    effects: PLAYBACK_DISPLAY_SOUND_EFFECTS,
+  });
 }
 
 function savePlaybackDisplaySettings(settings = state.playbackDisplaySettings) {
@@ -24396,11 +24382,11 @@ function normalizeServerUrl(value) {
 }
 
 function normalizeExternalSourceApiUrl(value) {
-  return externalSourceApi.normalizeApiUrl(value);
+  return bridgeOps.normalizeApiUrl(value, externalSourceApi.normalizeApiUrl);
 }
 
 function looksLikeSourceBridgeManifestUrl(value) {
-  return /\.json(?:$|[?#])/i.test(String(value || "").trim());
+  return bridgeOps.looksLikeManifestUrl(value);
 }
 
 function reconcileSourceBridgeInputUrls() {
@@ -24602,21 +24588,7 @@ function saveSourceMode(mode) {
 }
 
 function normalizeLyricsSourceBridgeApiUrl(value) {
-  const rawApiUrl = String(value || "").trim();
-
-  if (!rawApiUrl) {
-    return "";
-  }
-
-  try {
-    const url = new URL(rawApiUrl);
-    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
-      return "";
-    }
-    return normalizeExternalSourceApiUrl(url.toString());
-  } catch {
-    return "";
-  }
+  return bridgeOps.normalizeHttpUrl(value, externalSourceApi.normalizeApiUrl);
 }
 
 function loadLyricsSourceBridgeApiUrl() {
@@ -24788,7 +24760,7 @@ function getExternalSourceApiUrlFromSession(session) {
 }
 
 function isUnconfiguredSourceBridgeUrl(value) {
-  return String(value || "").trim().toLowerCase() === "source-bridge://unconfigured";
+  return bridgeOps.isUnconfiguredUrl(value);
 }
 
 function buildExternalSourceSession(apiUrl, info = {}) {
