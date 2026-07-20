@@ -1322,14 +1322,21 @@ function checkStorageQueuePersistence() {
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const main = read("main.js");
+  const libraryModule = read("src/library.js");
   const playerModule = read("src/player.js");
   const queueModule = read("src/queue.js");
+  const searchModule = read("src/search.js");
+  assert(main.includes('import * as library from "./src/library.js"'), "main.js should wire the library ESM module");
+  assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
   assert(main.includes('await import("./app.js?v=0.93.230")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
+  assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
+  assert(searchModule.includes("export function addHistory"), "search module should own history normalization");
   assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
+  assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");

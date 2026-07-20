@@ -17,6 +17,7 @@ const APP_SHELL = [
   versioned("./src/storage.js"),
   versioned("./src/player.js"),
   versioned("./src/queue.js"),
+  versioned("./src/search.js"),
   versioned("./src/hls-ready.js"),
   versioned("./main.js"),
   versioned("./app.js"),

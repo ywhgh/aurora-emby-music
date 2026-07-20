@@ -60,8 +60,10 @@ const {
   setStaticMarkup,
 } = window.EmbyMusicDomHelpers;
 const {
+  library: libraryOps,
   player: playerOps,
   queue: queueOps,
+  search: searchOps,
 } = window.EmbyMusicModules;
 const {
   clamp,
@@ -14358,7 +14360,7 @@ function getVisibleRecentTracks() {
 }
 
 function openSearchResults(rawQuery = searchInput.value) {
-  const query = String(rawQuery || "").trim();
+  const query = searchOps.normalizeQuery(rawQuery);
 
   if (!query) {
     closeSearchSuggestions();
@@ -14821,7 +14823,7 @@ function ensureSearchSourceFilter(sourceOptions) {
 }
 
 function handleSearch() {
-  const rawQuery = searchInput.value.trim();
+  const rawQuery = searchOps.normalizeQuery(searchInput.value);
   state.query = rawQuery.toLowerCase();
   state.albumFilter = null;
   state.artistFilter = null;
@@ -15214,22 +15216,15 @@ function applySearchHistoryQuery(query) {
 }
 
 function saveSearchHistoryQuery(query) {
-  const normalizedQuery = String(query || "").trim();
-
-  if (!normalizedQuery || normalizedQuery.length < SERVER_SEARCH_MIN_LENGTH) {
-    return;
-  }
-
-  const nextHistory = [
-    normalizedQuery,
-    ...loadSearchHistory().filter((item) => item.toLowerCase() !== normalizedQuery.toLowerCase()),
-  ].slice(0, MAX_SEARCH_HISTORY_ITEMS);
-
+  const nextHistory = searchOps.addHistory(loadSearchHistory(), query, {
+    minLength: SERVER_SEARCH_MIN_LENGTH,
+    limit: MAX_SEARCH_HISTORY_ITEMS,
+  });
   saveSearchHistory(nextHistory);
 }
 
 function removeSearchHistoryQuery(query) {
-  saveSearchHistory(loadSearchHistory().filter((item) => item.toLowerCase() !== String(query || "").toLowerCase()));
+  saveSearchHistory(searchOps.removeHistory(loadSearchHistory(), query, MAX_SEARCH_HISTORY_ITEMS));
   renderSearchSuggestions();
 }
 
@@ -15242,19 +15237,14 @@ function loadSearchHistory() {
       return [];
     }
 
-    return history
-      .map((item) => String(item || "").trim())
-      .filter(Boolean)
-      .slice(0, MAX_SEARCH_HISTORY_ITEMS);
+    return searchOps.normalizeHistory(history, MAX_SEARCH_HISTORY_ITEMS);
   } catch {
     return [];
   }
 }
 
 function saveSearchHistory(history) {
-  const normalizedHistory = Array.isArray(history)
-    ? history.map((item) => String(item || "").trim()).filter(Boolean).slice(0, MAX_SEARCH_HISTORY_ITEMS)
-    : [];
+  const normalizedHistory = searchOps.normalizeHistory(history, MAX_SEARCH_HISTORY_ITEMS);
   const key = getSearchHistoryStorageKey();
 
   if (normalizedHistory.length) {
@@ -15265,10 +15255,7 @@ function saveSearchHistory(history) {
 }
 
 function getSearchHistoryStorageKey() {
-  const profileKey = storage.getAccountProfileKey(state.session);
-  return profileKey
-    ? `${SEARCH_HISTORY_KEY}/${encodeURIComponent(profileKey)}`
-    : SEARCH_HISTORY_KEY;
+  return searchOps.getScopedHistoryKey(SEARCH_HISTORY_KEY, storage.getAccountProfileKey(state.session));
 }
 
 function scheduleServerSearch(rawQuery) {
@@ -19142,29 +19129,18 @@ function applyFilters() {
 }
 
 function getAvailableGenres() {
-  const genres = new Set();
-
-  [...state.tracks, ...state.albums, ...state.favoriteTracks].forEach((item) => {
-    getGenres(item).forEach((genre) => {
-      genres.add(genre);
-    });
-  });
-
-  return [...genres].sort((left, right) => compareText(left, right));
+  return libraryOps.collectGenres(
+    [...state.tracks, ...state.albums, ...state.favoriteTracks],
+    getGenres,
+    compareText
+  );
 }
 
 function getAvailableYears() {
-  const years = new Set();
-
-  [...state.tracks, ...state.albums, ...state.favoriteTracks].forEach((item) => {
-    const year = getProductionYear(item);
-
-    if (year) {
-      years.add(year);
-    }
-  });
-
-  return [...years].sort((left, right) => right - left);
+  return libraryOps.collectYears(
+    [...state.tracks, ...state.albums, ...state.favoriteTracks],
+    getProductionYear
+  );
 }
 
 function getAvailableQualities() {
@@ -19198,23 +19174,7 @@ function getTrackCollectionDuration(tracks) {
 }
 
 function matchesQuery(item, query) {
-  if (!query) {
-    return true;
-  }
-
-  const text = [
-    item.Name,
-    item.Album,
-    item.AlbumArtist,
-    ...(item.Artists || []),
-    ...(item.ArtistItems || []).map((artist) => artist.Name),
-    ...(item.AlbumArtists || []).map((artist) => artist.Name),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return text.includes(query);
+  return libraryOps.matchesQuery(item, query);
 }
 
 function matchesTrackFilters(track, options = {}) {
@@ -19493,7 +19453,7 @@ function findArtistById(artistId) {
 }
 
 function normalizeSearchText(value) {
-  return String(value || "").trim().toLowerCase();
+  return libraryOps.normalizeSearchText(value);
 }
 
 function isFavorite(item) {
@@ -19611,38 +19571,14 @@ async function setFavoriteOnServer(itemId, shouldBeFavorite) {
 }
 
 function sortTracks(tracks) {
-  const sorted = [...tracks];
-  const direction = getSortDirection();
-
-  sorted.sort((left, right) => {
-    let result;
-
-    switch (state.sortKey) {
-      case "title":
-        result = compareText(left.Name, right.Name);
-        break;
-      case "artist":
-        result = compareText(getArtists(left), getArtists(right)) || compareText(left.Name, right.Name);
-        break;
-      case "album":
-        result = compareText(left.Album, right.Album)
-          || compareNumber(left.ParentIndexNumber, right.ParentIndexNumber)
-          || compareNumber(left.IndexNumber, right.IndexNumber)
-          || compareText(left.Name, right.Name);
-        break;
-      case "duration":
-        result = compareNumber(left.RunTimeTicks, right.RunTimeTicks);
-        break;
-      case "recent":
-      default:
-        result = compareDate(left.DateCreated, right.DateCreated);
-        break;
-    }
-
-    return (result * direction) || compareText(left.Name, right.Name);
+  return libraryOps.sortTracks(tracks, {
+    sortKey: state.sortKey,
+    sortOrder: state.sortOrder,
+    compareText,
+    compareNumber,
+    compareDate,
+    getArtists,
   });
-
-  return sorted;
 }
 
 function sortAlbumTracks(tracks) {
@@ -19663,49 +19599,40 @@ function sortArtistTracks(tracks) {
 }
 
 function sortAlbums(albums) {
-  const direction = getSortDirection();
-
-  return [...albums].sort((left, right) => {
-    let result;
-
-    if (state.sortKey === "title") {
-      result = compareText(left.Name, right.Name);
-    } else if (state.sortKey === "artist") {
-      result = compareText(getArtists(left), getArtists(right)) || compareText(left.Name, right.Name);
-    } else {
-      result = compareDate(left.DateCreated, right.DateCreated);
-    }
-
-    return (result * direction) || compareText(left.Name, right.Name);
+  return libraryOps.sortCollections(albums, {
+    kind: "album",
+    sortKey: state.sortKey,
+    sortOrder: state.sortOrder,
+    compareText,
+    compareDate,
+    getArtists,
   });
 }
 
 function sortArtists(artists) {
-  const direction = getSortDirection();
-  return [...artists].sort((left, right) => {
-    return (compareText(left.SortName || left.Name, right.SortName || right.Name) * direction)
-      || compareText(left.Name, right.Name);
+  return libraryOps.sortCollections(artists, {
+    kind: "artist",
+    sortKey: state.sortKey,
+    sortOrder: state.sortOrder,
+    compareText,
+    compareDate,
+    getArtists,
   });
 }
 
 function sortPlaylists(playlists) {
-  const direction = getSortDirection();
-  return [...playlists].sort((left, right) => {
-    return (compareText(left.SortName || left.Name, right.SortName || right.Name) * direction)
-      || compareText(left.Name, right.Name);
+  return libraryOps.sortCollections(playlists, {
+    kind: "playlist",
+    sortKey: state.sortKey,
+    sortOrder: state.sortOrder,
+    compareText,
+    compareDate,
+    getArtists,
   });
 }
 
 function getSortDirection() {
-  if (state.sortOrder === "asc") {
-    return 1;
-  }
-
-  if (state.sortOrder === "desc") {
-    return -1;
-  }
-
-  return ["recent", "duration"].includes(state.sortKey) ? -1 : 1;
+  return libraryOps.getSortDirection(state.sortKey, state.sortOrder);
 }
 
 function getSortOrderLabel(sortOrder) {
