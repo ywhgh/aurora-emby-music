@@ -62,6 +62,7 @@ const {
 const {
   bridge: bridgeOps,
   library: libraryOps,
+  localData: localDataOps,
   player: playerOps,
   queue: queueOps,
   search: searchOps,
@@ -252,6 +253,7 @@ const DEFAULT_EXTERNAL_SOURCE_QUALITY_ID = "high";
 const DEFAULT_EXTERNAL_SOURCE_VIDEO_QUALITY_ID = "video-720";
 const LYRIC_OFFSET_KEY = "emby-music-web/lyric-offset-seconds";
 const LYRIC_SETTINGS_KEY = "emby-music-web/lyric-settings";
+const IMPORTED_FAVORITES_KEY = "emby-music-web/imported-favorites";
 const IMMERSIVE_PLAYER_STYLE_KEY = "emby-music-web/immersive-player-style";
 const DEFAULT_LYRIC_OFFSET_SECONDS = 0.18;
 const LYRIC_OFFSET_STEP_SECONDS = 0.1;
@@ -658,6 +660,9 @@ const settingsClearQueueButton = document.querySelector("#settingsClearQueueButt
 const settingsResetPreferencesButton = document.querySelector("#settingsResetPreferencesButton");
 const settingsClearCacheButton = document.querySelector("#settingsClearCacheButton");
 const settingsClearPlaybackCacheButton = document.querySelector("#settingsClearPlaybackCacheButton");
+const settingsExportDataButton = document.querySelector("#settingsExportDataButton");
+const settingsImportDataButton = document.querySelector("#settingsImportDataButton");
+const settingsImportDataInput = document.querySelector("#settingsImportDataInput");
 const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagnosticsButton");
 const lyricsSourceBridgeApiUrlInput = document.querySelector("#lyricsSourceBridgeApiUrl");
 const settingsSaveLyricsSourceBridgeButton = document.querySelector("#settingsSaveLyricsSourceBridgeButton");
@@ -1044,7 +1049,7 @@ const store = storeOps.createStore({
   tracks: [],
   artists: [],
   playlists: [],
-  favoriteTracks: [],
+  favoriteTracks: loadImportedFavorites(),
   recentTracks: loadRecentTracks(initialSession),
   listenTimeTotalSeconds: loadListenTimeTotalSeconds(),
   listenTimeUnsavedSeconds: 0,
@@ -1415,6 +1420,9 @@ function init() {
   settingsResetPreferencesButton.addEventListener("click", resetPlayerPreferences);
   settingsClearCacheButton.addEventListener("click", clearAppCache);
   settingsClearPlaybackCacheButton?.addEventListener("click", clearPlaybackCache);
+  settingsExportDataButton?.addEventListener("click", exportLocalData);
+  settingsImportDataButton?.addEventListener("click", () => settingsImportDataInput?.click());
+  settingsImportDataInput?.addEventListener("change", importLocalData);
   settingsCopyDiagnosticsButton.addEventListener("click", copyDiagnostics);
   settingsSaveLyricsSourceBridgeButton?.addEventListener("click", saveLyricsSourceBridgeApiUrlFromSettings);
   lyricsSourceBridgeApiUrlInput?.addEventListener("keydown", (event) => {
@@ -19540,11 +19548,13 @@ function syncFavoriteCollections(item, shouldBeFavorite) {
   if (shouldBeFavorite) {
     state.favoriteTracks = mergeUniqueItems(state.favoriteTracks, [{ ...item, UserData: { ...(item.UserData || {}), IsFavorite: true } }]);
     state.totalFavorites = hadFavorite ? state.totalFavorites : state.totalFavorites + 1;
+    saveImportedFavorites();
     return;
   }
 
   state.favoriteTracks = state.favoriteTracks.filter((track) => track.Id !== item.Id);
   state.totalFavorites = hadFavorite ? Math.max(0, state.totalFavorites - 1) : state.totalFavorites;
+  saveImportedFavorites();
 }
 
 async function setFavoriteOnServer(itemId, shouldBeFavorite) {
@@ -21438,6 +21448,108 @@ function resetPlayerPreferences() {
   renderLibrary();
   renderSettings();
   setLibraryStatus("播放器偏好已重置。");
+}
+
+function loadImportedFavorites() {
+  try {
+    return localDataOps.sanitizeTrackList(JSON.parse(localStorage.getItem(IMPORTED_FAVORITES_KEY) || "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function saveImportedFavorites() {
+  localStorage.setItem(IMPORTED_FAVORITES_KEY, JSON.stringify(localDataOps.sanitizeTrackList(state.favoriteTracks)));
+}
+
+function getExportPreferences() {
+  return {
+    playMode: state.playMode,
+    sortKey: state.sortKey,
+    sortOrder: state.sortOrder,
+    trackDensity: state.trackDensity,
+    playerMetaTarget: state.playerMetaTarget,
+    volume: state.volume,
+    lyricSettings: normalizeLyricSettings(state.lyricSettings),
+    playbackDisplaySettings: normalizePlaybackDisplaySettings(state.playbackDisplaySettings),
+    playbackPreloadEnabled: Boolean(state.playbackPreloadEnabled),
+    playbackLosslessPrecacheEnabled: Boolean(state.playbackLosslessPrecacheEnabled),
+  };
+}
+
+function exportLocalData() {
+  const payload = localDataOps.createExportPayload({
+    queue: state.queue,
+    favorites: state.favoriteTracks,
+    recent: state.recentTracks,
+    preferences: getExportPreferences(),
+  }, APP_VERSION);
+  const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = `aurora-export-${payload.metadata.generatedAt.slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(blobUrl);
+  setLibraryStatus("本地数据已安全导出。", { type: "success" });
+}
+
+async function importLocalData() {
+  const file = settingsImportDataInput?.files?.[0];
+  if (!file) return;
+  try {
+    const payload = localDataOps.validateImportPayload(await file.text());
+    const hasConflict = state.queue.length || state.favoriteTracks.length || state.recentTracks.length;
+    if (hasConflict && !window.confirm("导入会替换当前队列、收藏、最近播放和偏好，是否继续？")) return;
+    applyImportedLocalData(payload.data);
+    setLibraryStatus("本地数据已导入。", { type: "success" });
+  } catch (error) {
+    setLibraryStatus(`导入失败：${readableError(error)}`, { type: "error" });
+  } finally {
+    settingsImportDataInput.value = "";
+  }
+}
+
+function applyImportedLocalData(data) {
+  const preferences = data.preferences || {};
+  state.queue = localDataOps.sanitizeTrackList(data.queue);
+  state.currentTrackIndex = state.queue.length ? 0 : -1;
+  state.currentTrack = state.queue[0] || null;
+  state.favoriteTracks = localDataOps.sanitizeTrackList(data.favorites);
+  state.recentTracks = localDataOps.sanitizeTrackList(data.recent, MAX_RECENT_TRACKS);
+  state.playMode = PLAY_MODES.includes(preferences.playMode) ? preferences.playMode : state.playMode;
+  state.sortKey = SORT_KEYS.includes(preferences.sortKey) ? preferences.sortKey : state.sortKey;
+  state.sortOrder = SORT_ORDERS.includes(preferences.sortOrder) ? preferences.sortOrder : state.sortOrder;
+  state.trackDensity = TRACK_DENSITIES.includes(preferences.trackDensity) ? preferences.trackDensity : state.trackDensity;
+  state.playerMetaTarget = PLAYER_META_TARGETS.includes(preferences.playerMetaTarget) ? preferences.playerMetaTarget : state.playerMetaTarget;
+  state.volume = playerOps.normalizeVolume(preferences.volume ?? state.volume);
+  state.lyricSettings = normalizeLyricSettings(preferences.lyricSettings);
+  state.playbackDisplaySettings = normalizePlaybackDisplaySettings(preferences.playbackDisplaySettings);
+  state.playbackPreloadEnabled = preferences.playbackPreloadEnabled !== false;
+  state.playbackLosslessPrecacheEnabled = preferences.playbackLosslessPrecacheEnabled === true;
+  storage.savePlayMode(state.playMode);
+  storage.saveSortKey(state.sortKey);
+  storage.saveSortOrder(state.sortOrder);
+  storage.saveTrackDensity(state.trackDensity);
+  storage.savePlayerMetaTarget(state.playerMetaTarget);
+  storage.saveVolume(state.volume);
+  storage.savePlaybackPreloadEnabled?.(state.playbackPreloadEnabled);
+  storage.savePlaybackLosslessPrecacheEnabled?.(state.playbackLosslessPrecacheEnabled);
+  saveLyricSettings();
+  savePlaybackDisplaySettings(state.playbackDisplaySettings);
+  saveImportedFavorites();
+  saveRecentTracks();
+  if (state.queue.length) saveQueueState(0); else clearQueueState();
+  audioPlayer.volume = state.volume;
+  applyTrackDensityPreference();
+  updatePlayModeButton();
+  updateVolumeButton();
+  applyFilters();
+  renderLibrary();
+  renderQueue();
+  renderRecent();
+  renderHomeSections();
+  renderSettings();
+  renderPlayer();
 }
 
 async function clearAppCache() {

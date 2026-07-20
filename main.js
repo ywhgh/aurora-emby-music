@@ -1,5 +1,6 @@
 import * as bridge from "./src/bridge.js";
 import * as library from "./src/library.js";
+import * as localData from "./src/local-data.js";
 import * as player from "./src/player.js";
 import * as queue from "./src/queue.js";
 import * as search from "./src/search.js";
@@ -10,6 +11,7 @@ window.EmbyMusicModules = Object.freeze({
   ...(window.EmbyMusicModules || {}),
   bridge,
   library,
+  localData,
   player,
   queue,
   search,

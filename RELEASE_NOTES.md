@@ -150,6 +150,25 @@
 - `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
 - `git diff --check`
 
+### M7 · 本地数据导入 / 导出（F1）
+
+### 版本说明
+设置页维护区可安全导出和导入队列、收藏、最近播放与非敏感偏好；导入前校验 schema、敏感字段与 host，并在覆盖现有数据前确认。
+
+### 更新内容
+- 导出文件名为 `aurora-export-<date>.json`，包含 schema `version`、`appVersion` 与 `generatedAt`。
+- `src/local-data.js` 以字段白名单清洗曲目，不导出桥地址、服务器地址、token、设备或用户标识。
+- 导入只接受版本 1，发现敏感字段、URL、host 或 IP 即终止写入；导入内容不参与 origin 跳转。
+- 导入后的队列写入现有 IndexedDB/localStorage 持久层，收藏、最近和允许的偏好同步到本地。
+- smoke 覆盖安全字段白名单、敏感内容拒绝、模块 wiring 与设置页控件。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.230
 
 ### 版本说明

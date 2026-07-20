@@ -1319,6 +1319,23 @@ function checkStorageQueuePersistence() {
   assert(browserSmoke.includes("createIndexedDbQueuePersistenceSmokeScript"), "Browser smoke should verify IndexedDB queue persistence across adapter recreation");
 }
 
+async function checkLocalDataModule() {
+  const source = read("src/local-data.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const localData = await import(moduleUrl);
+  const payload = localData.createExportPayload({
+    queue: [{ Id: "track-1", Name: "Fixture", serverUrl: "http://fixture.invalid" }],
+    favorites: [], recent: [], preferences: { volume: 0.5 },
+  }, "fixture", "2026-07-20T00:00:00.000Z");
+  assert(payload.version === 1 && payload.metadata.appVersion === "fixture", "Local export should include schema and app versions");
+  assert(payload.data.queue[0]?.Name === "Fixture" && !payload.data.queue[0]?.serverUrl, "Local export should allowlist safe track fields");
+  assert(!localData.containsSensitiveData(payload), "Sanitized local export should not contain sensitive fields or hosts");
+  let rejected = false;
+  try { localData.validateImportPayload({ version: 1, data: { queue: [], favorites: [], recent: [], preferences: { serverUrl: "http://fixture.invalid" } } }); }
+  catch { rejected = true; }
+  assert(rejected, "Local import should reject payloads containing sensitive fields or hosts");
+}
+
 async function checkStoreModule() {
   const source = read("src/store.js");
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -1345,8 +1362,10 @@ async function checkStoreModule() {
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const main = read("main.js");
+  const index = read("index.html");
   const bridgeModule = read("src/bridge.js");
   const libraryModule = read("src/library.js");
+  const localDataModule = read("src/local-data.js");
   const playerModule = read("src/player.js");
   const queueModule = read("src/queue.js");
   const searchModule = read("src/search.js");
@@ -1355,6 +1374,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
   assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
   assert(main.includes('import * as store from "./src/store.js"'), "main.js should wire the store ESM module");
+  assert(main.includes('import * as localData from "./src/local-data.js"'), "main.js should wire the local data ESM module");
   assert(main.includes('import * as library from "./src/library.js"'), "main.js should wire the library ESM module");
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
@@ -1363,6 +1383,7 @@ function checkAppFunctionReferences() {
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
+  assert(localDataModule.includes("export function validateImportPayload"), "local data module should validate import payloads");
   assert(searchModule.includes("export function addHistory"), "search module should own history normalization");
   assert(bridgeModule.includes("export function normalizeHttpUrl"), "bridge module should own HTTP bridge URL normalization");
   assert(settingsModule.includes("export function normalizeLyricSettings"), "settings module should own lyric preference normalization");
@@ -1371,6 +1392,8 @@ function checkAppFunctionReferences() {
   assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
   assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
   assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
+  assert(app.includes("localDataOps.createExportPayload") && app.includes("localDataOps.validateImportPayload"), "settings should use the local data safety module");
+  assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
@@ -1537,7 +1560,6 @@ function checkAppFunctionReferences() {
   assert(app.includes("homeTrackSkeletonMarkup"), "Home track lists should render skeleton rows while loading");
   assert(app.includes("updateHomeTrackRippleOrigin"), "Home track rows should bind ripple origin to pointer position");
 
-  const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
   assert(index.includes("id=\"topLyricFocus\""), "Topbar should keep the lyric display layer hidden behind the feature flag");
   assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should keep the translated/current lyric line hidden behind the feature flag");
@@ -1722,6 +1744,7 @@ async function main() {
   checkLyrics();
   await checkExternalSourceLyrics();
   checkStorageQueuePersistence();
+  await checkLocalDataModule();
   await checkStoreModule();
   checkAppFunctionReferences();
   checkDomReferences();
