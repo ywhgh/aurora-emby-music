@@ -1,3 +1,214 @@
+## 0.94.0
+
+- F7：睡眠定时新增 30 / 60 / 90 秒淡出选项，通过独立 GainNode 线性衰减后暂停；WebAudio 不可用时保留到期暂停。
+- F6：新增默认关闭的 ReplayGain；解析 Emby 音频流增益并通过独立 WebAudio GainNode 应用，初始化失败时保持原始音量语义。
+- F5：快捷键由单一 descriptor 列表驱动，按 `?` 打开遮罩式说明弹窗，`Esc` 关闭并恢复焦点。
+- F4：新增浅色、深色、跟随系统三档主题设置，系统模式实时响应浏览器配色变化。
+- F3：新增默认开启的封面取色设置；当前曲目变化时通过独立 CORS-safe 采样模块更新主色 CSS 变量，失败或关闭时立即回退固定主题红。
+
+### 版本说明
+本段按 `docs/audit-2026-07.md` 的里程碑逐 PR 推进。所有任务、敏感字段、验收约定、交付格式以该索引文档为准；此处只跟踪每个 PR 已经完成的事项。
+
+### 索引
+完整任务清单 + 顺序 + 验收标准见 [docs/audit-2026-07.md](./docs/audit-2026-07.md)。
+里程碑切分（M1-M7）见该文档 §3。
+
+### 进入进度
+（本段由每个 PR 自动收尾，下方仅列出已经完成的动作；尚未完成的不要写在这里，留到 PR 关闭时再写。）
+
+<!-- 进度占位：每个 PR 完成后在此追加一段，按 §1 / §2.x / 验证 的标准格式 -->
+### M1 · 安全收口（S1 / S2 / S6 / S8）
+
+### 版本说明
+完成 source-bridge 的配置鉴权、远程流 SSRF 防护和受控 CORS；页面增加 CSP 与 Referrer-Policy；登录兜底、诊断输出、状态消息和服务器地址显示统一接入敏感字段脱敏。
+
+### 更新内容
+- `/configure` 支持 `SOURCE_BRIDGE_API_TOKEN` / `--api-token`，缺失或不匹配时返回 401；匿名配置必须显式开启。
+- `/remote-stream` 仅接受 HTTP/HTTPS，并在 DNS 解析后拒绝 loopback、私网、链路本地、共享地址、组播及 `.local` / `.internal` 主机。
+- CORS 改为白名单策略，默认仅允许本地开发页面，并覆盖 OPTIONS 与 `X-Bridge-Token`。
+- 页面移除 inline script / inline handler，加入 CSP、Referrer-Policy、独立登录兜底脚本与 HLS ready 脚本。
+- 诊断导出、登录兜底、状态栏、通知、错误文本和服务器 URL 显示统一通过 `src/redact.js` 脱敏。
+- bridge smoke 覆盖 token、私网目标、协议和 CORS 回归；smoke 覆盖 CSP、无 inline script 与敏感字段脱敏接线。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+### S7 · 清理私有歌词桥默认地址
+
+### 版本说明
+移除 `src/config.js` 中的具体歌词桥与外部音源桥地址默认值，改为由当前浏览器的专用 localStorage 配置按需读取。未配置时保持空值，不再根据当前网页 host 或其他音源地址推断歌词桥。
+
+### 更新内容
+- 清空 `DEFAULT_EXTERNAL_SOURCE_API_URL` 与 `DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL` 的具体地址。
+- 新增 `emby-music-web/lyrics-source-bridge-api-url` 专用配置键。
+- 设置页增加 password 类型的歌词桥地址输入、保存、清除和状态显示。
+- 对歌词桥地址执行 `http` / `https` 协议与 hostname 校验。
+- smoke 增加专用键读写、清除、输入控件和具体 host 回退移除断言。
+
+### 验证
+- `npm run check`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `git diff --check`
+
+
+### M2 · 插件签名与 worker 隔离（S3 / S4 / S5）
+
+### 版本说明
+音源插件清单与代码改为可信公钥签名校验，持久快照只允许恢复当前已验证清单中的插件；插件执行迁移到独立 worker，并限制 RPC、内存、调用时长、依赖和网络目标。
+
+### 更新内容
+- 支持 `EMBY_BRIDGE_TRUSTED_KEYS` 多公钥校验；manifest 根对象与每个插件代码分别验签，任一失败即拒绝整张清单。
+- 保留显式 `--allow-unsigned-plugins` / `SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS` 开关，默认关闭并输出启动警告。
+- 删除按快照 `pluginUrl` 动态加载代码的路径；重启后必须重新由当前签名清单确认插件 URL 与 key。
+- 每插件使用独立 `worker_threads` worker，RPC 仅开放 `search`、`getMediaSource`、`getLyric`，单次调用 3 秒、旧生代内存 256 MB，超时终止。
+- worker 仅注入安全网络与依赖白名单，并对 HTTP/HTTPS 目标执行 DNS 与私网地址拦截。
+- bridge smoke 使用运行时 RSA fixture 验证正常签名、缺失签名、篡改清单和重启快照失效。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+
+### M3 · 死代码清理与安全 DOM 底座（R1 / R2）
+
+### 版本说明
+移除未接入运行路径的旧模块，并以共享 DOM helper 收敛加载态、空态、HTML 转义和静态 SVG 注入；业务代码不再直接写入 `innerHTML`。
+
+### 更新内容
+- 删除 `state-management.js`、`accessibility.js`、`color-extractor.js`、`performance.js`、`theme.js`、`ui-helpers.js` 及对应 script 标签。
+- 新增 `src/dom-helpers.js`，统一提供 `appendLoading`、`appendEmpty`、`escapeHtml`、`setStaticMarkup`。
+- 动态文本通过 `textContent` 构建；静态 SVG 片段集中经 `setStaticMarkup` 的危险标签与事件属性检查。
+- `src/format.js` 复用共享 `escapeHtml`，避免多份转义实现漂移。
+- Service Worker app shell 纳入 DOM helper、脱敏、登录兜底和 HLS ready 脚本。
+- smoke 增加 DOM helper 单元用例、删除模块检查以及业务源码直接 `innerHTML` 写入约束。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+### M4 · IndexedDB 队列与渐进式 Service Worker（R3 / R4）
+
+### 版本说明
+播放队列主存储迁移到 IndexedDB，并保留最多 80 条的 localStorage 首屏降级快照；Service Worker 更新改为等待用户确认激活，所有同源 GET 请求统一采用 stale-while-revalidate。
+
+### 更新内容
+- 新增 `src/idb-queue.js`，按账号隔离保存最多 10000 条队列、当前曲目和播放进度。
+- `src/storage.js` 保持同步 queue API 兼容，同时增加异步 IndexedDB hydration；写入时同步保留 80 条 localStorage 降级数据。
+- 应用初始化先用 localStorage 渲染，再在会话未变化时异步恢复完整 IndexedDB 队列。
+- Service Worker install 不再主动 `skipWaiting()`；仅在收到 `SKIP_WAITING` 消息后激活新版本。
+- 同源导航、app shell 和运行期资源统一使用 stale-while-revalidate，离线导航回退到缓存的 `index.html`。
+- browser smoke 通过重建存储适配器验证 120 条队列、当前曲目和播放位置仍可恢复。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+---
+
+### M5 · 原生 ESM 模块拆分（R5a / R5b / R5c）
+
+### 版本说明
+播放器、队列、媒体库、搜索、设置与音源桥的纯逻辑从 `app.js` 分阶段迁移到原生 ESM，由 `main.js` 统一 wiring，保持无构建部署与原有服务契约。
+
+### 更新内容
+- `src/player.js` 与 `src/queue.js` 接管音量、seek、队列移动、删除、乱序与顺序比较。
+- `src/library.js` 与 `src/search.js` 接管过滤、排序、聚合、查询和搜索历史。
+- `src/settings.js` 与 `src/bridge.js` 接管歌词/播放设置正规化以及桥 URL 分类与 HTTP 校验。
+- Service Worker app shell、静态语法检查和 smoke wiring 断言覆盖全部新增模块。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+### M6 · 小型状态层收敛（R6）
+
+### 版本说明
+新增不依赖框架的小型 pub/sub store，在保持现有稳定 `state` 对象读取兼容的同时，集中更新派生筛选结果并通过 idle callback 防抖通知。
+
+### 更新内容
+- 新增不超过 100 行的 `src/store.js`，提供 `set`、`subscribe`、`derive` 与销毁接口。
+- `app.js` 初始状态由 store 创建；媒体库与收藏筛选结果通过依赖缓存按需派生并一次性 `store.set`。
+- subscriber 通知使用 `requestIdleCallback`，不支持时回退到异步定时器。
+- smoke 覆盖同步状态更新、idle 防抖、订阅通知、派生缓存和行数约束。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+### M7 · 本地数据导入 / 导出（F1）
+
+### 版本说明
+设置页维护区可安全导出和导入队列、收藏、最近播放与非敏感偏好；导入前校验 schema、敏感字段与 host，并在覆盖现有数据前确认。
+
+### 更新内容
+- 导出文件名为 `aurora-export-<date>.json`，包含 schema `version`、`appVersion` 与 `generatedAt`。
+- `src/local-data.js` 以字段白名单清洗曲目，不导出桥地址、服务器地址、token、设备或用户标识。
+- 导入只接受版本 1，发现敏感字段、URL、host 或 IP 即终止写入；导入内容不参与 origin 跳转。
+- 导入后的队列写入现有 IndexedDB/localStorage 持久层，收藏、最近和允许的偏好同步到本地。
+- smoke 覆盖安全字段白名单、敏感内容拒绝、模块 wiring 与设置页控件。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+### M7 · 歌词淡入淡出与卡拉 OK 高亮（F2）
+
+### 版本说明
+同步歌词行切换统一为 120ms 淡入淡出，双语主行/次行使用分级逐字高亮；Enhanced LRC 的 `<0.0>字` 相对时间继续进入现有 RAF 卡拉 OK 渲染链。
+
+### 更新内容
+- 普通歌词与沉浸歌词的背景、颜色、透明度和位移切换统一为 120ms。
+- 渲染时给 single/original/translated word group 标注角色，原文高亮较柔和，主译文/单行使用完整强调色。
+- 保留 `clip-path` + RAF 的逐字进度热路径，不引入布局宽度逐帧写入。
+- smoke 新增 `<0.0>逐<0.2>字...` verbatim 时间解析、角色颜色和 120ms 过渡断言。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
+## 0.93.230
+
+### 版本说明
+本版发布 M1 第一刀的共享敏感字段脱敏底座与回归用例。新增 URL、Emby Server URL、token 和自由文本脱敏 helper，并在 smoke-check 中验证沙箱代码不引入 process、globalThis 或原生 require。
+
+### 更新内容
+- 新增 `src/redact.js`，提供 `redactUrl`、`redactServer`、`redactToken` 和 `redactText`。
+- URL 隐藏凭据、域名细节、端口和路径；IPv4 主机按 `192.168.*.*:****` 形式脱敏。
+- token 仅保留最后四位，Bearer、X-Emby-Token 和敏感字段赋值统一提供文本兜底清理。
+- `scripts/smoke-check.js` 新增 helper 单元用例及 vm 沙箱标识检查。
+
+### 验证
+- `npm run check`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.229
 
 ### 版本说明

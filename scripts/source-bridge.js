@@ -3,13 +3,15 @@
 
 const crypto = require("node:crypto");
 const childProcess = require("node:child_process");
+const dns = require("node:dns").promises;
 const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
-const vm = require("node:vm");
 const { URL } = require("node:url");
+const { Worker } = require("node:worker_threads");
 
 const BRIDGE_VERSION = "0.1.0";
 const AUDIO_EXTENSIONS = new Set([".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"]);
@@ -36,6 +38,18 @@ const COVER_NAMES = [
 const options = parseArgs(process.argv.slice(2));
 const host = options.host || process.env.SOURCE_BRIDGE_HOST || "127.0.0.1";
 const port = Number(options.port || process.env.SOURCE_BRIDGE_PORT || process.env.PORT || 5174);
+const configureApiToken = String(options.apiToken || process.env.SOURCE_BRIDGE_API_TOKEN || "");
+const allowAnonymousConfigure = isTruthy(options.allowAnonymousConfigure || process.env.SOURCE_BRIDGE_ALLOW_ANONYMOUS_CONFIGURE);
+const allowUnsignedPlugins = isTruthy(options.allowUnsignedPlugins || process.env.SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS);
+const trustedPluginKeys = parseTrustedPluginKeys(process.env.EMBY_BRIDGE_TRUSTED_KEYS);
+const verifiedPluginCode = new Map();
+const PLUGIN_CALL_TIMEOUT_MS = 3000;
+const allowedCorsOrigins = new Set(uniqueStrings([
+  ...splitList(options.corsOrigin),
+  ...splitList(process.env.SOURCE_BRIDGE_CORS_ORIGINS),
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+]));
 const shouldLoadDefaultManifestUrls = !/^(1|true|yes)$/i.test(String(
   options.noDefaultManifest
     || options.noDefaultManifests
@@ -80,13 +94,21 @@ const state = {
 };
 
 main().catch((error) => {
-  console.error(`[source-bridge] failed: ${error.message}`);
+  console.error("[source-bridge] failed; see local diagnostics.");
   process.exitCode = 1;
 });
 
 installShutdownHandlers();
 
 async function main() {
+  if (!configureApiToken && !allowAnonymousConfigure) {
+    console.warn("[source-bridge] WARNING: /configure is locked; set SOURCE_BRIDGE_API_TOKEN or pass --allow-anonymous-configure.");
+  }
+  if (allowUnsignedPlugins) {
+    console.warn("[source-bridge] WARNING: unsigned plugins are enabled for this session.");
+  } else if (!trustedPluginKeys.length && manifestUrls.length) {
+    console.warn("[source-bridge] WARNING: plugin manifests require EMBY_BRIDGE_TRUSTED_KEYS.");
+  }
   await refreshState();
 
   const server = http.createServer((request, response) => {
@@ -101,18 +123,20 @@ async function main() {
   });
 
   server.listen(port, host, () => {
-    console.log(`[source-bridge] listening on http://${host}:${port}`);
+    console.log("[source-bridge] listening");
     console.log(`[source-bridge] local tracks: ${state.tracks.length}`);
     if (musicDirs.length) {
-      console.log(`[source-bridge] music dir: ${musicDirs.join(", ")}`);
+      console.log(`[source-bridge] music dirs configured: ${musicDirs.length}`);
     }
     if (manifestUrls.length) {
-      console.log(`[source-bridge] manifest url: ${manifestUrls.join(", ")}`);
+      console.log(`[source-bridge] manifests configured: ${manifestUrls.length}`);
     }
   });
 }
 
 async function refreshState() {
+  closePluginRuntimes();
+  verifiedPluginCode.clear();
   state.tracks = scanMusicDirs(musicDirs);
   state.trackMap = new Map(state.tracks.map((track) => [track.id, track]));
   state.manifests = await Promise.all(manifestUrls.map(loadManifestSummary));
@@ -130,13 +154,22 @@ const artworkCache = new Map();
 
 async function handleRequest(request, response) {
   if (request.method === "OPTIONS") {
-    sendEmpty(request, response, 204);
+    sendEmpty(request, response, isCorsOriginAllowed(request) ? 204 : 403);
+    return;
+  }
+
+  if (!isCorsOriginAllowed(request)) {
+    sendJson(request, response, 403, { error: "origin not allowed" });
     return;
   }
 
   const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
 
   if (url.pathname === "/configure" && request.method === "POST") {
+    if (!isConfigureAuthorized(request)) {
+      sendJson(request, response, 401, { error: "configure authentication required" });
+      return;
+    }
     const payload = await readJsonBody(request);
     const nextMusicDirs = uniqueStrings([
       ...splitList(payload.musicDir),
@@ -528,98 +561,135 @@ async function searchPluginTracks(request, url, query) {
 
 async function loadPluginRuntime(plugin) {
   const cached = state.pluginRuntimeMap.get(plugin.key);
-
   if (cached) {
     return cached;
   }
 
-  const code = await fetchText(plugin.url);
-  const module = { exports: {} };
-  const sandbox = createPluginSandbox(module, plugin);
-
-  vm.createContext(sandbox);
-  new vm.Script(code, {
-    filename: `source-plugin-${plugin.key}.js`,
-    displayErrors: true,
-  }).runInContext(sandbox, {
-    timeout: 8000,
-  });
-
-  const exported = module.exports?.default || module.exports;
-
-  if (!exported || typeof exported !== "object") {
-    throw new Error("插件没有导出可用对象");
+  const code = verifiedPluginCode.get(normalizeComparableUrl(plugin.url)) || await fetchText(plugin.url);
+  if (!verifyDetachedSignature(code, plugin.signature, { allowMissing: allowUnsignedPlugins })) {
+    throw new Error("plugin code signature verification failed");
   }
 
-  const runtime = {
-    plugin,
-    module: exported,
-    loadedAt: new Date().toISOString(),
-  };
-
-  plugin.platform = plugin.platform || exported.platform || plugin.name || "音源";
-  plugin.supportedSearchType = exported.supportedSearchType || plugin.supportedSearchType || [];
+  const runtime = await createPluginWorkerRuntime(plugin, code);
+  plugin.platform = plugin.platform || runtime.metadata.platform || plugin.name || "音源";
+  plugin.supportedSearchType = runtime.metadata.supportedSearchType || plugin.supportedSearchType || [];
   state.pluginRuntimeMap.set(plugin.key, runtime);
   return runtime;
 }
 
-function createPluginSandbox(module, plugin) {
-  const allowedModules = new Set([
-    "axios",
-    "crypto-js",
-    "qs",
-    "big-integer",
-    "dayjs",
-    "cheerio",
-    "he",
-  ]);
-  const sandboxExports = module.exports;
+function createPluginWorkerRuntime(plugin, code) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(path.join(__dirname, "source-plugin-worker.mjs"), {
+      workerData: {
+        code,
+        pluginName: plugin.name || plugin.key,
+      },
+      resourceLimits: {
+        maxOldGenerationSizeMb: 256,
+      },
+      execArgv: [...new Set([...process.execArgv, "--preserve-symlinks"])],
+    });
+    const runtime = {
+      plugin,
+      worker,
+      module: {},
+      metadata: {},
+      pending: new Map(),
+      nextCallId: 1,
+      closed: false,
+      loadedAt: new Date().toISOString(),
+    };
+    const initTimer = setTimeout(() => {
+      closePluginRuntime(runtime, "plugin initialization timeout");
+      reject(new Error("plugin initialization timeout"));
+    }, PLUGIN_CALL_TIMEOUT_MS);
 
-  const sandbox = {
-    module,
-    exports: sandboxExports,
-    require(name) {
-      if (allowedModules.has(name)) {
-        const loaded = require(name);
-
-        if (name === "axios") {
-          loaded.defaults.timeout = 18000;
-        }
-
-        return loaded;
+    worker.on("message", (message) => {
+      if (message?.type === "ready") {
+        clearTimeout(initTimer);
+        runtime.metadata = message.metadata || {};
+        (message.methods || []).forEach((method) => {
+          runtime.module[method] = (...args) => callPluginWorker(runtime, method, args);
+        });
+        resolve(runtime);
+        return;
       }
+      if (message?.type === "fatal") {
+        clearTimeout(initTimer);
+        closePluginRuntime(runtime, message.error || "plugin initialization failed");
+        reject(new Error(message.error || "plugin initialization failed"));
+        return;
+      }
+      if (message?.type !== "result") {
+        return;
+      }
+      const pending = runtime.pending.get(message.id);
+      if (!pending) {
+        return;
+      }
+      runtime.pending.delete(message.id);
+      clearTimeout(pending.timer);
+      if (message.ok) {
+        pending.resolve(message.value);
+      } else {
+        pending.reject(new Error(message.error || "plugin method failed"));
+      }
+    });
+    worker.once("error", () => {
+      clearTimeout(initTimer);
+      closePluginRuntime(runtime, "plugin worker failed");
+      reject(new Error("plugin worker failed"));
+    });
+    worker.once("exit", (codeValue) => {
+      clearTimeout(initTimer);
+      runtime.closed = true;
+      rejectPendingPluginCalls(runtime, codeValue === 0 ? "plugin worker closed" : "plugin worker stopped");
+      if (state.pluginRuntimeMap.get(plugin.key) === runtime) {
+        state.pluginRuntimeMap.delete(plugin.key);
+      }
+    });
+  });
+}
 
-      throw new Error(`插件依赖未允许：${name}`);
-    },
-    console,
-    Buffer,
-    URL,
-    URLSearchParams,
-    setTimeout,
-    clearTimeout,
-    setInterval,
-    clearInterval,
-    Promise,
-    Math,
-    Date,
-    JSON,
-    encodeURIComponent,
-    decodeURIComponent,
-    btoa: (value) => Buffer.from(String(value), "binary").toString("base64"),
-    atob: (value) => Buffer.from(String(value), "base64").toString("binary"),
-    fetch: globalThis.fetch ? globalThis.fetch.bind(globalThis) : undefined,
-    global: null,
-    globalThis: null,
-    process: {
-      env: {},
-      platform: process.platform,
-    },
-    __pluginName: plugin.name || plugin.key,
-  };
+function callPluginWorker(runtime, method, args) {
+  if (!runtime || runtime.closed || !runtime.worker) {
+    return Promise.reject(new Error("plugin worker unavailable"));
+  }
+  return new Promise((resolve, reject) => {
+    const id = runtime.nextCallId++;
+    const timer = setTimeout(() => {
+      runtime.pending.delete(id);
+      reject(new Error(`${method} exceeded ${PLUGIN_CALL_TIMEOUT_MS}ms CPU budget`));
+      closePluginRuntime(runtime, "plugin method timeout");
+    }, PLUGIN_CALL_TIMEOUT_MS);
+    runtime.pending.set(id, { resolve, reject, timer });
+    runtime.worker.postMessage({ type: "call", id, method, args });
+  });
+}
 
-  sandbox.global = sandbox;
-  sandbox.globalThis = sandbox;
-  return sandbox;
+function rejectPendingPluginCalls(runtime, reason) {
+  runtime.pending.forEach((pending) => {
+    clearTimeout(pending.timer);
+    pending.reject(new Error(reason));
+  });
+  runtime.pending.clear();
+}
+
+function closePluginRuntime(runtime, reason = "plugin worker closed") {
+  if (!runtime || runtime.closed) {
+    return;
+  }
+  runtime.closed = true;
+  rejectPendingPluginCalls(runtime, reason);
+  runtime.worker?.terminate().catch(() => {});
+  if (state.pluginRuntimeMap.get(runtime.plugin?.key) === runtime) {
+    state.pluginRuntimeMap.delete(runtime.plugin.key);
+  }
+}
+
+function closePluginRuntimes() {
+  state.pluginRuntimeMap.forEach((runtime) => closePluginRuntime(runtime));
+  state.pluginRuntimeMap.clear();
 }
 
 function extractPluginItems(payload) {
@@ -902,7 +972,7 @@ function flushPluginTrackCache() {
       tracks,
     }, null, 2));
   } catch (error) {
-    console.warn(`[source-bridge] failed to write plugin cache: ${error.message}`);
+    console.warn("[source-bridge] failed to write plugin cache.");
   }
 }
 
@@ -923,6 +993,7 @@ function installShutdownHandlers() {
     }
 
     isShuttingDown = true;
+    closePluginRuntimes();
     flushPluginTrackCacheForShutdown();
     process.exit(signal === "SIGINT" ? 130 : 143);
   };
@@ -2066,14 +2137,34 @@ function normalizePathForCompare(value) {
 async function loadManifestSummary(url) {
   try {
     const payload = await fetchJson(url);
-    const plugins = Array.isArray(payload?.plugins)
-      ? payload.plugins.map((plugin) => ({
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new Error("invalid plugin manifest");
+    }
+    const manifestBody = { ...payload };
+    delete manifestBody.signature;
+    if (!verifyDetachedSignature(stableStringify(manifestBody), payload.signature, { allowMissing: allowUnsignedPlugins })) {
+      throw new Error("manifest signature verification failed");
+    }
+    const rawPlugins = Array.isArray(payload.plugins) ? payload.plugins : [];
+    const plugins = [];
+    for (const plugin of rawPlugins) {
+      const pluginUrl = normalizeRemoteUrl(plugin?.url);
+      if (!pluginUrl) {
+        throw new Error("manifest plugin URL invalid");
+      }
+      const code = await fetchText(pluginUrl);
+      if (!verifyDetachedSignature(code, plugin?.signature, { allowMissing: allowUnsignedPlugins })) {
+        throw new Error("plugin code signature verification failed");
+      }
+      verifiedPluginCode.set(normalizeComparableUrl(pluginUrl), code);
+      plugins.push({
         name: plugin?.name || "",
-        url: plugin?.url || "",
+        url: pluginUrl,
         version: plugin?.version || "",
-        supported: Boolean(plugin?.url),
-      }))
-      : [];
+        signature: plugin?.signature || "",
+        supported: true,
+      });
+    }
 
     return {
       url,
@@ -2081,18 +2172,19 @@ async function loadManifestSummary(url) {
       pluginCount: plugins.length,
       plugins,
       executable: Boolean(plugins.length),
+      signatureVerified: true,
       note: plugins.length
-        ? "已识别为音源插件清单；搜索时会由本地音源桥加载插件并转换为 /search、/media 标准接口。"
-        : "已读取 JSON；如需播放，请转换为 /tracks、/search、/media 标准接口。",
+        ? "已验证音源插件清单与插件代码签名。"
+        : "已验证空清单。",
     };
-  } catch (error) {
+  } catch {
     return {
       url,
       type: "unknown",
       pluginCount: 0,
       plugins: [],
       executable: false,
-      error: error.message,
+      error: "plugin manifest rejected",
     };
   }
 }
@@ -3111,7 +3203,21 @@ async function streamFile(request, response, filePath, contentType) {
   fs.createReadStream(filePath, { start: safeStart, end: safeEnd }).pipe(response);
 }
 
-function streamRemoteMedia(request, response, url) {
+async function streamRemoteMedia(request, response, url) {
+  const mediaUrl = normalizeRemoteUrl(url.searchParams.get("url"));
+
+  if (!mediaUrl) {
+    sendJson(request, response, 400, { error: "missing or unsupported remote media url" });
+    return;
+  }
+
+  const target = new URL(mediaUrl);
+  if (await isBlockedRemoteTarget(target)) {
+    sendJson(request, response, 403, { error: "remote media target blocked" });
+    return;
+  }
+
+  const client = target.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = () => {
@@ -3126,16 +3232,6 @@ function streamRemoteMedia(request, response, url) {
         reject(error);
       }
     };
-    const mediaUrl = normalizeRemoteUrl(url.searchParams.get("url"));
-
-    if (!mediaUrl) {
-      sendJson(request, response, 400, { error: "missing remote media url" });
-      finish();
-      return;
-    }
-
-    const target = new URL(mediaUrl);
-    const client = target.protocol === "https:" ? https : http;
     const headers = {
       "User-Agent": String(url.searchParams.get("ua") || BILIBILI_USER_AGENT),
       Accept: "*/*",
@@ -3448,52 +3544,20 @@ function parsePluginTrackId(id) {
 }
 
 function getPluginForSnapshot(snapshot) {
-  return getPluginByKeySafe(snapshot.pluginKey)
-    || getPluginByUrlSafe(snapshot.pluginUrl || snapshot.url)
-    || getPluginByNameSafe(snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform)
-    || createRuntimePluginFromSnapshot(snapshot)
-    || null;
+  const snapshotUrl = normalizeComparableUrl(snapshot?.pluginUrl || snapshot?.url);
+  if (!snapshotUrl) {
+    return null;
+  }
+  const plugin = getPluginByUrlSafe(snapshotUrl);
+  if (!plugin) {
+    return null;
+  }
+  const keyedPlugin = snapshot?.pluginKey ? getPluginByKeySafe(snapshot.pluginKey) : null;
+  return keyedPlugin && keyedPlugin !== plugin ? null : plugin;
 }
 
 function hasPluginSnapshotIdentity(snapshot) {
-  return Boolean(
-    snapshot?.pluginKey
-      || snapshot?.pluginUrl
-      || snapshot?.url
-      || snapshot?.pluginName
-      || snapshot?.pluginPlatform
-      || snapshot?.platform
-  );
-}
-
-function createRuntimePluginFromSnapshot(snapshot) {
-  const pluginUrl = normalizeRemoteUrl(snapshot?.pluginUrl || snapshot?.url);
-
-  if (!pluginUrl || !/^https?:\/\//i.test(pluginUrl)) {
-    return null;
-  }
-
-  const existing = getPluginByUrlSafe(pluginUrl);
-
-  if (existing) {
-    return existing;
-  }
-
-  const plugin = {
-    key: snapshot.pluginKey || createPluginKey({
-      name: snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform || "restored-plugin",
-      url: pluginUrl,
-    }, state.plugins.length),
-    name: snapshot.pluginName || snapshot.pluginPlatform || snapshot.platform || "恢复音源",
-    url: pluginUrl,
-    version: "",
-    platform: snapshot.pluginPlatform || snapshot.platform || snapshot.pluginName || "",
-    supported: true,
-    restored: true,
-  };
-
-  state.plugins.push(plugin);
-  return plugin;
+  return Boolean(normalizeComparableUrl(snapshot?.pluginUrl || snapshot?.url));
 }
 
 function getPluginByUrlSafe(value) {
@@ -3833,6 +3897,84 @@ function pickDirectory(initialDirectory = "") {
   });
 }
 
+function isTruthy(value) {
+  return /^(1|true|yes)$/i.test(String(value || ""));
+}
+
+function isConfigureAuthorized(request) {
+  if (allowAnonymousConfigure) {
+    return true;
+  }
+
+  const suppliedToken = String(request.headers["x-bridge-token"] || "");
+  if (!configureApiToken || !suppliedToken) {
+    return false;
+  }
+
+  const expected = Buffer.from(configureApiToken);
+  const supplied = Buffer.from(suppliedToken);
+  return expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
+}
+
+function isCorsOriginAllowed(request) {
+  const origin = String(request.headers.origin || "").trim();
+  return !origin || allowedCorsOrigins.has(origin);
+}
+
+async function isBlockedRemoteTarget(target) {
+  if (!target || !["http:", "https:"].includes(target.protocol) || target.username || target.password) {
+    return true;
+  }
+
+  const hostname = String(target.hostname || "").replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  if (!hostname || isBlockedRemoteHostname(hostname)) {
+    return true;
+  }
+
+  try {
+    const records = await dns.lookup(hostname, { all: true, verbatim: true });
+    return !records.length || records.some((record) => isBlockedRemoteAddress(record.address));
+  } catch {
+    return true;
+  }
+}
+
+function isBlockedRemoteHostname(hostname) {
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".internal")) {
+    return true;
+  }
+
+  return net.isIP(hostname) > 0 && isBlockedRemoteAddress(hostname);
+}
+
+function isBlockedRemoteAddress(address) {
+  const normalized = String(address || "").toLowerCase().split("%")[0];
+  if (net.isIPv4(normalized)) {
+    const [a, b] = normalized.split(".").map(Number);
+    return a === 0
+      || a === 10
+      || a === 127
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || a >= 224;
+  }
+
+  if (!net.isIPv6(normalized)) {
+    return true;
+  }
+
+  if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd")) {
+    return true;
+  }
+  const firstGroup = Number.parseInt(normalized.split(":")[0] || "0", 16);
+  if (firstGroup >= 0xfe80 && firstGroup <= 0xfebf) {
+    return true;
+  }
+  const mappedIpv4 = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1];
+  return mappedIpv4 ? isBlockedRemoteAddress(mappedIpv4) : false;
+}
 function sendJson(request, response, statusCode, payload) {
   const body = JSON.stringify(payload, null, 2);
   writeCorsHeaders(request, response);
@@ -3850,9 +3992,13 @@ function sendEmpty(request, response, statusCode) {
 }
 
 function writeCorsHeaders(request, response) {
-  response.setHeader("Access-Control-Allow-Origin", request.headers.origin || "*");
+  const origin = String(request.headers.origin || "").trim();
+  if (origin && allowedCorsOrigins.has(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
   response.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Range, X-Bridge-Token");
   response.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type");
 }
 
@@ -3889,6 +4035,55 @@ function getImageContentType(filePath) {
   };
 
   return map[ext] || "application/octet-stream";
+}
+
+function parseTrustedPluginKeys(value) {
+  const text = String(value || "").replace(/\\n/g, "\n").trim();
+  if (!text) {
+    return [];
+  }
+  const pemKeys = text.match(/-----BEGIN (?:RSA )?PUBLIC KEY-----[\s\S]+?-----END (?:RSA )?PUBLIC KEY-----/g);
+  return pemKeys?.length ? pemKeys : splitList(text);
+}
+
+function getSignatureValue(signature) {
+  if (typeof signature === "string") {
+    return signature.trim();
+  }
+  return String(signature?.value || signature?.signature || "").trim();
+}
+
+function verifyDetachedSignature(content, signature, options = {}) {
+  const value = getSignatureValue(signature);
+  if (!value) {
+    return Boolean(options.allowMissing);
+  }
+  if (!trustedPluginKeys.length) {
+    return false;
+  }
+  let bytes;
+  try {
+    bytes = Buffer.from(value, "base64");
+  } catch {
+    return false;
+  }
+  return trustedPluginKeys.some((key) => {
+    try {
+      return crypto.verify("sha256", Buffer.from(String(content)), key, bytes);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function parseArgs(args) {

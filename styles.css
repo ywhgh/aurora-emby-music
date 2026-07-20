@@ -11950,8 +11950,10 @@ select:focus-visible {
   line-height: 1.55;
   opacity: 0.4;
   transition:
-    background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
-    opacity 0.35s ease;
+    background 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
 .lyric-line[role="button"] {
@@ -12035,6 +12037,19 @@ select:focus-visible {
 .lyric-line.active .word::after,
 .now-lyric-focus.synced .word::after {
   will-change: clip-path;
+}
+
+.lyric-line .lyric-role-original .word::after,
+.now-lyric-focus .lyric-role-original .word::after {
+  color: var(--now-accent);
+  opacity: 0.68;
+}
+
+.lyric-line .lyric-role-translated .word::after,
+.now-lyric-focus .lyric-role-translated .word::after,
+.lyric-line .lyric-role-single .word::after {
+  color: var(--now-accent);
+  opacity: 1;
 }
 
 .up-next-item {
@@ -12930,8 +12945,10 @@ select:focus-visible {
   line-height: 1.18;
   transform-origin: left center;
   transition:
-    background 0.35s cubic-bezier(0.25, 1, 0.5, 1),
-    opacity 0.35s ease;
+    background 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
 .immersive-lyric-list .lyric-line[role="button"] {
@@ -13028,6 +13045,17 @@ select:focus-visible {
 .immersive-lyric-list .lyric-line.active .word::after,
 .immersive-lyric-list p.active .word::after {
   will-change: clip-path;
+}
+
+.immersive-lyric-list .lyric-role-original .word::after {
+  color: var(--immersive-lyric-original-active);
+  opacity: 0.78;
+}
+
+.immersive-lyric-list .lyric-role-translated .word::after,
+.immersive-lyric-list .lyric-role-single .word::after {
+  color: var(--immersive-lyric-word-active);
+  opacity: 1;
 }
 
 .immersive-player-shell.is-lyrics-expanding .immersive-lyric-focus {
@@ -13724,6 +13752,16 @@ select:focus-visible {
   min-width: 0;
   color: var(--text);
   font-weight: 760;
+}
+
+.shortcut-cheat-sheet-card {
+  width: min(34rem, 100%);
+}
+
+.shortcut-cheat-sheet-card .shortcut-grid {
+  max-height: min(60vh, 32rem);
+  overflow: auto;
+  padding-right: 0.2rem;
 }
 
 .diagnostics-box {

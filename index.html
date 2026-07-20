@@ -4,13 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#ffffff" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: blob:; media-src 'self' https: http://localhost:* http://127.0.0.1:*; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+    <meta name="referrer" content="no-referrer" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Aurora Music" />
     <title>Aurora Music</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.93.229" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.93.229" />
-    <link rel="stylesheet" href="./styles.css?v=0.93.229" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.94.0" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.94.0" />
+    <link rel="stylesheet" href="./styles.css?v=0.94.0" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -110,12 +112,12 @@
             </button>
           </div>
 
-          <p class="login-entry-version" aria-hidden="true">v0.93.229</p>
+          <p class="login-entry-version" aria-hidden="true">v0.94.0</p>
         </section>
 
         <div class="login-sheet-backdrop" data-close-login-sheet hidden></div>
 
-        <form id="connectForm" class="login-card" action="javascript:void(0)" method="post" onsubmit="return false">
+        <form id="connectForm" class="login-card" action="" method="post">
           <button type="button" class="login-sheet-handle" data-close-login-sheet aria-label="收起登录面板">
             <span></span>
           </button>
@@ -198,7 +200,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.93.229</span>
+            <span id="loginVersion">v0.94.0</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1936,6 +1938,26 @@
                     <dd id="settingsAccentColor">-</dd>
                   </div>
                   <div>
+                    <dt>封面取色</dt>
+                    <dd>
+                      <label class="settings-toggle">
+                        <input id="settingsCoverColorToggle" type="checkbox" checked />
+                        <span aria-hidden="true"></span>
+                        <strong>跟随当前封面</strong>
+                      </label>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>主题</dt>
+                    <dd>
+                      <select id="settingsThemeSelect" class="settings-select" aria-label="主题">
+                        <option value="light">浅色</option>
+                        <option value="dark">深色</option>
+                        <option value="system">跟随系统</option>
+                      </select>
+                    </dd>
+                  </div>
+                  <div>
                     <dt>窗口标题</dt>
                     <dd id="settingsWindowTitle">-</dd>
                   </div>
@@ -2014,6 +2036,16 @@
                     </dd>
                   </div>
                   <div>
+                    <dt>ReplayGain</dt>
+                    <dd>
+                      <label class="settings-toggle">
+                        <input id="settingsReplayGainToggle" type="checkbox" />
+                        <span aria-hidden="true"></span>
+                        <strong>启用响度增益</strong>
+                      </label>
+                    </dd>
+                  </div>
+                  <div>
                     <dt>睡眠定时</dt>
                     <dd>
                       <select id="sleepTimerSelect" class="settings-select">
@@ -2023,6 +2055,16 @@
                         <option value="45">45 分钟</option>
                         <option value="60">60 分钟</option>
                         <option value="90">90 分钟</option>
+                      </select>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>睡眠淡出</dt>
+                    <dd>
+                      <select id="sleepFadeSecondsSelect" class="settings-select">
+                        <option value="30">30 秒</option>
+                        <option value="60">60 秒</option>
+                        <option value="90">90 秒</option>
                       </select>
                     </dd>
                   </div>
@@ -2100,6 +2142,24 @@
               </article>
             </section>
 
+            <section class="settings-section" aria-labelledby="lyricsSourceBridgeSettingsTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="kicker">歌词源</p>
+                  <h3 id="lyricsSourceBridgeSettingsTitle">Emby 歌词源桥</h3>
+                </div>
+                <span id="settingsLyricsSourceBridgeStatus">未配置</span>
+              </div>
+              <label class="source-bridge-field">
+                <span class="source-bridge-label">服务地址</span>
+                <input id="lyricsSourceBridgeApiUrl" type="password" inputmode="url" autocomplete="off" placeholder="请输入 http(s) 服务地址">
+                <small>仅保存在当前浏览器；留空会关闭 Emby 联网歌词匹配。</small>
+              </label>
+              <div class="settings-actions">
+                <button id="settingsSaveLyricsSourceBridgeButton" class="text-button" type="button">保存歌词源</button>
+              </div>
+            </section>
+
             <section class="settings-section">
               <div class="section-heading">
                 <div>
@@ -2115,6 +2175,9 @@
                 <button id="settingsResetPreferencesButton" class="text-button" type="button">重置播放器偏好</button>
                 <button id="settingsClearCacheButton" class="text-button" type="button">清除应用缓存</button>
                 <button id="settingsClearPlaybackCacheButton" class="text-button" type="button">清除歌曲缓存</button>
+                <button id="settingsExportDataButton" class="text-button" type="button">导出本地数据</button>
+                <button id="settingsImportDataButton" class="text-button" type="button">导入本地数据</button>
+                <input id="settingsImportDataInput" type="file" accept="application/json,.json" hidden>
                 <button id="settingsCopyDiagnosticsButton" class="text-button" type="button">复制诊断信息</button>
               </div>
             </section>
@@ -2126,18 +2189,7 @@
                   <h3>快捷键</h3>
                 </div>
               </div>
-              <div class="shortcut-grid" aria-label="快捷键">
-                <span>Space</span><strong>播放 / 暂停</strong>
-                <span>← / →</span><strong>快退 / 快进 10 秒</strong>
-                <span>↑ / ↓</span><strong>调节音量</strong>
-                <span>M</span><strong>静音</strong>
-                <span>N / P</span><strong>下一首 / 上一首</strong>
-                <span>F</span><strong>收藏当前歌曲</strong>
-                <span>L</span><strong>定位当前歌曲</strong>
-                <span>Q</span><strong>快捷队列 / 沉浸队列</strong>
-                <span>Esc</span><strong>关闭弹窗 / 清除搜索筛选</strong>
-                <span>/</span><strong>聚焦搜索</strong>
-              </div>
+              <div id="settingsShortcutGrid" class="shortcut-grid" aria-label="快捷键"></div>
             </section>
 
             <section class="settings-section">
@@ -2150,6 +2202,20 @@
               <pre id="settingsDiagnostics" class="diagnostics-box"></pre>
             </section>
           </section>
+
+          <div id="shortcutCheatSheet" class="modal-backdrop" hidden>
+            <section class="modal-card shortcut-cheat-sheet-card" role="dialog" aria-modal="true" aria-labelledby="shortcutCheatSheetTitle">
+              <div class="modal-heading">
+                <div>
+                  <p class="kicker">Keyboard</p>
+                  <h3 id="shortcutCheatSheetTitle">快捷键说明</h3>
+                  <p class="modal-subtitle">当前页面可用的全部键盘操作。</p>
+                </div>
+                <button id="shortcutCheatSheetClose" class="audio-quality-close-button" type="button" aria-label="关闭快捷键说明">×</button>
+              </div>
+              <div id="shortcutCheatSheetGrid" class="shortcut-grid" aria-label="全部快捷键"></div>
+            </section>
+          </div>
 
           <div id="appNotice" class="app-notice" role="status" aria-live="polite" hidden>
             <span id="appNoticeText"></span>
@@ -2934,399 +3000,18 @@
       <button id="mobileMoreNavButton" class="mobile-nav-item mobile-more-nav-compat" type="button" aria-hidden="true" tabindex="-1" hidden></button>
     </section>
 
-    <script>
-      (() => {
-        const version = "0.93.229";
-        const appName = "Aurora Music";
-        const sessionKey = "emby-music-web/session";
-        const accountProfilesKey = "emby-music-web/account-profiles";
-        const deviceKey = "emby-music-web/device-id";
-        const byId = (id) => document.getElementById(id);
-        const message = byId("message");
-        const serverUrlInput = byId("serverUrl");
-        const usernameInput = byId("username");
-        const passwordInput = byId("password");
-        const deviceNameInput = byId("deviceName");
-
-        function setLoginMessage(text, type = "") {
-          if (!message) {
-            return;
-          }
-          message.textContent = text;
-          message.className = `message ${type}`.trim();
-        }
-
-        function normalizeServerUrl(value) {
-          const trimmed = value.trim();
-
-          if (!trimmed) {
-            return "";
-          }
-
-          const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-
-          try {
-            const url = new URL(withProtocol);
-            url.hash = "";
-            url.search = "";
-            url.pathname = url.pathname
-              .replace(/\/+$/, "")
-              .replace(/\/web\/index\.html?$/i, "")
-              .replace(/\/web$/i, "");
-            return url.toString().replace(/\/+$/, "");
-          } catch {
-            return withProtocol.replace(/\/+$/, "");
-          }
-        }
-
-        function buildServerUrl(serverUrl, path) {
-          const baseUrl = serverUrl.replace(/\/+$/, "");
-          let nextPath = path.startsWith("/") ? path : `/${path}`;
-
-          if (/\/emby$/i.test(baseUrl) && /^\/emby(?=\/|$|\?)/i.test(nextPath)) {
-            nextPath = nextPath.replace(/^\/emby(?=\/|$|\?)/i, "");
-          }
-
-          return `${baseUrl}${nextPath}`;
-        }
-
-        function getDeviceId() {
-          const existing = localStorage.getItem(deviceKey);
-
-          if (existing) {
-            return existing;
-          }
-
-          const id = crypto?.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-          localStorage.setItem(deviceKey, id);
-          return id;
-        }
-
-        function escapeHeaderValue(value) {
-          return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
-        }
-
-        function authorizationHeader(deviceName) {
-          const parts = [
-            `Client="${escapeHeaderValue(appName)}"`,
-            `Device="${escapeHeaderValue(deviceName)}"`,
-            `DeviceId="${escapeHeaderValue(getDeviceId())}"`,
-            `Version="${escapeHeaderValue(version)}"`,
-          ];
-
-          return `MediaBrowser ${parts.join(", ")}`;
-        }
-
-        async function requestJson(url, options = {}) {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-          try {
-            const response = await fetch(url, {
-              ...options,
-              signal: options.signal || controller.signal,
-            });
-
-            if (!response.ok) {
-              if (response.status === 401) {
-                throw new Error("认证失败，请检查用户名或密码。");
-              }
-
-              throw new Error(`服务器返回 ${response.status} ${response.statusText || ""}`.trim());
-            }
-
-            return response.json();
-          } catch (error) {
-            if (error?.name === "AbortError") {
-              throw new Error("连接服务器超时，请检查服务器是否在线、端口是否开放。");
-            }
-
-            if (error instanceof Error && error.message) {
-              throw error;
-            }
-
-            throw new Error("网络请求失败，请检查地址、协议、端口和浏览器 CORS 限制。");
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        }
-
-        async function fallbackTestServer() {
-          const serverUrl = normalizeServerUrl(serverUrlInput?.value || "");
-
-          if (!serverUrl) {
-            setLoginMessage("请先填写服务器地址。", "error");
-            return;
-          }
-
-          setLoginMessage("正在测试 Emby 服务器...");
-          const publicInfo = await requestJson(buildServerUrl(serverUrl, "/emby/System/Info/Public"));
-          const serverLabel = publicInfo.ServerName || publicInfo.LocalAddress || "Emby Server";
-          const versionLabel = publicInfo.Version ? ` · Emby ${publicInfo.Version}` : "";
-          setLoginMessage(`服务器连接正常：${serverLabel}${versionLabel}。`, "success");
-        }
-
-        async function fallbackConnect() {
-          const serverUrl = normalizeServerUrl(serverUrlInput?.value || "");
-          const username = usernameInput?.value.trim() || "";
-          const password = passwordInput?.value || "";
-          const deviceName = deviceNameInput?.value.trim() || `${appName} on ${navigator.platform || "Browser"}`;
-
-          if (!serverUrl || !username || !password) {
-            setLoginMessage("请填写服务器地址、用户名和密码。", "error");
-            return;
-          }
-
-          setLoginMessage("正在连接 Emby 服务器...");
-          const auth = await requestJson(buildServerUrl(serverUrl, "/emby/Users/AuthenticateByName"), {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Emby-Authorization": authorizationHeader(deviceName),
-            },
-            body: JSON.stringify({ Username: username, Pw: password }),
-          });
-          const publicInfo = await requestJson(buildServerUrl(serverUrl, "/emby/System/Info/Public")).catch(() => ({}));
-          const session = {
-            serverUrl,
-            deviceName,
-            accessToken: auth.AccessToken,
-            userId: auth.User?.Id,
-            userName: auth.User?.Name,
-            serverId: auth.ServerId || publicInfo.Id,
-            serverName: publicInfo.ServerName || publicInfo.LocalAddress || "Emby Server",
-            version: publicInfo.Version || "-",
-            savedAt: new Date().toISOString(),
-          };
-
-          localStorage.setItem(sessionKey, JSON.stringify(session));
-          saveFallbackAccountProfile(session);
-          setLoginMessage("连接成功，正在进入应用...", "success");
-          const url = new URL(location.href);
-          url.searchParams.set("v", version);
-          url.searchParams.set("reload", String(Date.now()));
-          location.replace(url.toString());
-        }
-
-        function saveFallbackAccountProfile(session) {
-          if (!session?.serverUrl || !session?.userId || !session?.accessToken) {
-            return;
-          }
-
-          const key = `${session.serverUrl.replace(/\/+$/, "").toLowerCase()}::${session.userId}`;
-          const savedAt = new Date().toISOString();
-          const profile = {
-            key,
-            savedAt,
-            session: { ...session, savedAt },
-          };
-
-          try {
-            const existing = JSON.parse(localStorage.getItem(accountProfilesKey) || "[]");
-            const profiles = Array.isArray(existing) ? existing.filter((item) => item?.key !== key) : [];
-            localStorage.setItem(accountProfilesKey, JSON.stringify([profile, ...profiles].slice(0, 12)));
-          } catch {
-            localStorage.setItem(accountProfilesKey, JSON.stringify([profile]));
-          }
-        }
-
-        function scrubCredentialQuery() {
-          const url = new URL(location.href);
-          const serverUrl = url.searchParams.get("serverUrl");
-          const username = url.searchParams.get("username");
-          const password = url.searchParams.get("password");
-          const deviceName = url.searchParams.get("deviceName");
-          const hadPassword = url.searchParams.has("password");
-          const hasCredentials = ["serverUrl", "username", "password", "deviceName"]
-            .some((key) => url.searchParams.has(key));
-
-          if (serverUrl && serverUrlInput && !serverUrlInput.value) {
-            serverUrlInput.value = serverUrl;
-          }
-          if (username && usernameInput && !usernameInput.value) {
-            usernameInput.value = username;
-          }
-          if (password && passwordInput && !passwordInput.value) {
-            passwordInput.value = password;
-          }
-          if (deviceName && deviceNameInput && !deviceNameInput.value) {
-            deviceNameInput.value = deviceName;
-          }
-
-          const pendingLogin = serverUrl && username && password
-            ? { serverUrl, username, password, deviceName: deviceName || "" }
-            : null;
-
-          if (pendingLogin) {
-            window.EmbyMusicPendingLogin = pendingLogin;
-          }
-
-          if (!hasCredentials) {
-            return pendingLogin;
-          }
-
-          ["serverUrl", "username", "password", "deviceName"].forEach((key) => {
-            url.searchParams.delete(key);
-          });
-          history.replaceState(null, "", url.toString());
-
-          if (hadPassword) {
-            setLoginMessage(pendingLogin
-              ? "已移除地址栏中的密码参数，正在连接 Emby..."
-              : "已移除地址栏中的密码参数，可以直接连接。");
-          }
-
-          return pendingLogin;
-        }
-
-        async function clearCacheAndReload() {
-          setLoginMessage("正在清除应用缓存...");
-          try {
-            if ("serviceWorker" in navigator) {
-              const registrations = await navigator.serviceWorker.getRegistrations();
-              await Promise.all(registrations.map((registration) => registration.unregister()));
-            }
-            if ("caches" in window) {
-              const keys = await caches.keys();
-              await Promise.all(keys
-                .filter((key) => key.startsWith("emby-music-web-"))
-                .map((key) => caches.delete(key)));
-            }
-          } finally {
-            const url = new URL(location.href);
-            url.searchParams.set("v", version);
-            url.searchParams.set("reload", String(Date.now()));
-            location.replace(url.toString());
-          }
-        }
-
-        function buildFallbackDiagnostics() {
-          return [
-            `Aurora Music ${version}`,
-            `URL: ${location.href}`,
-            `Recommended action: ${getFallbackDiagnosticsGuidance()}`,
-            `Fallback ready: yes`,
-            `Main app ready: ${window.EmbyMusicAppReady ? "yes" : "no"}`,
-            `Main app error: ${window.EmbyMusicAppError || "-"}`,
-            `Server input: ${serverUrlInput?.value || "-"}`,
-            `Browser network: ${navigator.onLine === false ? "offline" : "online"}`,
-            `Service Worker: ${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "controlled" : "supported") : "unsupported"}`,
-            `Cache API: ${"caches" in window ? "supported" : "unsupported"}`,
-            `User agent: ${navigator.userAgent}`,
-          ].join("\n");
-        }
-
-        function getFallbackDiagnosticsGuidance() {
-          if (!serverUrlInput?.value) {
-            return "enter the Emby server address, then test the server";
-          }
-
-          if (navigator.onLine === false) {
-            return "browser is offline; reconnect the network before logging in";
-          }
-
-          if (location.protocol === "file:") {
-            return "file protocol may be blocked by CORS; use a local static server";
-          }
-
-          if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-            return "main app did not load; clear cache and reload";
-          }
-
-          return "test server first; if it succeeds, connect with username and password";
-        }
-
-        function runFallbackConnect() {
-          fallbackConnect().catch((error) => {
-            setLoginMessage(error instanceof Error ? error.message : "连接失败，请稍后重试。", "error");
-          });
-        }
-
-        function bindFallbackLogin() {
-          byId("loginVersion").textContent = `v${version}`;
-          const pendingLogin = scrubCredentialQuery();
-
-          if (pendingLogin) {
-            setTimeout(() => {
-              if (window.EmbyMusicAppReady || !window.EmbyMusicPendingLogin) {
-                return;
-              }
-
-              fallbackConnect()
-                .catch((error) => {
-                  setLoginMessage(error instanceof Error ? error.message : "连接失败，请稍后重试。", "error");
-                })
-                .finally(() => {
-                  window.EmbyMusicPendingLogin = null;
-                });
-            }, 1600);
-          }
-
-          byId("connectForm").addEventListener("submit", (event) => {
-            event.preventDefault();
-            if (window.EmbyMusicAppReady) {
-              return;
-            }
-            runFallbackConnect();
-          });
-
-          byId("connectButton").addEventListener("click", (event) => {
-            if (window.EmbyMusicAppReady) {
-              return;
-            }
-            event.preventDefault();
-            runFallbackConnect();
-          });
-
-          byId("testServerButton").addEventListener("click", () => {
-            if (window.EmbyMusicAppReady) {
-              return;
-            }
-            fallbackTestServer().catch((error) => {
-              setLoginMessage(`服务器测试失败：${error instanceof Error ? error.message : "请稍后重试。"}`, "error");
-            });
-          });
-
-          byId("copyLoginDiagnosticsButton").addEventListener("click", async () => {
-            if (window.EmbyMusicAppReady) {
-              return;
-            }
-            const diagnostics = buildFallbackDiagnostics();
-            try {
-              await navigator.clipboard.writeText(diagnostics);
-              setLoginMessage("兜底诊断信息已复制。", "success");
-            } catch {
-              console.info(diagnostics);
-              setLoginMessage("无法自动复制，诊断信息已输出到 Console。", "error");
-            }
-          });
-
-          byId("clearLoginCacheButton").addEventListener("click", () => {
-            if (window.EmbyMusicAppReady) {
-              return;
-            }
-            clearCacheAndReload();
-          });
-        }
-
-        bindFallbackLogin();
-      })();
-    </script>
-    <script src="./src/config.js?v=0.93.229" defer></script>
-    <script src="./src/format.js?v=0.93.229" defer></script>
-    <script src="./src/lyrics.js?v=0.93.229" defer></script>
-    <script src="./src/emby-api.js?v=0.93.229" defer></script>
-    <script src="./src/external-source-api.js?v=0.93.229" defer></script>
-    <script src="./src/storage.js?v=0.93.229" defer></script>
-    <script src="./src/ui-helpers.js?v=0.93.229" defer></script>
-    <script src="./src/performance.js?v=0.93.229" defer></script>
-    <script src="./src/accessibility.js?v=0.93.229" defer></script>
-    <script src="./src/state-management.js?v=0.93.229" defer></script>
-    <script src="./src/theme.js?v=0.93.229" defer></script>
-    <script src="./src/color-extractor.js?v=0.93.229" defer></script>
-    <script src="./app.js?v=0.93.229" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async onload="window.dispatchEvent(new Event('emby-music-hls-ready'))"></script>
+    <script src="./src/redact.js?v=0.94.0" defer></script>
+    <script src="./src/login-fallback.js?v=0.94.0" defer></script>
+    <script src="./src/config.js?v=0.94.0" defer></script>
+    <script src="./src/dom-helpers.js?v=0.94.0" defer></script>
+    <script src="./src/format.js?v=0.94.0" defer></script>
+    <script src="./src/lyrics.js?v=0.94.0" defer></script>
+    <script src="./src/emby-api.js?v=0.94.0" defer></script>
+    <script src="./src/external-source-api.js?v=0.94.0" defer></script>
+    <script src="./src/idb-queue.js?v=0.94.0" defer></script>
+    <script src="./src/storage.js?v=0.94.0" defer></script>
+    <script type="module" src="./main.js?v=0.94.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" async></script>
+    <script src="./src/hls-ready.js?v=0.94.0" defer></script>
   </body>
 </html>

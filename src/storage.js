@@ -36,6 +36,8 @@ function createEmbyMusicStorage({
   const PLAYBACK_PRELOAD_KEY = playbackPreloadKey || "emby-music-web/playback-preload";
   const PLAYBACK_LOSSLESS_PRECACHE_KEY = playbackLosslessPrecacheKey || "emby-music-web/playback-lossless-precache";
   const ACCOUNT_PROFILES_LIMIT = 12;
+  const LOCAL_QUEUE_FALLBACK_LIMIT = 80;
+  const queueDatabase = window.EmbyMusicIdbQueue?.createIdbQueueStorage?.() || null;
 
   function saveSession(session) {
     localStorage.setItem(sessionKey, JSON.stringify(session));
@@ -320,42 +322,61 @@ function createEmbyMusicStorage({
     }
   }
 
+  async function loadQueueStateAsync(session) {
+    if (!queueDatabase) {
+      return loadQueueState(session);
+    }
+
+    try {
+      const saved = await queueDatabase.load(session);
+      return saved && isSameSession(saved, session)
+        ? normalizeQueueState(saved)
+        : loadQueueState(session);
+    } catch {
+      return loadQueueState(session);
+    }
+  }
+
   function saveQueueState(queueState) {
     if (!queueState?.session || !Array.isArray(queueState.queue) || !queueState.queue.length) {
-      clearQueueState();
+      clearQueueState(queueState?.session);
       return;
     }
 
+    const savedAt = new Date().toISOString();
+    const queue = queueState.queue.filter((track) => track?.Id).slice(0, maxQueueTracks);
     const payload = {
       serverUrl: queueState.session.serverUrl,
       userId: queueState.session.userId,
       serverId: queueState.session.serverId,
-      queue: queueState.queue.filter((track) => track?.Id).slice(0, maxQueueTracks),
+      queue: queue.slice(0, LOCAL_QUEUE_FALLBACK_LIMIT),
       currentTrackId: queueState.currentTrackId || "",
       currentTrackIndex: Number(queueState.currentTrackIndex) || 0,
       positionSeconds: Number(queueState.positionSeconds) || 0,
-      savedAt: new Date().toISOString(),
+      savedAt,
     };
 
     try {
       localStorage.setItem(getScopedSessionKey(queueKey, queueState.session), JSON.stringify(payload));
     } catch {
-      const compactPayload = {
-        ...payload,
-        queue: payload.queue.slice(0, Math.min(80, payload.queue.length)),
-      };
       try {
-        localStorage.setItem(getScopedSessionKey(queueKey, queueState.session), JSON.stringify(compactPayload));
+        localStorage.setItem(getScopedSessionKey(queueKey, queueState.session), JSON.stringify({
+          ...payload,
+          queue: payload.queue.slice(0, Math.min(20, payload.queue.length)),
+        }));
       } catch {
-        clearQueueState(queueState.session);
+        getQueueStateCandidates(queueState.session).forEach((key) => localStorage.removeItem(key));
       }
     }
+
+    void queueDatabase?.save({ ...queueState, queue, savedAt }).catch(() => {});
   }
 
   function clearQueueState(session) {
     getQueueStateCandidates(session).forEach((key) => {
       localStorage.removeItem(key);
     });
+    void queueDatabase?.clear(session).catch(() => {});
   }
 
   function emptyQueueState() {
@@ -682,6 +703,7 @@ function createEmbyMusicStorage({
     loadPlayerMetaTarget,
     loadPlayMode,
     loadQueueState,
+    loadQueueStateAsync,
     loadRecentTracks,
     loadSession,
     loadSortKey,

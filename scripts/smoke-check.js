@@ -66,8 +66,81 @@ function createMemoryLocalStorage() {
   };
 }
 
+function checkRedaction() {
+  const redactCode = read("src/redact.js");
+  const context = { URL, window: {} };
+  vm.runInNewContext(redactCode, context, { filename: "src/redact.js" });
+  const redact = context.window.EmbyMusicRedact;
+
+  assert(redact?.redactUrl("https://user:secret@example.com:8443/private") === "https://us***@exa***.com:****", "redactUrl should hide credentials, host details, port, and path");
+  assert(redact?.redactServer("http://192.168.10.25:8096/emby") === "http://192.168.*.*:****/emby", "redactServer should mask server host and port while keeping the path");
+  assert(redact?.redactToken("token-123456") === "***3456", "redactToken should expose only the last four characters");
+  const redactedText = redact?.redactText('serverUrl=https://example.com:8443/secret accessToken=token-123456 {"userId":"fixture-user","deviceName":"fixture-device"}');
+  ["example.com:8443", "token-123456", "fixture-user", "fixture-device"].forEach((secret) => {
+    assert(!redactedText?.includes(secret), "redactText should scrub URLs and sensitive assignments");
+  });
+  assert(!/\b(?:process|globalThis|require)\b/.test(redactCode), "redact.js must stay browser-safe without process, globalThis, or require");
+
+  const app = read("app.js");
+  const fallback = read("src/login-fallback.js");
+  assert(app.includes("const redact = window.EmbyMusicRedact"), "app should use the shared redaction helper");
+  assert(app.includes("return redact.redactText(diagnostics)"), "app diagnostics should be redacted before display or copy");
+  assert(fallback.includes("return redact.redactText(diagnostics)"), "fallback diagnostics should be redacted before copy or console output");
+  assert(app.includes("settingsServerUrl.textContent = redact.redactServer"), "settings server URL should be masked for display");
+}
+
+
+function checkDomHelpers() {
+  const helperCode = read("src/dom-helpers.js");
+  const created = [];
+  const document = {
+    createElement(tagName) {
+      const element = {
+        tagName: String(tagName).toUpperCase(),
+        className: "",
+        textContent: "",
+        attributes: {},
+        setAttribute(name, value) { this.attributes[name] = String(value); },
+      };
+      created.push(element);
+      return element;
+    },
+  };
+  const context = { document, TypeError, window: {} };
+  vm.runInNewContext(helperCode, context, { filename: "src/dom-helpers.js" });
+  const helpers = context.window.EmbyMusicDomHelpers;
+  const container = { children: [], replaceChildren(...children) { this.children = children; } };
+
+  assert(helpers?.escapeHtml('<img src=x onerror="x">') === "&lt;img src=x onerror=&quot;x&quot;&gt;", "DOM escapeHtml should encode untrusted markup");
+  helpers?.appendLoading(container, "加载 <外部>");
+  assert(container.children[0]?.textContent === "加载 <外部>", "appendLoading should use textContent instead of parsing markup");
+  helpers?.appendEmpty(container, { text: "空 <外部>" });
+  assert(container.children[0]?.textContent === "空 <外部>", "appendEmpty should use textContent instead of parsing markup");
+
+  const app = read("app.js");
+  const sourceFiles = fs.readdirSync(path.join(root, "src")).filter((name) => name.endsWith(".js") && name !== "dom-helpers.js");
+  const rawInnerHtml = ["app.js", ...sourceFiles.map((name) => `src/${name}`)]
+    .filter((file) => /\.innerHTML\s*=/.test(read(file)));
+  assert(!rawInnerHtml.length, `Only setStaticMarkup may assign innerHTML: ${rawInnerHtml.join(", ")}`);
+  assert(app.includes("setStaticMarkup(wrapper"), "Static SVG fragments should use setStaticMarkup");
+  assert(app.includes("appendLoading(homePlaylistGrid"), "Loading states should use appendLoading");
+  assert(app.includes("appendEmpty(homeRecentPlayedList, { text: message })"), "Dynamic empty states should use appendEmpty");
+
+  const index = read("index.html");
+  const sw = read("sw.js");
+  const removed = ["state-management.js", "accessibility.js", "color-extractor.js", "performance.js", "theme.js", "ui-helpers.js"];
+  removed.forEach((name) => {
+    assert(!fs.existsSync(path.join(root, "src", name)), `${name} should be removed`);
+    assert(!index.includes(name), `${name} should not be loaded by index.html`);
+    assert(!sw.includes(name), `${name} should not be cached by the service worker`);
+  });
+  assert(index.includes("./src/dom-helpers.js"), "index.html should load the shared DOM helpers before app.js");
+  assert(sw.includes('versioned("./src/dom-helpers.js")'), "service worker app shell should cache DOM helpers");
+}
+
 function checkVersions() {
   const index = read("index.html");
+  const fallback = read("src/login-fallback.js");
   const config = read("src/config.js");
   const sw = read("sw.js");
   const packageJson = JSON.parse(read("package.json"));
@@ -79,8 +152,12 @@ function checkVersions() {
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
-  assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174"'), "Default source bridge URL should point to the built-in local bridge");
-  assert(config.includes("DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL"), "Emby lyrics should support a dedicated source bridge URL");
+  assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: ""'), "Default source bridge URL should stay empty");
+  assert(config.includes('DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: ""'), "Default Emby lyrics bridge URL should stay empty");
+  assert(config.includes('LYRICS_SOURCE_BRIDGE_API_KEY: "emby-music-web/lyrics-source-bridge-api-url"'), "Emby lyrics bridge should use a dedicated localStorage key");
+  assert(!/DEFAULT_(?:EXTERNAL_SOURCE|EMBY_LYRICS_SOURCE_BRIDGE)_API_URL:\s*"https?:\/\//.test(config), "Bridge URL defaults must not contain a concrete host");
+  assert(/<input id="lyricsSourceBridgeApiUrl" type="password"[^>]*>/.test(index), "Emby lyrics bridge settings should mask the persisted host");
+  assert(index.includes('id="settingsSaveLyricsSourceBridgeButton"'), "Emby lyrics bridge settings should expose an explicit save action");
   assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
   assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
   assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
@@ -122,12 +199,15 @@ function checkVersions() {
 
   [
     "styles.css",
+    "src/redact.js",
+    "src/login-fallback.js",
+    "src/hls-ready.js",
     "src/config.js",
     "src/format.js",
     "src/lyrics.js",
     "src/emby-api.js",
     "src/storage.js",
-    "app.js",
+    "main.js",
     "manifest.webmanifest",
     "icon.svg",
   ].forEach((asset) => {
@@ -135,7 +215,7 @@ function checkVersions() {
   });
 
   assert(index.includes(`v${appVersion}`), "login version label is not synced");
-  assert(index.includes(`const version = "${appVersion}"`), "fallback script version is not synced");
+  assert(fallback.includes(`const version = "${appVersion}"`), "fallback script version is not synced");
 }
 
 function checkCss() {
@@ -176,8 +256,8 @@ function checkCss() {
   assert(/background:\s*transparent;/.test(lyricBaseRule), "Inactive lyric rows should stay background-transparent");
   assert(/border-radius:\s*0;/.test(lyricBaseRule), "Lyric rows should not use rounded rectangle backgrounds");
   assert(
-    /background\s+0\.35s cubic-bezier\(0\.25, 1, 0\.5, 1\),\s*opacity\s+0\.35s ease;/.test(lyricBaseRule),
-    "Lyric row fog transitions should use the shared smooth easing"
+    /background\s+120ms ease,\s*color\s+120ms ease,\s*opacity\s+120ms ease,\s*transform\s+120ms ease;/.test(lyricBaseRule),
+    "Lyric row transitions should use the requested 120ms fade timing"
   );
   assert(css.includes(".lyric-line:hover,\n.lyric-line:focus-visible"), "Lyric hover fog should apply to every lyric row");
   assert(!css.includes(".lyric-line[role=\"button\"]:hover,\n.lyric-line[role=\"button\"]:focus-visible"), "Lyric hover fog should not be limited to seekable rows");
@@ -201,6 +281,8 @@ function checkCss() {
   assert(css.includes(".top-lyric-current"), "Topbar lyric text should have a dedicated translated/current line style");
   assert(css.includes(".top-lyric-focus[hidden]"), "Hidden topbar lyrics should not leave an invisible overlay");
   assert(css.includes(".top-lyric-char"), "Topbar lyric shard effect should split lyric text into character spans");
+  assert(css.includes("background 120ms ease") && css.includes("opacity 120ms ease"), "Lyric line changes should use the requested 120ms fade transition");
+  assert(css.includes(".lyric-role-original .word::after") && css.includes(".lyric-role-translated .word::after"), "Karaoke word highlights should expose primary and secondary color roles");
   assert(/\.top-lyric-char\s*\{[\s\S]*?opacity:\s*0\.6;/.test(css), "Topbar lyric characters should start in the unplayed opacity state");
   assert(css.includes(".top-lyric-char.is-sharded"), "Topbar lyric shard effect should hide triggered characters");
   assert(css.includes(".top-lyric-shard-canvas"), "Topbar lyric shard effect should render temporary canvases");
@@ -252,6 +334,8 @@ function checkLyrics() {
   assert(Array.isArray(enhancedLine?.wordTimeline), "Enhanced LRC should expose wordTimeline");
   assert(enhancedLine.wordTimeline.length === 3, `Enhanced LRC should expose 3 timed words, got ${enhancedLine.wordTimeline?.length || 0}`);
   assert(enhancedLine.wordTimeline[1]?.time === 0.6, `Enhanced LRC second word time expected 0.6, got ${enhancedLine.wordTimeline[1]?.time}`);
+  const verbatimLine = parseLyrics("[00:10.00]<0.0>逐<0.2>字<0.4>高<0.6>亮").lines[0];
+  assert(verbatimLine.wordTimeline?.length === 4 && verbatimLine.wordTimeline[3]?.time === 10.6, "Verbatim <0.0> character timing should reach the karaoke renderer");
   const relativeEnhancedLine = parseLyrics("[01:20.00]<0.00>后<0.50>半<1.00>段").lines[0];
   assert(relativeEnhancedLine.wordTimeline?.[0]?.time === 80, `Line-relative enhanced LRC first word time expected 80, got ${relativeEnhancedLine.wordTimeline?.[0]?.time}`);
   assert(relativeEnhancedLine.wordTimeline?.[2]?.time === 81, `Line-relative enhanced LRC third word time expected 81, got ${relativeEnhancedLine.wordTimeline?.[2]?.time}`);
@@ -405,7 +489,7 @@ function checkLyrics() {
   assert(app.includes("function getImmersiveVisualizerAudioStats"), "Immersive music visualizer should derive RMS/peak/frequency energy from captured audio");
   assert(app.includes("function getImmersiveVisualizerReactiveLevels"), "Immersive music visualizer should render audio-reactive waveform levels");
   assert(app.includes("createMediaStreamSource(immersiveVisualizerStream)"), "Immersive music visualizer should keep the safe captureStream MediaStreamSource path");
-  assert(!app.includes("createMediaElementSource(audioPlayer)"), "Immersive music visualizer must not use MediaElementSource on the shared audio element");
+  assert(!app.includes("immersiveVisualizerAudioContext.createMediaElementSource"), "Immersive music visualizer must not use MediaElementSource on the shared audio element");
   assert(app.includes("function scheduleImmersiveVisualizerSync"), "Immersive music visualizer should have a retryable playback sync scheduler");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?scheduleImmersiveVisualizerSync\(\);/.test(app), "Audio play should immediately trigger the immersive music visualizer");
   assert(/function handleAudioBufferingEnd\(\) \{[\s\S]*?scheduleImmersiveVisualizerSync\(\);/.test(app), "Audio playing/canplay should retrigger the immersive music visualizer after buffering");
@@ -1125,9 +1209,25 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes("function appendPluginTrackSnapshot"), "Source bridge should append plugin restore snapshots to stable stream URLs");
   assert(/function streamPluginMedia\(request, response, url\) \{[\s\S]*?const media = await resolvePluginMedia\(track, requestedQuality\)[\s\S]*?await streamRemoteMedia\(request, response, proxyUrl\)/.test(bridge), "Plugin stream endpoint should resolve fresh media and proxy it with range support");
   assert(bridge.includes('"GET, HEAD, POST, OPTIONS"'), "Source bridge CORS should advertise HEAD for media probing");
-  assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should recover persisted plugin tracks when the plugin key changes");
-  assert(bridge.includes("function getPluginByUrlSafe"), "Source bridge should match restored plugin tracks by plugin URL");
-  assert(bridge.includes("function getPluginByNameSafe"), "Source bridge should match restored plugin tracks by plugin name");
+  assert(bridge.includes("function getPluginForSnapshot"), "Source bridge should validate persisted plugin tracks against current plugins");
+  assert(bridge.includes("function getPluginByUrlSafe"), "Source bridge should match restored plugin tracks by a verified plugin URL");
+  assert(!bridge.includes("function createRuntimePluginFromSnapshot"), "Source bridge must not execute a plugin URL supplied by a snapshot");
+  assert(!bridge.includes('require("node:vm")'), "Source bridge should not use the in-process vm sandbox");
+  assert(bridge.includes('require("node:worker_threads")'), "Source bridge should isolate plugins in worker threads");
+  assert(bridge.includes('source-plugin-worker.mjs'), "Source bridge should use the dedicated plugin worker entry");
+  assert(bridge.includes("maxOldGenerationSizeMb: 256"), "Plugin workers should have a 256 MB old-generation limit");
+  assert(bridge.includes("PLUGIN_CALL_TIMEOUT_MS = 3000"), "Plugin calls should have a 3 second execution budget");
+  assert(bridge.includes("EMBY_BRIDGE_TRUSTED_KEYS"), "Source bridge should load trusted plugin signing keys from the environment");
+  assert(bridge.includes("SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS"), "Source bridge should expose an explicit unsigned-plugin override");
+  assert(bridge.includes('crypto.verify("sha256"'), "Source bridge should verify detached manifest and plugin signatures");
+  const pluginWorker = read("scripts/source-plugin-worker.mjs");
+  assert(pluginWorker.includes('new Set(["search", "getMediaSource", "getLyric"])'), "Plugin worker should expose only the approved RPC methods");
+  assert(pluginWorker.includes("validatePluginSource"), "Plugin worker should reject privileged source constructs before execution");
+  assert(pluginWorker.includes("safeRequire"), "Plugin worker should expose only the dependency allowlist");
+  assert(pluginWorker.includes("assertSafeRemoteUrl"), "Plugin worker network capabilities should apply private-host guards");
+  assert(pluginWorker.includes("lockDownWorkerRealm"), "Plugin worker should remove privileged runtime globals before plugin execution");
+  assert(!pluginWorker.includes('from "node:fs"'), "Plugin worker should not import filesystem capabilities");
+  assert(!pluginWorker.includes('from "node:child_process"'), "Plugin worker should not import process-spawning capabilities");
   assert(bridge.includes("url.searchParams.get(\"track\")"), "Source bridge should read persisted track snapshots from media requests");
   assert(bridge.includes("raw: track.raw"), "Source bridge API tracks should preserve plugin raw payloads for later playback");
   assert(bridge.includes("pluginUrl: track.pluginUrl"), "Source bridge API tracks should preserve plugin URL for resilient restored playback");
@@ -1197,10 +1297,169 @@ function checkStorageQueuePersistence() {
 
   const stableQueueKey = `${queueKey}/${encodeURIComponent("source-bridge://external-source::external-source")}`;
   assert(localStorage.hasItem(stableQueueKey), "External source queue should save under a stable bridge account key instead of the mutable bridge URL");
+
+  storage.saveQueueState({
+    session: currentSession,
+    queue: Array.from({ length: 100 }, (_, index) => ({ Id: `queue-${index}` })),
+    currentTrackId: "queue-90",
+    currentTrackIndex: 90,
+    positionSeconds: 9,
+  });
+  const localFallback = JSON.parse(localStorage.getItem(stableQueueKey));
+  assert(localFallback.queue.length === 80, `localStorage queue fallback should keep exactly 80 tracks, got ${localFallback.queue.length}`);
+
+  const idbQueue = read("src/idb-queue.js");
+  const index = read("index.html");
+  const sw = read("sw.js");
+  assert(idbQueue.includes("const MAX_QUEUE_TRACKS = 10000"), "IndexedDB queue should support 10000 tracks");
+  assert(storageCode.includes("loadQueueStateAsync"), "Storage should expose asynchronous IndexedDB queue hydration");
+  assert(index.indexOf("./src/idb-queue.js") < index.indexOf("./src/storage.js"), "IndexedDB queue adapter should load before storage.js");
+  assert(sw.includes('versioned("./src/idb-queue.js")'), "Service worker app shell should cache IndexedDB queue adapter");
+  const installBlock = sw.slice(sw.indexOf('self.addEventListener("install"'), sw.indexOf('self.addEventListener("message"'));
+  assert(!installBlock.includes("self.skipWaiting()"), "Service worker install should wait for an explicit SKIP_WAITING message");
+  assert(sw.includes("staleWhileRevalidate(request, fallbackUrl, event)"), "Service worker fetches should use stale-while-revalidate");
+  assert(!sw.includes("networkFirst(") && !sw.includes("cacheFirst("), "Legacy service worker cache strategies should be removed");
+  const browserSmoke = read("scripts/browser-smoke.js");
+  assert(browserSmoke.includes("createIndexedDbQueuePersistenceSmokeScript"), "Browser smoke should verify IndexedDB queue persistence across adapter recreation");
+}
+
+async function checkCoverColorModule() {
+  const source = read("src/cover-color.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const coverColor = await import(moduleUrl);
+  const accent = coverColor.createCoverAccent("120, 80, 40", "30, 60, 90");
+  assert(accent?.color === "#785028" && accent?.rgb === "120, 80, 40", "Cover color should create stable CSS colors");
+  class FixtureImage {
+    addEventListener(type, callback) { if (type === "load") this.onload = callback; }
+    set src(value) { this.value = value; this.onload?.(); }
+  }
+  const pixels = new Uint8ClampedArray([120, 80, 40, 255, 122, 82, 42, 255]);
+  let fixtureImage;
+  const colors = await coverColor.sampleCoverColors("fixture-cover", {
+    ImageCtor: class extends FixtureImage { constructor() { super(); fixtureImage = this; } },
+    sampleSize: 1,
+    documentRef: { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: pixels }) }) }) },
+  });
+  assert(fixtureImage?.crossOrigin === "anonymous", "Cover images should opt into anonymous CORS before loading");
+  assert(colors?.primary === "121, 81, 41", "Cover color should sample visible mid-tone pixels");
+}
+
+async function checkLocalDataModule() {
+  const source = read("src/local-data.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const localData = await import(moduleUrl);
+  const payload = localData.createExportPayload({
+    queue: [{ Id: "track-1", Name: "Fixture", serverUrl: "http://fixture.invalid" }],
+    favorites: [], recent: [], preferences: { volume: 0.5 },
+  }, "fixture", "2026-07-20T00:00:00.000Z");
+  assert(payload.version === 1 && payload.metadata.appVersion === "fixture", "Local export should include schema and app versions");
+  assert(payload.data.queue[0]?.Name === "Fixture" && !payload.data.queue[0]?.serverUrl, "Local export should allowlist safe track fields");
+  assert(!localData.containsSensitiveData(payload), "Sanitized local export should not contain sensitive fields or hosts");
+  let rejected = false;
+  try { localData.validateImportPayload({ version: 1, data: { queue: [], favorites: [], recent: [], preferences: { serverUrl: "http://fixture.invalid" } } }); }
+  catch { rejected = true; }
+  assert(rejected, "Local import should reject payloads containing sensitive fields or hosts");
+}
+
+async function checkPlayerModule() {
+  const source = read("src/player.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const player = await import(moduleUrl);
+  const replayGain = player.getReplayGainDb([{
+    Id: "fixture-source",
+    MediaStreams: [{ Type: "Audio", ReplayGain: -6 }],
+  }], "fixture-source");
+  assert(replayGain === -6, "Player should read ReplayGain from the selected Emby audio stream");
+  assert(Math.abs(player.replayGainToMultiplier(-6) - Math.pow(10, -6 / 20)) < 1e-12, "Player should convert ReplayGain dB to a linear multiplier");
+}
+
+async function checkSettingsModule() {
+  const source = read("src/settings.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const settings = await import(moduleUrl);
+  assert(settings.normalizeThemePreference("dark") === "dark", "Theme settings should accept the dark preference");
+  assert(settings.normalizeThemePreference("invalid") === "system", "Invalid theme settings should fall back to system");
+  assert(settings.normalizeSleepFadeSeconds(60) === 60, "Sleep fade settings should accept supported durations");
+  assert(settings.normalizeSleepFadeSeconds(45) === 30, "Sleep fade settings should reject unsupported durations");
+}
+
+async function checkStoreModule() {
+  const source = read("src/store.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const { createStore } = await import(moduleUrl);
+  const idleQueue = [];
+  const store = createStore({ count: 1 }, {
+    requestIdle(callback) { idleQueue.push(callback); return idleQueue.length; },
+    cancelIdle() {},
+  });
+  let notifications = 0;
+  store.subscribe(() => { notifications += 1; });
+  store.set({ count: 2 });
+  assert(store.state.count === 2, "Store set should update the stable state object synchronously");
+  assert(notifications === 0 && idleQueue.length === 1, "Store notifications should be debounced through requestIdleCallback");
+  idleQueue.shift()?.();
+  assert(notifications === 1, "Store subscriber should run after the idle callback");
+  let derivedRuns = 0;
+  const first = store.derive("double", [store.state.count], () => { derivedRuns += 1; return store.state.count * 2; });
+  const second = store.derive("double", [store.state.count], () => { derivedRuns += 1; return 0; });
+  assert(first === 4 && second === 4 && derivedRuns === 1, "Store derive should cache values until dependencies change");
+  assert(source.split("\n").length <= 100, "src/store.js should stay within the 100-line audit limit");
 }
 
 function checkAppFunctionReferences() {
   const app = read("app.js");
+  const main = read("main.js");
+  const index = read("index.html");
+  const bridgeModule = read("src/bridge.js");
+  const coverColorModule = read("src/cover-color.js");
+  const libraryModule = read("src/library.js");
+  const localDataModule = read("src/local-data.js");
+  const playerModule = read("src/player.js");
+  const queueModule = read("src/queue.js");
+  const searchModule = read("src/search.js");
+  const settingsModule = read("src/settings.js");
+  const storeModule = read("src/store.js");
+  assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
+  assert(main.includes('import * as coverColor from "./src/cover-color.js"'), "main.js should wire the cover color ESM module");
+  assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
+  assert(main.includes('import * as store from "./src/store.js"'), "main.js should wire the store ESM module");
+  assert(main.includes('import * as localData from "./src/local-data.js"'), "main.js should wire the local data ESM module");
+  assert(main.includes('import * as library from "./src/library.js"'), "main.js should wire the library ESM module");
+  assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
+  assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
+  assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
+  assert(main.includes('await import("./app.js?v=0.94.0")'), "main.js should load app.js through native ESM");
+  assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
+  assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
+  assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
+  assert(localDataModule.includes("export function validateImportPayload"), "local data module should validate import payloads");
+  assert(searchModule.includes("export function addHistory"), "search module should own history normalization");
+  assert(bridgeModule.includes("export function normalizeHttpUrl"), "bridge module should own HTTP bridge URL normalization");
+  assert(settingsModule.includes("export function normalizeLyricSettings"), "settings module should own lyric preference normalization");
+  assert(storeModule.includes("export function createStore"), "store module should expose the small pub/sub state layer");
+  assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
+  assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
+  assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
+  assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
+  assert(app.includes("localDataOps.createExportPayload") && app.includes("localDataOps.validateImportPayload"), "settings should use the local data safety module");
+  assert(app.includes("coverColorOps.sampleCoverColors") && coverColorModule.includes('image.crossOrigin = "anonymous"'), "Current tracks should use the isolated CORS-safe cover sampler");
+  assert(app.includes('window.matchMedia?.("(prefers-color-scheme: dark)")'), "System theme should observe the browser dark-mode query");
+  assert(app.includes('themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange)'), "System theme should react to preference changes");
+  assert(index.includes('id="settingsThemeSelect"'), "Settings should expose light, dark, and system theme choices");
+  assert(index.includes('id="settingsReplayGainToggle"'), "Settings should expose the optional ReplayGain control");
+  assert(app.includes('localStorage.getItem(REPLAY_GAIN_ENABLED_KEY) === "true"'), "ReplayGain should stay disabled unless explicitly enabled");
+  assert(app.includes("createMediaElementSource(audioPlayer)"), "ReplayGain should route playback through WebAudio only when needed");
+  assert(app.includes("replayGainNode.connect(sleepFadeGainNode)"), "ReplayGain and sleep fade should use separate serial GainNodes");
+  assert(app.includes("playerOps.getReplayGainDb(playbackInfo?.MediaSources, mediaSourceId)"), "Playback sessions should read ReplayGain from Emby media streams");
+  assert(index.includes('id="sleepFadeSecondsSelect"'), "Settings should expose 30, 60, and 90 second sleep fades");
+  assert(app.includes("sleepFadeGainNode.gain.linearRampToValueAtTime?.(0, now + remainingSeconds)"), "Sleep timer should linearly fade its dedicated GainNode");
+  assert(app.includes("clearSleepTimer({ announce: false, resetFade: false })"), "Sleep expiry should pause before restoring the fade gain");
+  assert(app.includes("if (options.resetFade !== false) restoreSleepFadeGain()"), "Clearing a sleep timer should restore its gain");
+  assert(app.includes("const KEYBOARD_SHORTCUTS = Object.freeze(["), "Keyboard handling and UI should share one descriptor list");
+  assert(app.includes("KEYBOARD_SHORTCUTS.find((item) => item.keys.includes(event.key))"), "Keyboard events should resolve through descriptors");
+  assert(app.includes("KEYBOARD_SHORTCUTS.forEach((shortcut)"), "Shortcut UI should render from descriptors");
+  assert(index.includes('id="shortcutCheatSheet"') && index.includes('id="shortcutCheatSheetGrid"'), "Question mark shortcut should open a modal cheat sheet");
+  assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
@@ -1316,6 +1575,12 @@ function checkAppFunctionReferences() {
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
+  assert(/export function normalizeHttpUrl\(value, normalizer\) \{[\s\S]*?new URL\(raw\);[\s\S]*?\["http:", "https:"\]\.includes\(url\.protocol\)[\s\S]*?!url\.hostname[\s\S]*?return "";/.test(bridgeModule), "Bridge module should reject malformed or non-HTTP service URLs");
+  assert(/function loadLyricsSourceBridgeApiUrl\(\) \{\s*return normalizeLyricsSourceBridgeApiUrl\(localStorage\.getItem\(LYRICS_SOURCE_BRIDGE_API_KEY\) \|\| ""\);\s*\}/.test(app), "Emby lyrics bridge should load only from its dedicated localStorage key");
+  assert(/function saveLyricsSourceBridgeApiUrl\(apiUrl\) \{[\s\S]*?localStorage\.setItem\(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl\);[\s\S]*?localStorage\.removeItem\(LYRICS_SOURCE_BRIDGE_API_KEY\);[\s\S]*?\}/.test(app), "Emby lyrics bridge should save and clear only its dedicated localStorage key");
+  assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{\s*return loadLyricsSourceBridgeApiUrl\(\);\s*\}/.test(app), "Emby lyrics bridge should not fall back to a concrete host");
+  assert(!app.includes("getDefaultRemoteSourceBridgeApiUrl"), "Emby lyrics bridge should not retain the hard-coded remote fallback");
+  assert(!app.includes("getSameHostSourceBridgeApiUrl"), "Emby lyrics bridge should not infer a bridge from the current page host");
   assert(app.includes("function getExternalTrackApiUrl"), "External source playback should centralize restored track bridge URL resolution");
   assert(/function getExternalTrackApiUrl\(track, session = state\.session\) \{[\s\S]*?const sessionApiUrl = getSessionExternalSourceApiUrl\(session\)[\s\S]*?loadExternalSourceApiUrl\(\);[\s\S]*?if \(sessionApiUrl\) \{[\s\S]*?return sessionApiUrl;[\s\S]*?const trackApiUrl = track\?\.ExternalSource\?\.apiUrl;/.test(app), "Restored external tracks should prefer the current bridge session URL over stale per-track URLs");
   assert(/fetchLyricsText\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");
@@ -1325,10 +1590,10 @@ function checkAppFunctionReferences() {
   assert(/resolveExternalSearchTrackQuality\(track, token\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External search quality resolution should use the current bridge URL after app re-entry");
   assert(!app.includes("track.ExternalSource?.apiUrl || getSessionExternalSourceApiUrl()"), "Restored external tracks should not prefer stale per-track bridge URLs");
   assert(externalSourceCode.includes("function hasExternalPluginSnapshotIdentity"), "External source snapshots should allow plugin URL/name fallback when plugin key changes");
-  assert(sourceBridge.includes("function createRuntimePluginFromSnapshot"), "Source bridge should restore plugin tracks from persisted plugin URLs without requiring a fresh search");
-  assert(/function restorePluginTrackFromSnapshot\(url, id\) \{[\s\S]*?hasPluginSnapshotIdentity\(snapshot\)/.test(sourceBridge), "Source bridge snapshot restore should accept plugin URL/name identity, not only plugin key");
-  assert(/function getPluginForSnapshot\(snapshot\) \{[\s\S]*?createRuntimePluginFromSnapshot\(snapshot\)/.test(sourceBridge), "Source bridge should create a runtime plugin from a persisted snapshot if the manifest key changed");
-  assert(/function createRuntimePluginFromSnapshot\(snapshot\) \{[\s\S]*?state\.plugins\.push\(plugin\);[\s\S]*?return plugin;/.test(sourceBridge), "Runtime restored plugins should be registered before resolving media");
+  assert(!sourceBridge.includes("function createRuntimePluginFromSnapshot"), "Source bridge should reject snapshot-provided plugin URLs that are not currently verified");
+  assert(/function restorePluginTrackFromSnapshot\(url, id\) \{[\s\S]*?hasPluginSnapshotIdentity\(snapshot\)/.test(sourceBridge), "Source bridge snapshot restore should require a complete plugin identity");
+  assert(/function getPluginForSnapshot\(snapshot\) \{[\s\S]*?getPluginByUrlSafe\(snapshotUrl\)[\s\S]*?return null;/.test(sourceBridge), "Source bridge should only resolve snapshots through the current verified plugin set");
+  assert(/const keyedPlugin = snapshot\?\.pluginKey \? getPluginByKeySafe\(snapshot\.pluginKey\) : null;\s*return keyedPlugin && keyedPlugin !== plugin \? null : plugin;/.test(sourceBridge), "Source bridge should reject snapshots whose plugin key conflicts with the verified URL");
   assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
   assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");
@@ -1353,26 +1618,30 @@ function checkAppFunctionReferences() {
   assert(app.includes("home-track-equalizer"), "Home track rows should render an equalizer indicator");
   assert(app.includes("home-track-favorite-button"), "Home track rows should expose the refined favorite action");
   assert(app.includes("createActionIcon(\"heart\")"), "Favorite buttons should render a line SVG heart");
-  assert(app.includes("function updateAlbumAmbientColor"), "Playback should update album-aware ambient colors");
-  assert(app.includes("function extractImageAverageRgb"), "Album art colors should be sampled with canvas");
+  assert(app.includes("function setTrackAccent"), "Playback should update album-aware ambient colors");
+  assert(coverColorModule.includes("context.getImageData"), "Album art colors should be sampled with canvas");
   assert(app.includes("--album-ambient-rgb-alt"), "Album ambient system should expose two sampled colors");
   assert(app.includes("function getTrackQualityTier"), "Track quality badges should use tiered classification");
   assert(app.includes("return \"master\""), "Track quality badges should classify master-quality audio");
   assert(app.includes("homeTrackSkeletonMarkup"), "Home track lists should render skeleton rows while loading");
   assert(app.includes("updateHomeTrackRippleOrigin"), "Home track rows should bind ripple origin to pointer position");
 
-  const index = read("index.html");
   assert(index.includes("mobilePlayerMoreButton"), "Missing mobile player more button");
   assert(index.includes("id=\"topLyricFocus\""), "Topbar should keep the lyric display layer hidden behind the feature flag");
   assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should keep the translated/current lyric line hidden behind the feature flag");
   assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
-  assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
-  assert(index.includes("Main app error:"), "Fallback diagnostics should expose the app init error");
+  const fallback = read("src/login-fallback.js");
+  assert(index.includes('http-equiv="Content-Security-Policy"'), "index should define a CSP meta policy");
+  assert(index.includes('name="referrer" content="no-referrer"'), "index should disable referrer leakage");
+  assert(!/<script>(?:.|\n)*?<\/script>/.test(index), "index should not contain inline script blocks");
+  assert(!/\son[a-z]+=/i.test(index), "index should not contain inline event handlers");
+  assert(fallback.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
+  assert(fallback.includes("Main app error:"), "Fallback diagnostics should expose the app init error");
   assert(index.includes("id=\"playbackPreloadToggle\""), "Settings should include playback preload toggle");
   assert(index.includes("id=\"playbackLosslessPrecacheToggle\""), "Settings should include lossless precache toggle");
   assert(index.includes("id=\"settingsClearPlaybackCacheButton\""), "Settings should include playback cache clearing action");
-  assert(index.indexOf("./app.js?v=") < index.indexOf("hls.min.js"), "External hls.js should load after the main app script");
+  assert(index.indexOf("./main.js?v=") < index.indexOf("hls.min.js"), "External hls.js should load after the ESM entry script");
   assert(index.includes("hls.min.js\" async"), "External hls.js should not block main app initialization");
   assert(index.indexOf("class=\"account-menu-profile\"") < index.indexOf("id=\"connectionBadge\""), "Account menu status badge should live in the top heading");
   assert(index.includes("class=\"hero-side\""), "Home dashboard stats should live inside the hero side region");
@@ -1534,11 +1803,18 @@ function findMissingHtmlIdReferences(html, ids, attribute) {
 }
 
 async function main() {
+  checkRedaction();
+  checkDomHelpers();
   checkVersions();
   checkCss();
   checkLyrics();
   await checkExternalSourceLyrics();
   checkStorageQueuePersistence();
+  await checkCoverColorModule();
+  await checkLocalDataModule();
+  await checkPlayerModule();
+  await checkSettingsModule();
+  await checkStoreModule();
   checkAppFunctionReferences();
   checkDomReferences();
 
