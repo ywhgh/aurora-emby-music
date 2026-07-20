@@ -66,6 +66,22 @@ function createMemoryLocalStorage() {
   };
 }
 
+function checkRedaction() {
+  const redactCode = read("src/redact.js");
+  const context = { URL, window: {} };
+  vm.runInNewContext(redactCode, context, { filename: "src/redact.js" });
+  const redact = context.window.EmbyMusicRedact;
+
+  assert(redact?.redactUrl("https://user:secret@example.com:8443/private") === "https://us***@exa***.com:****", "redactUrl should hide credentials, host details, port, and path");
+  assert(redact?.redactServer("http://192.168.10.25:8096/emby") === "http://192.168.*.*:****/emby", "redactServer should mask server host and port while keeping the path");
+  assert(redact?.redactToken("token-123456") === "***3456", "redactToken should expose only the last four characters");
+  const redactedText = redact?.redactText('serverUrl=https://example.com:8443/secret accessToken=token-123456 {"userId":"fixture-user","deviceName":"fixture-device"}');
+  ["example.com:8443", "token-123456", "fixture-user", "fixture-device"].forEach((secret) => {
+    assert(!redactedText?.includes(secret), "redactText should scrub URLs and sensitive assignments");
+  });
+  assert(!/\b(?:process|globalThis|require)\b/.test(redactCode), "redact.js must stay browser-safe without process, globalThis, or require");
+}
+
 function checkVersions() {
   const index = read("index.html");
   const config = read("src/config.js");
@@ -1534,6 +1550,7 @@ function findMissingHtmlIdReferences(html, ids, attribute) {
 }
 
 async function main() {
+  checkRedaction();
   checkVersions();
   checkCss();
   checkLyrics();
