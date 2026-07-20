@@ -394,6 +394,7 @@ const EXTERNAL_SOURCE_VIDEO_QUALITY_OPTIONS = [
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
 const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playback-display";
 const COVER_COLOR_ENABLED_KEY = "emby-music-web/cover-color-enabled";
+const THEME_PREFERENCE_KEY = "emby-music-web/theme-preference";
 const PLAYBACK_DISPLAY_DEFAULTS = {
   volumeLeveling: false,
   backgroundMix: false,
@@ -667,6 +668,7 @@ const settingsImportDataButton = document.querySelector("#settingsImportDataButt
 const settingsImportDataInput = document.querySelector("#settingsImportDataInput");
 const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagnosticsButton");
 const settingsCoverColorToggle = document.querySelector("#settingsCoverColorToggle");
+const settingsThemeSelect = document.querySelector("#settingsThemeSelect");
 const lyricsSourceBridgeApiUrlInput = document.querySelector("#lyricsSourceBridgeApiUrl");
 const settingsSaveLyricsSourceBridgeButton = document.querySelector("#settingsSaveLyricsSourceBridgeButton");
 const settingsLyricsSourceBridgeStatus = document.querySelector("#settingsLyricsSourceBridgeStatus");
@@ -1105,6 +1107,7 @@ const store = storeOps.createStore({
   playbackPreloadEnabled: loadPlaybackPreloadEnabled(),
   playbackLosslessPrecacheEnabled: loadPlaybackLosslessPrecacheEnabled(),
   coverColorEnabled: loadCoverColorEnabled(),
+  themePreference: loadThemePreference(),
   trackDensity: loadTrackDensity(),
   playerMetaTarget: loadPlayerMetaTarget(),
   volume: loadVolume(),
@@ -1217,6 +1220,7 @@ const store = storeOps.createStore({
   cancelIdle: window.cancelIdleCallback?.bind(window),
 });
 const state = store.state;
+const themeMediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)") || null;
 
 const MINI_PLAYER_LYRIC_REVEAL_DELAY_MS = 30000;
 const MINI_PLAYER_PROGRESS_LYRIC_TAIL_GUARD_SECONDS = 0.85;
@@ -1429,6 +1433,9 @@ function init() {
   settingsImportDataInput?.addEventListener("change", importLocalData);
   settingsCopyDiagnosticsButton.addEventListener("click", copyDiagnostics);
   settingsCoverColorToggle?.addEventListener("change", handleCoverColorToggleChange);
+  settingsThemeSelect?.addEventListener("change", handleThemePreferenceChange);
+  themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange);
+  applyThemePreference();
   settingsSaveLyricsSourceBridgeButton?.addEventListener("click", saveLyricsSourceBridgeApiUrlFromSettings);
   lyricsSourceBridgeApiUrlInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -9319,6 +9326,9 @@ function renderSettings() {
   }
   if (settingsCoverColorToggle) {
     settingsCoverColorToggle.checked = state.coverColorEnabled;
+  }
+  if (settingsThemeSelect) {
+    settingsThemeSelect.value = state.themePreference;
   }
   settingsPlaybackError.textContent = getSettingsPlaybackErrorLabel();
   settingsPlaybackError.classList.toggle("settings-error-value", settingsPlaybackError.textContent !== "-");
@@ -21431,6 +21441,7 @@ function resetPlayerPreferences() {
   state.playbackPreloadEnabled = true;
   state.playbackLosslessPrecacheEnabled = false;
   state.coverColorEnabled = true;
+  state.themePreference = "system";
   state.trackDensity = "comfortable";
   state.playerMetaTarget = "immersive";
   state.volume = 1;
@@ -21445,6 +21456,7 @@ function resetPlayerPreferences() {
   storage.clearPlaybackPreloadEnabled?.();
   storage.clearPlaybackLosslessPrecacheEnabled?.();
   localStorage.removeItem(COVER_COLOR_ENABLED_KEY);
+  localStorage.removeItem(THEME_PREFERENCE_KEY);
   storage.clearTrackDensity();
   storage.clearPlayerMetaTarget();
   storage.clearTranscodeBitrate();
@@ -21458,6 +21470,7 @@ function resetPlayerPreferences() {
   applyFilters();
   renderLibrary();
   applyTrackAccent(state.currentTrack);
+  applyThemePreference();
   renderSettings();
   setLibraryStatus("播放器偏好已重置。");
 }
@@ -21487,6 +21500,7 @@ function getExportPreferences() {
     playbackPreloadEnabled: Boolean(state.playbackPreloadEnabled),
     playbackLosslessPrecacheEnabled: Boolean(state.playbackLosslessPrecacheEnabled),
     coverColorEnabled: Boolean(state.coverColorEnabled),
+    themePreference: settingsOps.normalizeThemePreference(state.themePreference),
   };
 }
 
@@ -21540,6 +21554,7 @@ function applyImportedLocalData(data) {
   state.playbackPreloadEnabled = preferences.playbackPreloadEnabled !== false;
   state.playbackLosslessPrecacheEnabled = preferences.playbackLosslessPrecacheEnabled === true;
   state.coverColorEnabled = preferences.coverColorEnabled !== false;
+  state.themePreference = settingsOps.normalizeThemePreference(preferences.themePreference);
   storage.savePlayMode(state.playMode);
   storage.saveSortKey(state.sortKey);
   storage.saveSortOrder(state.sortOrder);
@@ -21549,6 +21564,7 @@ function applyImportedLocalData(data) {
   storage.savePlaybackPreloadEnabled?.(state.playbackPreloadEnabled);
   storage.savePlaybackLosslessPrecacheEnabled?.(state.playbackLosslessPrecacheEnabled);
   saveCoverColorEnabled();
+  saveThemePreference();
   saveLyricSettings();
   savePlaybackDisplaySettings(state.playbackDisplaySettings);
   saveImportedFavorites();
@@ -21564,6 +21580,7 @@ function applyImportedLocalData(data) {
   renderRecent();
   renderHomeSections();
   applyTrackAccent(state.currentTrack);
+  applyThemePreference();
   renderSettings();
   renderPlayer();
 }
@@ -23078,6 +23095,34 @@ function handleCoverColorToggleChange() {
   saveCoverColorEnabled();
   applyTrackAccent(state.currentTrack);
   renderSettings();
+}
+
+function loadThemePreference() {
+  return settingsOps.normalizeThemePreference(localStorage.getItem(THEME_PREFERENCE_KEY));
+}
+
+function saveThemePreference() {
+  localStorage.setItem(THEME_PREFERENCE_KEY, state.themePreference);
+}
+
+function applyThemePreference() {
+  const resolvedTheme = state.themePreference === "system"
+    ? (themeMediaQuery?.matches ? "dark" : "light")
+    : state.themePreference;
+  document.documentElement.dataset.theme = resolvedTheme;
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeMeta) themeMeta.content = resolvedTheme === "dark" ? "#111111" : "#ffffff";
+}
+
+function handleThemePreferenceChange() {
+  state.themePreference = settingsOps.normalizeThemePreference(settingsThemeSelect?.value);
+  saveThemePreference();
+  applyThemePreference();
+  renderSettings();
+}
+
+function handleSystemThemeChange() {
+  if (state.themePreference === "system") applyThemePreference();
 }
 
 function getTrackAccent(track) {

@@ -1361,6 +1361,14 @@ async function checkLocalDataModule() {
   assert(rejected, "Local import should reject payloads containing sensitive fields or hosts");
 }
 
+async function checkSettingsModule() {
+  const source = read("src/settings.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const settings = await import(moduleUrl);
+  assert(settings.normalizeThemePreference("dark") === "dark", "Theme settings should accept the dark preference");
+  assert(settings.normalizeThemePreference("invalid") === "system", "Invalid theme settings should fall back to system");
+}
+
 async function checkStoreModule() {
   const source = read("src/store.js");
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -1421,6 +1429,9 @@ function checkAppFunctionReferences() {
   assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
   assert(app.includes("localDataOps.createExportPayload") && app.includes("localDataOps.validateImportPayload"), "settings should use the local data safety module");
   assert(app.includes("coverColorOps.sampleCoverColors") && coverColorModule.includes('image.crossOrigin = "anonymous"'), "Current tracks should use the isolated CORS-safe cover sampler");
+  assert(app.includes('window.matchMedia?.("(prefers-color-scheme: dark)")'), "System theme should observe the browser dark-mode query");
+  assert(app.includes('themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange)'), "System theme should react to preference changes");
+  assert(index.includes('id="settingsThemeSelect"'), "Settings should expose light, dark, and system theme choices");
   assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
@@ -1774,6 +1785,7 @@ async function main() {
   checkStorageQueuePersistence();
   await checkCoverColorModule();
   await checkLocalDataModule();
+  await checkSettingsModule();
   await checkStoreModule();
   checkAppFunctionReferences();
   checkDomReferences();
