@@ -1270,6 +1270,7 @@ function init() {
   renderMobileProfilePage();
   bindMobileProfileTabs();
   bindMiniPlayerLyricIdleListeners();
+  void hydrateQueueStateFromIndexedDb(initialSession, initialQueueState.savedAt);
 
   if (!pendingCredentialLogin && state.session) {
     if (isExternalSourceSession(state.session)) {
@@ -25706,6 +25707,44 @@ function loadQueueState(session) {
   }
 
   return queueState;
+}
+
+async function hydrateQueueStateFromIndexedDb(session, initialSavedAt = "") {
+  if (!session || !storage.loadQueueStateAsync) {
+    return;
+  }
+
+  const expectedUserId = session.userId;
+  const expectedMode = getSessionSourceMode(session);
+  const queueState = await storage.loadQueueStateAsync(session);
+  if (
+    state.session?.userId !== expectedUserId
+    || getSessionSourceMode(state.session) !== expectedMode
+    || state.queueSavedAt !== initialSavedAt
+    || !queueState.queue.length
+  ) {
+    return;
+  }
+
+  queueState.queue.forEach(markRestoredQueueTrackForFreshResolve);
+  if (queueState.currentTrack) {
+    markRestoredQueueTrackForFreshResolve(queueState.currentTrack);
+  }
+
+  state.queue = queueState.queue;
+  state.currentTrackIndex = queueState.currentTrackIndex;
+  state.currentTrack = queueState.currentTrack;
+  state.savedPlaybackPositionSeconds = queueState.positionSeconds;
+  state.queueSavedAt = queueState.savedAt;
+  state.lastQueuePositionSaveSeconds = queueState.positionSeconds || 0;
+  setPlayerEnabled(Boolean(state.queue.length));
+  renderQueue();
+  renderNowPlaying();
+  renderPlayerNextPreview();
+  renderRestoredPlaybackProgress(state.currentTrack);
+  if (state.currentTrack) {
+    updatePlayerMeta(state.currentTrack);
+  }
 }
 
 function loadPlayMode() {

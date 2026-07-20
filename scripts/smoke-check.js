@@ -1293,6 +1293,30 @@ function checkStorageQueuePersistence() {
 
   const stableQueueKey = `${queueKey}/${encodeURIComponent("source-bridge://external-source::external-source")}`;
   assert(localStorage.hasItem(stableQueueKey), "External source queue should save under a stable bridge account key instead of the mutable bridge URL");
+
+  storage.saveQueueState({
+    session: currentSession,
+    queue: Array.from({ length: 100 }, (_, index) => ({ Id: `queue-${index}` })),
+    currentTrackId: "queue-90",
+    currentTrackIndex: 90,
+    positionSeconds: 9,
+  });
+  const localFallback = JSON.parse(localStorage.getItem(stableQueueKey));
+  assert(localFallback.queue.length === 80, `localStorage queue fallback should keep exactly 80 tracks, got ${localFallback.queue.length}`);
+
+  const idbQueue = read("src/idb-queue.js");
+  const index = read("index.html");
+  const sw = read("sw.js");
+  assert(idbQueue.includes("const MAX_QUEUE_TRACKS = 10000"), "IndexedDB queue should support 10000 tracks");
+  assert(storageCode.includes("loadQueueStateAsync"), "Storage should expose asynchronous IndexedDB queue hydration");
+  assert(index.indexOf("./src/idb-queue.js") < index.indexOf("./src/storage.js"), "IndexedDB queue adapter should load before storage.js");
+  assert(sw.includes('versioned("./src/idb-queue.js")'), "Service worker app shell should cache IndexedDB queue adapter");
+  const installBlock = sw.slice(sw.indexOf('self.addEventListener("install"'), sw.indexOf('self.addEventListener("message"'));
+  assert(!installBlock.includes("self.skipWaiting()"), "Service worker install should wait for an explicit SKIP_WAITING message");
+  assert(sw.includes("staleWhileRevalidate(request, fallbackUrl, event)"), "Service worker fetches should use stale-while-revalidate");
+  assert(!sw.includes("networkFirst(") && !sw.includes("cacheFirst("), "Legacy service worker cache strategies should be removed");
+  const browserSmoke = read("scripts/browser-smoke.js");
+  assert(browserSmoke.includes("createIndexedDbQueuePersistenceSmokeScript"), "Browser smoke should verify IndexedDB queue persistence across adapter recreation");
 }
 
 function checkAppFunctionReferences() {

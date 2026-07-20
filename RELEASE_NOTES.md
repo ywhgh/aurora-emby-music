@@ -92,6 +92,26 @@
 - `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
 - `git diff --check`
 
+### M4 · IndexedDB 队列与渐进式 Service Worker（R3 / R4）
+
+### 版本说明
+播放队列主存储迁移到 IndexedDB，并保留最多 80 条的 localStorage 首屏降级快照；Service Worker 更新改为等待用户确认激活，所有同源 GET 请求统一采用 stale-while-revalidate。
+
+### 更新内容
+- 新增 `src/idb-queue.js`，按账号隔离保存最多 10000 条队列、当前曲目和播放进度。
+- `src/storage.js` 保持同步 queue API 兼容，同时增加异步 IndexedDB hydration；写入时同步保留 80 条 localStorage 降级数据。
+- 应用初始化先用 localStorage 渲染，再在会话未变化时异步恢复完整 IndexedDB 队列。
+- Service Worker install 不再主动 `skipWaiting()`；仅在收到 `SKIP_WAITING` 消息后激活新版本。
+- 同源导航、app shell 和运行期资源统一使用 stale-while-revalidate，离线导航回退到缓存的 `index.html`。
+- browser smoke 通过重建存储适配器验证 120 条队列、当前曲目和播放位置仍可恢复。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ---
 
 ## 0.93.230

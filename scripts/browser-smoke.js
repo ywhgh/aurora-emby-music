@@ -262,6 +262,42 @@ function createLyricOffsetSmokeScript() {
   })()`;
 }
 
+function createIndexedDbQueuePersistenceSmokeScript() {
+  return `(async () => {
+    const factory = window.EmbyMusicIdbQueue?.createIdbQueueStorage;
+    if (!factory) {
+      return { hasAdapter: false };
+    }
+    const session = {
+      sourceMode: "external",
+      userId: "browser-smoke-idb-user",
+      serverId: "browser-smoke-idb-server",
+    };
+    const tracks = Array.from({ length: 120 }, (_, index) => ({
+      Id: "browser-smoke-idb-" + index,
+      Name: "Queue fixture " + index,
+    }));
+    const writer = factory();
+    await writer.clear(session);
+    await writer.save({
+      session,
+      queue: tracks,
+      currentTrackId: tracks[93].Id,
+      currentTrackIndex: 93,
+      positionSeconds: 37,
+    });
+    const readerAfterRefresh = factory();
+    const restored = await readerAfterRefresh.load(session);
+    await readerAfterRefresh.clear(session);
+    return {
+      hasAdapter: true,
+      restoredCount: restored?.queue?.length || 0,
+      currentTrackId: restored?.currentTrackId || "",
+      positionSeconds: restored?.positionSeconds || 0,
+    };
+  })()`;
+}
+
 function createLyricProgressSmokeScript() {
   return `(() => {
     const hooks = window.EmbyMusicBrowserSmoke;
@@ -616,6 +652,7 @@ async function runBrowserCheck(cdp, check) {
           lyricProgress: ${createLyricProgressSmokeScript()},
           immersiveVisualizer: ${createImmersiveVisualizerSmokeScript()},
           externalSourceReentry: await ${createExternalSourceReentrySmokeScript()},
+          indexedDbQueue: await ${createIndexedDbQueuePersistenceSmokeScript()},
           searchAbort: ${createSearchAbortSmokeScript()},
         };
       })()`,
@@ -674,6 +711,7 @@ function checkPageState(check, page) {
   const immersiveVisualizer = page.immersiveVisualizer || {};
   const externalSourceReentry = page.externalSourceReentry || {};
   const searchAbort = page.searchAbort || {};
+  const indexedDbQueue = page.indexedDbQueue || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
   const isNonDecreasing = (values) => Array.isArray(values)
@@ -738,6 +776,10 @@ function checkPageState(check, page) {
   assert(searchAbort.hasHook, `${label} missing browser-smoke search abort hook`);
   assert(!searchAbort.error, `${label} search abort smoke failed: ${searchAbort.error || "-"}`);
   assert(searchAbort.abortedImmediately === true, `${label} search should abort stale in-flight requests immediately: ${JSON.stringify(searchAbort)}`);
+  assert(indexedDbQueue.hasAdapter === true, `${label} IndexedDB queue adapter should load: ${JSON.stringify(indexedDbQueue)}`);
+  assert(indexedDbQueue.restoredCount === 120, `${label} IndexedDB queue should survive adapter recreation with more than the local fallback limit: ${JSON.stringify(indexedDbQueue)}`);
+  assert(indexedDbQueue.currentTrackId === "browser-smoke-idb-93", `${label} IndexedDB queue should restore current track identity: ${JSON.stringify(indexedDbQueue)}`);
+  assert(indexedDbQueue.positionSeconds === 37, `${label} IndexedDB queue should restore playback position: ${JSON.stringify(indexedDbQueue)}`);
   assert(searchAbort.timerScheduled === true, `${label} search abort smoke should still schedule the next debounced search: ${JSON.stringify(searchAbort)}`);
   assert(immersiveVisualizer.hasHook, `${label} missing immersive visualizer smoke hook`);
   assert(!immersiveVisualizer.error, `${label} immersive visualizer smoke failed: ${immersiveVisualizer.error || "-"}`);
