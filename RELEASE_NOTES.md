@@ -1,4 +1,4 @@
-## 未发布（Unreleased · 0.94.x）
+## 0.94.0
 
 - F7：睡眠定时新增 30 / 60 / 90 秒淡出选项，通过独立 GainNode 线性衰减后暂停；WebAudio 不可用时保留到期暂停。
 - F6：新增默认关闭的 ReplayGain；解析 Emby 音频流增益并通过独立 WebAudio GainNode 应用，初始化失败时保持原始音量语义。
