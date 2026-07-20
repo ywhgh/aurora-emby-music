@@ -256,8 +256,8 @@ function checkCss() {
   assert(/background:\s*transparent;/.test(lyricBaseRule), "Inactive lyric rows should stay background-transparent");
   assert(/border-radius:\s*0;/.test(lyricBaseRule), "Lyric rows should not use rounded rectangle backgrounds");
   assert(
-    /background\s+0\.35s cubic-bezier\(0\.25, 1, 0\.5, 1\),\s*opacity\s+0\.35s ease;/.test(lyricBaseRule),
-    "Lyric row fog transitions should use the shared smooth easing"
+    /background\s+120ms ease,\s*color\s+120ms ease,\s*opacity\s+120ms ease,\s*transform\s+120ms ease;/.test(lyricBaseRule),
+    "Lyric row transitions should use the requested 120ms fade timing"
   );
   assert(css.includes(".lyric-line:hover,\n.lyric-line:focus-visible"), "Lyric hover fog should apply to every lyric row");
   assert(!css.includes(".lyric-line[role=\"button\"]:hover,\n.lyric-line[role=\"button\"]:focus-visible"), "Lyric hover fog should not be limited to seekable rows");
@@ -281,6 +281,8 @@ function checkCss() {
   assert(css.includes(".top-lyric-current"), "Topbar lyric text should have a dedicated translated/current line style");
   assert(css.includes(".top-lyric-focus[hidden]"), "Hidden topbar lyrics should not leave an invisible overlay");
   assert(css.includes(".top-lyric-char"), "Topbar lyric shard effect should split lyric text into character spans");
+  assert(css.includes("background 120ms ease") && css.includes("opacity 120ms ease"), "Lyric line changes should use the requested 120ms fade transition");
+  assert(css.includes(".lyric-role-original .word::after") && css.includes(".lyric-role-translated .word::after"), "Karaoke word highlights should expose primary and secondary color roles");
   assert(/\.top-lyric-char\s*\{[\s\S]*?opacity:\s*0\.6;/.test(css), "Topbar lyric characters should start in the unplayed opacity state");
   assert(css.includes(".top-lyric-char.is-sharded"), "Topbar lyric shard effect should hide triggered characters");
   assert(css.includes(".top-lyric-shard-canvas"), "Topbar lyric shard effect should render temporary canvases");
@@ -332,6 +334,8 @@ function checkLyrics() {
   assert(Array.isArray(enhancedLine?.wordTimeline), "Enhanced LRC should expose wordTimeline");
   assert(enhancedLine.wordTimeline.length === 3, `Enhanced LRC should expose 3 timed words, got ${enhancedLine.wordTimeline?.length || 0}`);
   assert(enhancedLine.wordTimeline[1]?.time === 0.6, `Enhanced LRC second word time expected 0.6, got ${enhancedLine.wordTimeline[1]?.time}`);
+  const verbatimLine = parseLyrics("[00:10.00]<0.0>逐<0.2>字<0.4>高<0.6>亮").lines[0];
+  assert(verbatimLine.wordTimeline?.length === 4 && verbatimLine.wordTimeline[3]?.time === 10.6, "Verbatim <0.0> character timing should reach the karaoke renderer");
   const relativeEnhancedLine = parseLyrics("[01:20.00]<0.00>后<0.50>半<1.00>段").lines[0];
   assert(relativeEnhancedLine.wordTimeline?.[0]?.time === 80, `Line-relative enhanced LRC first word time expected 80, got ${relativeEnhancedLine.wordTimeline?.[0]?.time}`);
   assert(relativeEnhancedLine.wordTimeline?.[2]?.time === 81, `Line-relative enhanced LRC third word time expected 81, got ${relativeEnhancedLine.wordTimeline?.[2]?.time}`);

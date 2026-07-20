@@ -10181,6 +10181,7 @@ function appendLyricLineContent(container, line, options = {}) {
 
 function appendLyricWordSpans(container, line, text, options = {}) {
   const group = createLyricWordGroup(line, text, options);
+  container.classList.add(`lyric-role-${group.role}`);
   appendLyricWordParts(container, group.parts, group);
   return group;
 }

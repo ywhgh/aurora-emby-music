@@ -169,6 +169,24 @@
 - `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
 - `git diff --check`
 
+### M7 · 歌词淡入淡出与卡拉 OK 高亮（F2）
+
+### 版本说明
+同步歌词行切换统一为 120ms 淡入淡出，双语主行/次行使用分级逐字高亮；Enhanced LRC 的 `<0.0>字` 相对时间继续进入现有 RAF 卡拉 OK 渲染链。
+
+### 更新内容
+- 普通歌词与沉浸歌词的背景、颜色、透明度和位移切换统一为 120ms。
+- 渲染时给 single/original/translated word group 标注角色，原文高亮较柔和，主译文/单行使用完整强调色。
+- 保留 `clip-path` + RAF 的逐字进度热路径，不引入布局宽度逐帧写入。
+- smoke 新增 `<0.0>逐<0.2>字...` verbatim 时间解析、角色颜色和 120ms 过渡断言。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.230
 
 ### 版本说明
