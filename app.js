@@ -61,6 +61,7 @@ const {
 } = window.EmbyMusicDomHelpers;
 const {
   bridge: bridgeOps,
+  coverColor: coverColorOps,
   library: libraryOps,
   localData: localDataOps,
   player: playerOps,
@@ -392,6 +393,7 @@ const EXTERNAL_SOURCE_VIDEO_QUALITY_OPTIONS = [
 ];
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
 const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playback-display";
+const COVER_COLOR_ENABLED_KEY = "emby-music-web/cover-color-enabled";
 const PLAYBACK_DISPLAY_DEFAULTS = {
   volumeLeveling: false,
   backgroundMix: false,
@@ -664,6 +666,7 @@ const settingsExportDataButton = document.querySelector("#settingsExportDataButt
 const settingsImportDataButton = document.querySelector("#settingsImportDataButton");
 const settingsImportDataInput = document.querySelector("#settingsImportDataInput");
 const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagnosticsButton");
+const settingsCoverColorToggle = document.querySelector("#settingsCoverColorToggle");
 const lyricsSourceBridgeApiUrlInput = document.querySelector("#lyricsSourceBridgeApiUrl");
 const settingsSaveLyricsSourceBridgeButton = document.querySelector("#settingsSaveLyricsSourceBridgeButton");
 const settingsLyricsSourceBridgeStatus = document.querySelector("#settingsLyricsSourceBridgeStatus");
@@ -1101,6 +1104,7 @@ const store = storeOps.createStore({
   audioQualityProfileId: initialAudioQualityProfile.id,
   playbackPreloadEnabled: loadPlaybackPreloadEnabled(),
   playbackLosslessPrecacheEnabled: loadPlaybackLosslessPrecacheEnabled(),
+  coverColorEnabled: loadCoverColorEnabled(),
   trackDensity: loadTrackDensity(),
   playerMetaTarget: loadPlayerMetaTarget(),
   volume: loadVolume(),
@@ -1424,6 +1428,7 @@ function init() {
   settingsImportDataButton?.addEventListener("click", () => settingsImportDataInput?.click());
   settingsImportDataInput?.addEventListener("change", importLocalData);
   settingsCopyDiagnosticsButton.addEventListener("click", copyDiagnostics);
+  settingsCoverColorToggle?.addEventListener("change", handleCoverColorToggleChange);
   settingsSaveLyricsSourceBridgeButton?.addEventListener("click", saveLyricsSourceBridgeApiUrlFromSettings);
   lyricsSourceBridgeApiUrlInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -9311,6 +9316,9 @@ function renderSettings() {
   }
   if (settingsPlaybackPreload) {
     settingsPlaybackPreload.textContent = getSettingsPlaybackPreloadLabel();
+  }
+  if (settingsCoverColorToggle) {
+    settingsCoverColorToggle.checked = state.coverColorEnabled;
   }
   settingsPlaybackError.textContent = getSettingsPlaybackErrorLabel();
   settingsPlaybackError.classList.toggle("settings-error-value", settingsPlaybackError.textContent !== "-");
@@ -21422,6 +21430,7 @@ function resetPlayerPreferences() {
   state.transcodeBitrate = DEFAULT_AUDIO_QUALITY_PROFILE.bitrate || normalizeTranscodeBitrate(TRANSCODE_BITRATES[0]?.value);
   state.playbackPreloadEnabled = true;
   state.playbackLosslessPrecacheEnabled = false;
+  state.coverColorEnabled = true;
   state.trackDensity = "comfortable";
   state.playerMetaTarget = "immersive";
   state.volume = 1;
@@ -21435,6 +21444,7 @@ function resetPlayerPreferences() {
   storage.clearAudioQualityProfile();
   storage.clearPlaybackPreloadEnabled?.();
   storage.clearPlaybackLosslessPrecacheEnabled?.();
+  localStorage.removeItem(COVER_COLOR_ENABLED_KEY);
   storage.clearTrackDensity();
   storage.clearPlayerMetaTarget();
   storage.clearTranscodeBitrate();
@@ -21447,6 +21457,7 @@ function resetPlayerPreferences() {
   updateVolumeButton();
   applyFilters();
   renderLibrary();
+  applyTrackAccent(state.currentTrack);
   renderSettings();
   setLibraryStatus("播放器偏好已重置。");
 }
@@ -21475,6 +21486,7 @@ function getExportPreferences() {
     playbackDisplaySettings: normalizePlaybackDisplaySettings(state.playbackDisplaySettings),
     playbackPreloadEnabled: Boolean(state.playbackPreloadEnabled),
     playbackLosslessPrecacheEnabled: Boolean(state.playbackLosslessPrecacheEnabled),
+    coverColorEnabled: Boolean(state.coverColorEnabled),
   };
 }
 
@@ -21527,6 +21539,7 @@ function applyImportedLocalData(data) {
   state.playbackDisplaySettings = normalizePlaybackDisplaySettings(preferences.playbackDisplaySettings);
   state.playbackPreloadEnabled = preferences.playbackPreloadEnabled !== false;
   state.playbackLosslessPrecacheEnabled = preferences.playbackLosslessPrecacheEnabled === true;
+  state.coverColorEnabled = preferences.coverColorEnabled !== false;
   storage.savePlayMode(state.playMode);
   storage.saveSortKey(state.sortKey);
   storage.saveSortOrder(state.sortOrder);
@@ -21535,6 +21548,7 @@ function applyImportedLocalData(data) {
   storage.saveVolume(state.volume);
   storage.savePlaybackPreloadEnabled?.(state.playbackPreloadEnabled);
   storage.savePlaybackLosslessPrecacheEnabled?.(state.playbackLosslessPrecacheEnabled);
+  saveCoverColorEnabled();
   saveLyricSettings();
   savePlaybackDisplaySettings(state.playbackDisplaySettings);
   saveImportedFavorites();
@@ -21549,6 +21563,7 @@ function applyImportedLocalData(data) {
   renderQueue();
   renderRecent();
   renderHomeSections();
+  applyTrackAccent(state.currentTrack);
   renderSettings();
   renderPlayer();
 }
@@ -23023,127 +23038,46 @@ function resetPlayerMeta() {
 }
 
 function applyTrackAccent(track) {
-  const accent = DEFAULT_TRACK_ACCENT;
+  const requestId = state.albumAmbientRequestId + 1;
+  state.albumAmbientRequestId = requestId;
+  setTrackAccent(DEFAULT_TRACK_ACCENT, DEFAULT_TRACK_ACCENT.rgb, requestId);
+  if (!state.coverColorEnabled || !track) return;
+  const imageUrl = getTrackImageUrl(track, 120);
+  if (!imageUrl) return;
+  coverColorOps.sampleCoverColors(imageUrl)
+    .then((colors) => {
+      const accent = coverColorOps.createCoverAccent(colors?.primary, colors?.secondary);
+      if (accent) setTrackAccent(accent, accent.secondaryRgb, requestId);
+    })
+    .catch(() => {});
+}
+
+function setTrackAccent(accent, secondaryRgb = accent.rgb, requestId = state.albumAmbientRequestId) {
+  if (requestId !== state.albumAmbientRequestId || !accent?.rgb) return;
   state.currentAccent = accent;
   document.documentElement.style.setProperty("--now-accent", accent.color);
   document.documentElement.style.setProperty("--now-accent-deep", accent.deep);
   document.documentElement.style.setProperty("--now-accent-rgb", accent.rgb);
   document.documentElement.style.setProperty("--accent-color", accent.color);
   document.documentElement.style.setProperty("--accent-color-rgb", accent.rgb);
-  updateAlbumAmbientColor(track, accent);
+  document.documentElement.style.setProperty("--album-ambient-rgb", accent.rgb);
+  document.documentElement.style.setProperty("--album-ambient-rgb-alt", secondaryRgb || accent.rgb);
   syncCurrentAccentStatus();
 }
 
-function updateAlbumAmbientColor(track, accent = state.currentAccent || DEFAULT_TRACK_ACCENT) {
-  const requestId = state.albumAmbientRequestId + 1;
-  state.albumAmbientRequestId = requestId;
-
-  if (!track) {
-    setAlbumAmbientColor(accent.rgb, accent.rgb, requestId);
-    return;
-  }
-
-  const imageUrl = getTrackImageUrl(track, 120);
-  if (!imageUrl) {
-    setAlbumAmbientColor(accent.rgb, accent.rgb, requestId);
-    return;
-  }
-
-  extractImageAverageRgb(imageUrl)
-    .then((colors) => {
-      setAlbumAmbientColor(colors?.primary || accent.rgb, colors?.secondary || accent.rgb, requestId);
-    })
-    .catch(() => {
-      setAlbumAmbientColor(accent.rgb, accent.rgb, requestId);
-    });
+function loadCoverColorEnabled() {
+  return localStorage.getItem(COVER_COLOR_ENABLED_KEY) !== "false";
 }
 
-function setAlbumAmbientColor(primaryRgb, secondaryRgb = primaryRgb, requestId) {
-  if (requestId !== state.albumAmbientRequestId || !primaryRgb) {
-    return;
-  }
-
-  document.documentElement.style.setProperty("--album-ambient-rgb", primaryRgb);
-  document.documentElement.style.setProperty("--album-ambient-rgb-alt", secondaryRgb || primaryRgb);
+function saveCoverColorEnabled() {
+  localStorage.setItem(COVER_COLOR_ENABLED_KEY, String(Boolean(state.coverColorEnabled)));
 }
 
-function extractImageAverageRgb(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.decoding = "async";
-
-    image.addEventListener("load", () => {
-      try {
-        const sampleSize = 28;
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-
-        if (!context) {
-          resolve("");
-          return;
-        }
-
-        canvas.width = sampleSize;
-        canvas.height = sampleSize;
-        context.drawImage(image, 0, 0, sampleSize, sampleSize);
-
-        const { data } = context.getImageData(0, 0, sampleSize, sampleSize);
-        const buckets = new Map();
-
-        for (let index = 0; index < data.length; index += 4) {
-          const alpha = data[index + 3];
-          if (alpha < 180) {
-            continue;
-          }
-
-          const r = data[index];
-          const g = data[index + 1];
-          const b = data[index + 2];
-          const lightness = (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
-
-          if (lightness < 26 || lightness > 238) {
-            continue;
-          }
-
-          const key = [
-            Math.round(r / 36),
-            Math.round(g / 36),
-            Math.round(b / 36),
-          ].join("-");
-          const bucket = buckets.get(key) || { red: 0, green: 0, blue: 0, count: 0 };
-          bucket.red += r;
-          bucket.green += g;
-          bucket.blue += b;
-          bucket.count += 1;
-          buckets.set(key, bucket);
-        }
-
-        const colors = [...buckets.values()]
-          .filter((bucket) => bucket.count > 1)
-          .map((bucket) => ({
-            rgb: `${Math.round(bucket.red / bucket.count)}, ${Math.round(bucket.green / bucket.count)}, ${Math.round(bucket.blue / bucket.count)}`,
-            count: bucket.count,
-          }))
-          .sort((first, second) => second.count - first.count);
-
-        if (!colors.length) {
-          resolve(null);
-          return;
-        }
-
-        resolve({
-          primary: colors[0].rgb,
-          secondary: colors[1]?.rgb || colors[0].rgb,
-        });
-      } catch (error) {
-        reject(error);
-      }
-    }, { once: true });
-
-    image.addEventListener("error", reject, { once: true });
-    image.src = src;
-  });
+function handleCoverColorToggleChange() {
+  state.coverColorEnabled = settingsCoverColorToggle?.checked !== false;
+  saveCoverColorEnabled();
+  applyTrackAccent(state.currentTrack);
+  renderSettings();
 }
 
 function getTrackAccent(track) {

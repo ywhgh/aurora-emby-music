@@ -1323,6 +1323,27 @@ function checkStorageQueuePersistence() {
   assert(browserSmoke.includes("createIndexedDbQueuePersistenceSmokeScript"), "Browser smoke should verify IndexedDB queue persistence across adapter recreation");
 }
 
+async function checkCoverColorModule() {
+  const source = read("src/cover-color.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const coverColor = await import(moduleUrl);
+  const accent = coverColor.createCoverAccent("120, 80, 40", "30, 60, 90");
+  assert(accent?.color === "#785028" && accent?.rgb === "120, 80, 40", "Cover color should create stable CSS colors");
+  class FixtureImage {
+    addEventListener(type, callback) { if (type === "load") this.onload = callback; }
+    set src(value) { this.value = value; this.onload?.(); }
+  }
+  const pixels = new Uint8ClampedArray([120, 80, 40, 255, 122, 82, 42, 255]);
+  let fixtureImage;
+  const colors = await coverColor.sampleCoverColors("fixture-cover", {
+    ImageCtor: class extends FixtureImage { constructor() { super(); fixtureImage = this; } },
+    sampleSize: 1,
+    documentRef: { createElement: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: pixels }) }) }) },
+  });
+  assert(fixtureImage?.crossOrigin === "anonymous", "Cover images should opt into anonymous CORS before loading");
+  assert(colors?.primary === "121, 81, 41", "Cover color should sample visible mid-tone pixels");
+}
+
 async function checkLocalDataModule() {
   const source = read("src/local-data.js");
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -1368,6 +1389,7 @@ function checkAppFunctionReferences() {
   const main = read("main.js");
   const index = read("index.html");
   const bridgeModule = read("src/bridge.js");
+  const coverColorModule = read("src/cover-color.js");
   const libraryModule = read("src/library.js");
   const localDataModule = read("src/local-data.js");
   const playerModule = read("src/player.js");
@@ -1376,6 +1398,7 @@ function checkAppFunctionReferences() {
   const settingsModule = read("src/settings.js");
   const storeModule = read("src/store.js");
   assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
+  assert(main.includes('import * as coverColor from "./src/cover-color.js"'), "main.js should wire the cover color ESM module");
   assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
   assert(main.includes('import * as store from "./src/store.js"'), "main.js should wire the store ESM module");
   assert(main.includes('import * as localData from "./src/local-data.js"'), "main.js should wire the local data ESM module");
@@ -1397,6 +1420,7 @@ function checkAppFunctionReferences() {
   assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
   assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
   assert(app.includes("localDataOps.createExportPayload") && app.includes("localDataOps.validateImportPayload"), "settings should use the local data safety module");
+  assert(app.includes("coverColorOps.sampleCoverColors") && coverColorModule.includes('image.crossOrigin = "anonymous"'), "Current tracks should use the isolated CORS-safe cover sampler");
   assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
@@ -1556,8 +1580,8 @@ function checkAppFunctionReferences() {
   assert(app.includes("home-track-equalizer"), "Home track rows should render an equalizer indicator");
   assert(app.includes("home-track-favorite-button"), "Home track rows should expose the refined favorite action");
   assert(app.includes("createActionIcon(\"heart\")"), "Favorite buttons should render a line SVG heart");
-  assert(app.includes("function updateAlbumAmbientColor"), "Playback should update album-aware ambient colors");
-  assert(app.includes("function extractImageAverageRgb"), "Album art colors should be sampled with canvas");
+  assert(app.includes("function setTrackAccent"), "Playback should update album-aware ambient colors");
+  assert(coverColorModule.includes("context.getImageData"), "Album art colors should be sampled with canvas");
   assert(app.includes("--album-ambient-rgb-alt"), "Album ambient system should expose two sampled colors");
   assert(app.includes("function getTrackQualityTier"), "Track quality badges should use tiered classification");
   assert(app.includes("return \"master\""), "Track quality badges should classify master-quality audio");
@@ -1748,6 +1772,7 @@ async function main() {
   checkLyrics();
   await checkExternalSourceLyrics();
   checkStorageQueuePersistence();
+  await checkCoverColorModule();
   await checkLocalDataModule();
   await checkStoreModule();
   checkAppFunctionReferences();

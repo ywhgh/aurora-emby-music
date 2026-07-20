@@ -1,4 +1,5 @@
 import * as bridge from "./src/bridge.js";
+import * as coverColor from "./src/cover-color.js";
 import * as library from "./src/library.js";
 import * as localData from "./src/local-data.js";
 import * as player from "./src/player.js";
@@ -10,6 +11,7 @@ import * as store from "./src/store.js";
 window.EmbyMusicModules = Object.freeze({
   ...(window.EmbyMusicModules || {}),
   bridge,
+  coverColor,
   library,
   localData,
   player,

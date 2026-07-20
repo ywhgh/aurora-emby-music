@@ -6,6 +6,7 @@ const APP_SHELL = [
   "./index.html",
   versioned("./styles.css"),
   versioned("./src/bridge.js"),
+  versioned("./src/cover-color.js"),
   versioned("./src/config.js"),
   versioned("./src/dom-helpers.js"),
   versioned("./src/redact.js"),
