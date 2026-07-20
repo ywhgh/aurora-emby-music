@@ -14,6 +14,22 @@
 
 ---
 
+## 0.93.230
+
+### 版本说明
+本版发布 M1 第一刀的共享敏感字段脱敏底座与回归用例。新增 URL、Emby Server URL、token 和自由文本脱敏 helper，并在 smoke-check 中验证沙箱代码不引入 process、globalThis 或原生 require。
+
+### 更新内容
+- 新增 `src/redact.js`，提供 `redactUrl`、`redactServer`、`redactToken` 和 `redactText`。
+- URL 隐藏凭据、域名细节、端口和路径；IPv4 主机按 `192.168.*.*:****` 形式脱敏。
+- token 仅保留最后四位，Bearer、X-Emby-Token 和敏感字段赋值统一提供文本兜底清理。
+- `scripts/smoke-check.js` 新增 helper 单元用例及 vm 沙箱标识检查。
+
+### 验证
+- `npm run check`
+- `BROWSER_SMOKE_RUN=1 BROWSER_SMOKE_TIMEOUT_MS=90000 npm run smoke:browser`
+- `git diff --check`
+
 ## 0.93.229
 
 ### 版本说明
