@@ -95,8 +95,12 @@ function checkVersions() {
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
-  assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: "http://127.0.0.1:5174"'), "Default source bridge URL should point to the built-in local bridge");
-  assert(config.includes("DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL"), "Emby lyrics should support a dedicated source bridge URL");
+  assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: ""'), "Default source bridge URL should stay empty");
+  assert(config.includes('DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: ""'), "Default Emby lyrics bridge URL should stay empty");
+  assert(config.includes('LYRICS_SOURCE_BRIDGE_API_KEY: "emby-music-web/lyrics-source-bridge-api-url"'), "Emby lyrics bridge should use a dedicated localStorage key");
+  assert(!/DEFAULT_(?:EXTERNAL_SOURCE|EMBY_LYRICS_SOURCE_BRIDGE)_API_URL:\s*"https?:\/\//.test(config), "Bridge URL defaults must not contain a concrete host");
+  assert(/<input id="lyricsSourceBridgeApiUrl" type="password"[^>]*>/.test(index), "Emby lyrics bridge settings should mask the persisted host");
+  assert(index.includes('id="settingsSaveLyricsSourceBridgeButton"'), "Emby lyrics bridge settings should expose an explicit save action");
   assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
   assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
   assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
@@ -1332,6 +1336,12 @@ function checkAppFunctionReferences() {
   assert(/function retryExternalPlaybackWithFreshMedia\(track = state\.currentTrack, reason = ""\) \{[\s\S]*?state\.externalResolveRetryTrackId === track\.Id[\s\S]*?forceExternalResolve: true/.test(app), "External source playback errors should retry once with a fresh bridge media URL");
   assert(/function handleAudioElementError\(\) \{[\s\S]*?retryExternalPlaybackWithFreshMedia\(state\.currentTrack\)/.test(app), "Audio element errors should auto-refresh external source media URLs");
   assert(/function retryWithOppositePlaybackMode\(track\) \{[\s\S]*?isExternalSourceTrack\(track\)[\s\S]*?forceExternalResolve: true/.test(app), "External source manual reparse should bypass stale cached media URLs");
+  assert(/function normalizeLyricsSourceBridgeApiUrl\(value\) \{[\s\S]*?new URL\(rawApiUrl\);[\s\S]*?\["http:", "https:"\]\.includes\(url\.protocol\)[\s\S]*?!url\.hostname[\s\S]*?return "";/.test(app), "Emby lyrics bridge should reject malformed or non-HTTP service URLs");
+  assert(/function loadLyricsSourceBridgeApiUrl\(\) \{\s*return normalizeLyricsSourceBridgeApiUrl\(localStorage\.getItem\(LYRICS_SOURCE_BRIDGE_API_KEY\) \|\| ""\);\s*\}/.test(app), "Emby lyrics bridge should load only from its dedicated localStorage key");
+  assert(/function saveLyricsSourceBridgeApiUrl\(apiUrl\) \{[\s\S]*?localStorage\.setItem\(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl\);[\s\S]*?localStorage\.removeItem\(LYRICS_SOURCE_BRIDGE_API_KEY\);[\s\S]*?\}/.test(app), "Emby lyrics bridge should save and clear only its dedicated localStorage key");
+  assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{\s*return loadLyricsSourceBridgeApiUrl\(\);\s*\}/.test(app), "Emby lyrics bridge should not fall back to a concrete host");
+  assert(!app.includes("getDefaultRemoteSourceBridgeApiUrl"), "Emby lyrics bridge should not retain the hard-coded remote fallback");
+  assert(!app.includes("getSameHostSourceBridgeApiUrl"), "Emby lyrics bridge should not infer a bridge from the current page host");
   assert(app.includes("function getExternalTrackApiUrl"), "External source playback should centralize restored track bridge URL resolution");
   assert(/function getExternalTrackApiUrl\(track, session = state\.session\) \{[\s\S]*?const sessionApiUrl = getSessionExternalSourceApiUrl\(session\)[\s\S]*?loadExternalSourceApiUrl\(\);[\s\S]*?if \(sessionApiUrl\) \{[\s\S]*?return sessionApiUrl;[\s\S]*?const trackApiUrl = track\?\.ExternalSource\?\.apiUrl;/.test(app), "Restored external tracks should prefer the current bridge session URL over stale per-track URLs");
   assert(/fetchLyricsText\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");

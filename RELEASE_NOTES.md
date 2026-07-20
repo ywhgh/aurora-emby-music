@@ -11,6 +11,24 @@
 （本段由每个 PR 自动收尾，下方仅列出已经完成的动作；尚未完成的不要写在这里，留到 PR 关闭时再写。）
 
 <!-- 进度占位：每个 PR 完成后在此追加一段，按 §1 / §2.x / 验证 的标准格式 -->
+### S7 · 清理私有歌词桥默认地址
+
+### 版本说明
+移除 `src/config.js` 中的具体歌词桥与外部音源桥地址默认值，改为由当前浏览器的专用 localStorage 配置按需读取。未配置时保持空值，不再根据当前网页 host 或其他音源地址推断歌词桥。
+
+### 更新内容
+- 清空 `DEFAULT_EXTERNAL_SOURCE_API_URL` 与 `DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL` 的具体地址。
+- 新增 `emby-music-web/lyrics-source-bridge-api-url` 专用配置键。
+- 设置页增加 password 类型的歌词桥地址输入、保存、清除和状态显示。
+- 对歌词桥地址执行 `http` / `https` 协议与 hostname 校验。
+- smoke 增加专用键读写、清除、输入控件和具体 host 回退移除断言。
+
+### 验证
+- `npm run check`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `git diff --check`
 
 ---
 

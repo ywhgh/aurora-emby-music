@@ -2100,6 +2100,24 @@
               </article>
             </section>
 
+            <section class="settings-section" aria-labelledby="lyricsSourceBridgeSettingsTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="kicker">歌词源</p>
+                  <h3 id="lyricsSourceBridgeSettingsTitle">Emby 歌词源桥</h3>
+                </div>
+                <span id="settingsLyricsSourceBridgeStatus">未配置</span>
+              </div>
+              <label class="source-bridge-field">
+                <span class="source-bridge-label">服务地址</span>
+                <input id="lyricsSourceBridgeApiUrl" type="password" inputmode="url" autocomplete="off" placeholder="请输入 http(s) 服务地址">
+                <small>仅保存在当前浏览器；留空会关闭 Emby 联网歌词匹配。</small>
+              </label>
+              <div class="settings-actions">
+                <button id="settingsSaveLyricsSourceBridgeButton" class="text-button" type="button">保存歌词源</button>
+              </div>
+            </section>
+
             <section class="settings-section">
               <div class="section-heading">
                 <div>

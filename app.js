@@ -4,13 +4,13 @@ const {
   APP_VERSION,
   AUDIO_QUALITY_PROFILE_KEY,
   AUDIO_QUALITY_PROFILES,
-  DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL = "",
   DEFAULT_EXTERNAL_SOURCE_API_URL = "",
   DEFAULT_SERVER_URL = "",
   DEVICE_KEY,
   EXTERNAL_SOURCE_API_KEY = "emby-music-web/external-source-api-url",
   FILTER_STATE_KEY,
   LIBRARY_VIEW_KEY,
+  LYRICS_SOURCE_BRIDGE_API_KEY = "emby-music-web/lyrics-source-bridge-api-url",
   LOCK_SERVER_URL = false,
   MAX_PERSISTED_QUEUE_TRACKS,
   MAX_RECENT_TRACKS,
@@ -639,6 +639,9 @@ const settingsResetPreferencesButton = document.querySelector("#settingsResetPre
 const settingsClearCacheButton = document.querySelector("#settingsClearCacheButton");
 const settingsClearPlaybackCacheButton = document.querySelector("#settingsClearPlaybackCacheButton");
 const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagnosticsButton");
+const lyricsSourceBridgeApiUrlInput = document.querySelector("#lyricsSourceBridgeApiUrl");
+const settingsSaveLyricsSourceBridgeButton = document.querySelector("#settingsSaveLyricsSourceBridgeButton");
+const settingsLyricsSourceBridgeStatus = document.querySelector("#settingsLyricsSourceBridgeStatus");
 const settingsDiagnostics = document.querySelector("#settingsDiagnostics");
 const appNotice = document.querySelector("#appNotice");
 const appNoticeText = document.querySelector("#appNoticeText");
@@ -1388,6 +1391,13 @@ function init() {
   settingsClearCacheButton.addEventListener("click", clearAppCache);
   settingsClearPlaybackCacheButton?.addEventListener("click", clearPlaybackCache);
   settingsCopyDiagnosticsButton.addEventListener("click", copyDiagnostics);
+  settingsSaveLyricsSourceBridgeButton?.addEventListener("click", saveLyricsSourceBridgeApiUrlFromSettings);
+  lyricsSourceBridgeApiUrlInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveLyricsSourceBridgeApiUrlFromSettings();
+    }
+  });
   bindSourceBridgeControls();
   playerMetaTargetSelect.addEventListener("change", handlePlayerMetaTargetChange);
   playbackStreamSelect.addEventListener("change", handlePlaybackStreamPolicyChange);
@@ -9269,6 +9279,12 @@ function renderSettings() {
   settingsPlaybackError.classList.toggle("settings-error-value", settingsPlaybackError.textContent !== "-");
   renderPlaybackRecoveryPanel();
   settingsRecent.textContent = `${state.recentTracks.length} 首`;
+  if (lyricsSourceBridgeApiUrlInput && document.activeElement !== lyricsSourceBridgeApiUrlInput) {
+    lyricsSourceBridgeApiUrlInput.value = loadLyricsSourceBridgeApiUrl();
+  }
+  if (settingsLyricsSourceBridgeStatus) {
+    settingsLyricsSourceBridgeStatus.textContent = loadLyricsSourceBridgeApiUrl() ? "已配置" : "未配置";
+  }
   settingsLyrics.textContent = state.lyricLines.length
     ? `${state.lyricLines.length} 行${state.isLyricSynced ? " / 已同步" : ""}`
     : "未读取";
@@ -10554,55 +10570,14 @@ function setLyricsSourceDiagnostics(details) {
 
 function getLyricsSourceBridgeApiUrl() {
   if (!isExternalSourceSession()) {
-    return getConfiguredEmbyLyricsSourceBridgeApiUrl()
-      || getDefaultRemoteSourceBridgeApiUrl()
-      || getSameHostSourceBridgeApiUrl()
-      || normalizeExternalSourceApiUrl(DEFAULT_EXTERNAL_SOURCE_API_URL || "");
+    return getConfiguredEmbyLyricsSourceBridgeApiUrl();
   }
 
   return getConfiguredSourceBridgeApiUrl();
 }
 
 function getConfiguredEmbyLyricsSourceBridgeApiUrl() {
-  return [
-    getSessionExternalSourceApiUrl(state.session),
-    normalizeExternalSourceApiUrl(state.externalSourceApiUrl || ""),
-    loadExternalSourceApiUrl(),
-  ].find((apiUrl) => apiUrl && !isDefaultLocalSourceBridgeApiUrl(apiUrl)) || "";
-}
-
-function isDefaultLocalSourceBridgeApiUrl(value) {
-  const defaultUrl = normalizeExternalSourceApiUrl(DEFAULT_EXTERNAL_SOURCE_API_URL || "");
-  const normalized = normalizeExternalSourceApiUrl(value || "");
-
-  if (!normalized) {
-    return false;
-  }
-
-  if (defaultUrl && normalized === defaultUrl) {
-    return true;
-  }
-
-  try {
-    const parsed = new URL(normalized);
-    return ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname) && parsed.port === "5174";
-  } catch {
-    return false;
-  }
-}
-
-function getDefaultRemoteSourceBridgeApiUrl() {
-  const apiUrl = normalizeExternalSourceApiUrl(DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL || "");
-  return apiUrl && !isDefaultLocalSourceBridgeApiUrl(apiUrl) ? apiUrl : "";
-}
-
-function getSameHostSourceBridgeApiUrl() {
-  if (location.protocol !== "http:" && location.protocol !== "https:") {
-    return "";
-  }
-
-  const port = location.port && location.port !== "5173" ? location.port : "5174";
-  return normalizeExternalSourceApiUrl(`${location.protocol}//${location.hostname}:${port}`);
+  return loadLyricsSourceBridgeApiUrl();
 }
 
 function getConfiguredSourceBridgeApiUrl() {
@@ -24697,6 +24672,58 @@ function loadSourceMode() {
 
 function saveSourceMode(mode) {
   localStorage.setItem(SOURCE_MODE_KEY, normalizeSourceMode(mode));
+}
+
+function normalizeLyricsSourceBridgeApiUrl(value) {
+  const rawApiUrl = String(value || "").trim();
+
+  if (!rawApiUrl) {
+    return "";
+  }
+
+  try {
+    const url = new URL(rawApiUrl);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
+      return "";
+    }
+    return normalizeExternalSourceApiUrl(url.toString());
+  } catch {
+    return "";
+  }
+}
+
+function loadLyricsSourceBridgeApiUrl() {
+  return normalizeLyricsSourceBridgeApiUrl(localStorage.getItem(LYRICS_SOURCE_BRIDGE_API_KEY) || "");
+}
+
+function saveLyricsSourceBridgeApiUrl(apiUrl) {
+  const normalizedApiUrl = normalizeLyricsSourceBridgeApiUrl(apiUrl);
+
+  if (normalizedApiUrl) {
+    localStorage.setItem(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl);
+  } else {
+    localStorage.removeItem(LYRICS_SOURCE_BRIDGE_API_KEY);
+  }
+}
+
+function saveLyricsSourceBridgeApiUrlFromSettings() {
+  const rawApiUrl = String(lyricsSourceBridgeApiUrlInput?.value || "").trim();
+  const apiUrl = normalizeLyricsSourceBridgeApiUrl(rawApiUrl);
+
+  if (rawApiUrl && !apiUrl) {
+    showNotice("歌词源桥地址无效，请填写完整的 http:// 或 https:// 地址。", { type: "warning" });
+    lyricsSourceBridgeApiUrlInput?.focus();
+    return;
+  }
+
+  saveLyricsSourceBridgeApiUrl(apiUrl);
+  if (lyricsSourceBridgeApiUrlInput) {
+    lyricsSourceBridgeApiUrlInput.value = apiUrl;
+  }
+  if (settingsLyricsSourceBridgeStatus) {
+    settingsLyricsSourceBridgeStatus.textContent = apiUrl ? "已配置" : "未配置";
+  }
+  showNotice(apiUrl ? "歌词源桥地址已保存。" : "歌词源桥地址已清除。", { type: "success" });
 }
 
 function loadExternalSourceApiUrl() {
