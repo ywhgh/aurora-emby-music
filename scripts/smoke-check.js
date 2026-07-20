@@ -1432,6 +1432,10 @@ function checkAppFunctionReferences() {
   assert(app.includes('window.matchMedia?.("(prefers-color-scheme: dark)")'), "System theme should observe the browser dark-mode query");
   assert(app.includes('themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange)'), "System theme should react to preference changes");
   assert(index.includes('id="settingsThemeSelect"'), "Settings should expose light, dark, and system theme choices");
+  assert(app.includes("const KEYBOARD_SHORTCUTS = Object.freeze(["), "Keyboard handling and UI should share one descriptor list");
+  assert(app.includes("KEYBOARD_SHORTCUTS.find((item) => item.keys.includes(event.key))"), "Keyboard events should resolve through descriptors");
+  assert(app.includes("KEYBOARD_SHORTCUTS.forEach((shortcut)"), "Shortcut UI should render from descriptors");
+  assert(index.includes('id="shortcutCheatSheet"') && index.includes('id="shortcutCheatSheetGrid"'), "Question mark shortcut should open a modal cheat sheet");
   assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");

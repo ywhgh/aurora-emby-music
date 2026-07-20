@@ -392,6 +392,22 @@ const EXTERNAL_SOURCE_VIDEO_QUALITY_OPTIONS = [
   },
 ];
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
+const KEYBOARD_SHORTCUTS = Object.freeze([
+  { keys: [" "], display: "Space", label: "播放 / 暂停", run: () => togglePlayback() },
+  { keys: ["ArrowLeft"], display: "←", label: "快退 10 秒", run: () => seekRelative(-10) },
+  { keys: ["ArrowRight"], display: "→", label: "快进 10 秒", run: () => seekRelative(10) },
+  { keys: ["ArrowUp"], display: "↑", label: "提高音量", run: () => adjustVolume(0.05) },
+  { keys: ["ArrowDown"], display: "↓", label: "降低音量", run: () => adjustVolume(-0.05) },
+  { keys: ["m", "M"], display: "M", label: "静音", run: () => toggleMute() },
+  { keys: ["n", "N"], display: "N", label: "下一首", run: () => playNext() },
+  { keys: ["p", "P"], display: "P", label: "上一首", run: () => playPrevious() },
+  { keys: ["f", "F"], display: "F", label: "收藏当前歌曲", enabled: () => Boolean(state.currentTrack), run: () => toggleFavorite(state.currentTrack) },
+  { keys: ["l", "L"], display: "L", label: "定位当前歌曲", run: () => locateCurrentTrack() },
+  { keys: ["q", "Q"], display: "Q", label: "快捷队列 / 沉浸队列", run: () => toggleActiveQueueView() },
+  { keys: ["/"], display: "/", label: "聚焦搜索", run: () => focusSearch() },
+  { keys: ["?", "？"], display: "?", label: "打开快捷键说明", run: () => openShortcutCheatSheet() },
+  { keys: ["Escape"], display: "Esc", label: "关闭弹窗 / 清除搜索筛选", allowTyping: true, preventDefault: false, run: () => handleEscapeShortcut() },
+]);
 const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playback-display";
 const COVER_COLOR_ENABLED_KEY = "emby-music-web/cover-color-enabled";
 const THEME_PREFERENCE_KEY = "emby-music-web/theme-preference";
@@ -669,6 +685,10 @@ const settingsImportDataInput = document.querySelector("#settingsImportDataInput
 const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagnosticsButton");
 const settingsCoverColorToggle = document.querySelector("#settingsCoverColorToggle");
 const settingsThemeSelect = document.querySelector("#settingsThemeSelect");
+const settingsShortcutGrid = document.querySelector("#settingsShortcutGrid");
+const shortcutCheatSheet = document.querySelector("#shortcutCheatSheet");
+const shortcutCheatSheetGrid = document.querySelector("#shortcutCheatSheetGrid");
+const shortcutCheatSheetClose = document.querySelector("#shortcutCheatSheetClose");
 const lyricsSourceBridgeApiUrlInput = document.querySelector("#lyricsSourceBridgeApiUrl");
 const settingsSaveLyricsSourceBridgeButton = document.querySelector("#settingsSaveLyricsSourceBridgeButton");
 const settingsLyricsSourceBridgeStatus = document.querySelector("#settingsLyricsSourceBridgeStatus");
@@ -1202,6 +1222,7 @@ const store = storeOps.createStore({
   recentUndoSnapshot: null,
   isQuickQueueOpen: false,
   quickQueueReturnFocus: null,
+  shortcutSheetReturnFocus: null,
   isAddingToPlaylist: false,
   isCreatingPlaylist: false,
   isMovingPlaylistTrack: false,
@@ -1436,6 +1457,11 @@ function init() {
   settingsThemeSelect?.addEventListener("change", handleThemePreferenceChange);
   themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange);
   applyThemePreference();
+  renderKeyboardShortcuts();
+  shortcutCheatSheetClose?.addEventListener("click", closeShortcutCheatSheet);
+  shortcutCheatSheet?.addEventListener("click", (event) => {
+    if (isBackdropCloseEvent(event, shortcutCheatSheet)) closeShortcutCheatSheet();
+  });
   settingsSaveLyricsSourceBridgeButton?.addEventListener("click", saveLyricsSourceBridgeApiUrlFromSettings);
   lyricsSourceBridgeApiUrlInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -20517,134 +20543,96 @@ function handleResumePlayError(error) {
   renderSettings();
 }
 
+function renderKeyboardShortcuts() {
+  [settingsShortcutGrid, shortcutCheatSheetGrid].filter(Boolean).forEach((grid) => {
+    const fragment = document.createDocumentFragment();
+    KEYBOARD_SHORTCUTS.forEach((shortcut) => {
+      const key = document.createElement("span");
+      key.textContent = shortcut.display;
+      const label = document.createElement("strong");
+      label.textContent = shortcut.label;
+      fragment.append(key, label);
+    });
+    grid.replaceChildren(fragment);
+  });
+}
+
+function openShortcutCheatSheet() {
+  if (!shortcutCheatSheet || !shortcutCheatSheet.hidden) return;
+  state.shortcutSheetReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  shortcutCheatSheet.hidden = false;
+  shortcutCheatSheetClose?.focus();
+}
+
+function closeShortcutCheatSheet() {
+  if (!shortcutCheatSheet || shortcutCheatSheet.hidden) return;
+  shortcutCheatSheet.hidden = true;
+  if (state.shortcutSheetReturnFocus?.isConnected) state.shortcutSheetReturnFocus.focus();
+  state.shortcutSheetReturnFocus = null;
+}
+
+function handleEscapeShortcut() {
+  if (shortcutCheatSheet && !shortcutCheatSheet.hidden) {
+    closeShortcutCheatSheet();
+    return;
+  }
+  if (searchSuggestPopover && !searchSuggestPopover.hidden) {
+    closeSearchSuggestions();
+    return;
+  }
+  if (state.isQuickQueueOpen) {
+    closeQuickQueue();
+    return;
+  }
+  if (state.isImmersiveQueueOpen) {
+    closeImmersiveQueue();
+    return;
+  }
+  if (!trackActionSheet.hidden) {
+    closeTrackActionSheet();
+    return;
+  }
+  if (!accountMenu.hidden) {
+    closeAccountMenu();
+    return;
+  }
+  if (!playlistPicker.hidden) {
+    closePlaylistPicker();
+    return;
+  }
+  if (!createPlaylistModal.hidden) {
+    closeCreatePlaylistModal();
+    return;
+  }
+  if (!audioQualityModal.hidden) {
+    closeAudioQualityModal();
+    return;
+  }
+  if (sourceBridgeModal && !sourceBridgeModal.hidden) {
+    closeSourceBridgeModal();
+    return;
+  }
+  if (getActiveView() === "immersivePlayer") {
+    closeImmersivePlayer();
+    return;
+  }
+  if (hasActiveTrackFilter()) {
+    clearSearchAndFilters();
+    setLibraryStatus("已清除搜索和筛选。");
+  }
+}
+
 function handleKeyboardShortcut(event) {
   if (event.key === "Tab" && trackActionSheet && !trackActionSheet.hidden) {
     trapTrackActionSheetFocus(event);
     return;
   }
-
-  if (event.key === "Escape") {
-    if (searchSuggestPopover && !searchSuggestPopover.hidden) {
-      closeSearchSuggestions();
-      return;
-    }
-
-    if (state.isQuickQueueOpen) {
-      closeQuickQueue();
-      return;
-    }
-
-    if (state.isImmersiveQueueOpen) {
-      closeImmersiveQueue();
-      return;
-    }
-
-    if (!trackActionSheet.hidden) {
-      closeTrackActionSheet();
-      return;
-    }
-
-    if (!accountMenu.hidden) {
-      closeAccountMenu();
-      return;
-    }
-
-    if (!playlistPicker.hidden) {
-      closePlaylistPicker();
-      return;
-    }
-
-    if (!createPlaylistModal.hidden) {
-      closeCreatePlaylistModal();
-      return;
-    }
-
-    if (!audioQualityModal.hidden) {
-      closeAudioQualityModal();
-      return;
-    }
-
-    if (sourceBridgeModal && !sourceBridgeModal.hidden) {
-      closeSourceBridgeModal();
-      return;
-    }
-
-    if (getActiveView() === "immersivePlayer") {
-      closeImmersivePlayer();
-      return;
-    }
-
-    if (hasActiveTrackFilter()) {
-      clearSearchAndFilters();
-      setLibraryStatus("已清除搜索和筛选。");
-      return;
-    }
-  }
-
-  if (event.defaultPrevented || isTypingTarget(event.target) || event.altKey || event.ctrlKey || event.metaKey) {
-    return;
-  }
-
-  switch (event.key) {
-    case " ":
-      event.preventDefault();
-      togglePlayback();
-      break;
-    case "ArrowLeft":
-      event.preventDefault();
-      seekRelative(-10);
-      break;
-    case "ArrowRight":
-      event.preventDefault();
-      seekRelative(10);
-      break;
-    case "ArrowUp":
-      event.preventDefault();
-      adjustVolume(0.05);
-      break;
-    case "ArrowDown":
-      event.preventDefault();
-      adjustVolume(-0.05);
-      break;
-    case "m":
-    case "M":
-      event.preventDefault();
-      toggleMute();
-      break;
-    case "n":
-    case "N":
-      event.preventDefault();
-      playNext();
-      break;
-    case "p":
-    case "P":
-      event.preventDefault();
-      playPrevious();
-      break;
-    case "q":
-    case "Q":
-      event.preventDefault();
-      toggleActiveQueueView();
-      break;
-    case "f":
-    case "F":
-      if (state.currentTrack) {
-        event.preventDefault();
-        toggleFavorite(state.currentTrack);
-      }
-      break;
-    case "l":
-    case "L":
-      event.preventDefault();
-      locateCurrentTrack();
-      break;
-    case "/":
-      event.preventDefault();
-      focusSearch();
-      break;
-    default:
-      break;
-  }
+  const shortcut = KEYBOARD_SHORTCUTS.find((item) => item.keys.includes(event.key));
+  if (!shortcut || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (!shortcut.allowTyping && isTypingTarget(event.target)) return;
+  if (shortcut.enabled && !shortcut.enabled()) return;
+  if (shortcut.preventDefault !== false) event.preventDefault();
+  shortcut.run(event);
 }
 
 function isTypingTarget(target) {
