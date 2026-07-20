@@ -48,6 +48,12 @@ const {
   VOLUME_KEY,
   itemFields,
 } = window.EmbyMusicConfig;
+const redact = window.EmbyMusicRedact || {
+  redactServer: (value) => String(value || ""),
+  redactText: (value) => String(value || ""),
+  redactToken: (value) => String(value || ""),
+  redactUrl: (value) => String(value || ""),
+};
 const {
   clamp,
   coverClass,
@@ -1208,7 +1214,7 @@ function safeInit() {
     renderSavedAccounts();
     setBadge("error", "初始化失败");
     setMessage(`页面初始化失败：${readableError(error)}。请刷新或清除站点缓存后重试。`, "error");
-    console.error(error);
+    console.error(redact.redactText(readableError(error)));
   }
 }
 
@@ -4426,7 +4432,7 @@ async function copyLoginDiagnostics() {
     setMessage("登录诊断信息已复制。", "success");
   } catch {
     setMessage("无法自动复制诊断信息，请打开浏览器开发者工具查看 Console。", "error");
-    console.info(diagnostics);
+    console.info(redact.redactText(diagnostics));
   }
 }
 
@@ -4815,7 +4821,7 @@ function renderSession(session) {
   serverName.textContent = isBridge ? "音乐桥" : (session.serverName || "-");
   serverVersion.textContent = session.version || "-";
   currentUser.textContent = isBridge ? "桥接来源" : (session.userName || "-");
-  currentServer.textContent = isBridge ? getSourceBridgeDisplayUrl(session) : (session.serverUrl || "-");
+  currentServer.textContent = redact.redactServer(isBridge ? getSourceBridgeDisplayUrl(session) : (session.serverUrl || "")) || "-";
   heroTitle.textContent = isBridge
     ? "音乐桥工作台"
     : (session.userName ? `欢迎回来，${session.userName}` : "欢迎回来");
@@ -4836,7 +4842,9 @@ function renderAccountMenu(session = state.session || {}) {
   }
 
   accountMenuTitle.textContent = userName;
-  accountMenuServer.textContent = isBridge ? getSourceBridgeDisplayUrl(session) : (session.serverName || session.serverUrl || "-");
+  accountMenuServer.textContent = isBridge
+    ? (redact.redactServer(getSourceBridgeDisplayUrl(session)) || "-")
+    : (session.serverName || redact.redactServer(session.serverUrl) || "-");
   if (accountSourceBridgeButton) {
     accountSourceBridgeButton.hidden = !isBridge;
     accountSourceBridgeButton.disabled = !isBridge;
@@ -5420,7 +5428,7 @@ function getSourceBridgeLibraryLabel() {
 }
 
 function getSourceBridgeDisplayUrl(session = state.session) {
-  return getSessionExternalSourceApiUrl(session) || state.externalSourceApiUrl || "未配置";
+  return getSessionExternalSourceApiUrl(session) || state.externalSourceApiUrl || "";
 }
 
 function renderLibraryViewOptions() {
@@ -9232,7 +9240,7 @@ function renderSettings() {
     settingsSourceMode.textContent = isBridge ? "音乐桥" : "Emby";
   }
   settingsServerName.textContent = session.serverName || "-";
-  settingsServerUrl.textContent = isBridge ? getSourceBridgeDisplayUrl(session) : (session.serverUrl || "-");
+  settingsServerUrl.textContent = redact.redactServer(isBridge ? getSourceBridgeDisplayUrl(session) : session.serverUrl) || "-";
   settingsUser.textContent = isBridge ? "桥接来源" : (session.userName || "-");
   settingsLibraryView.textContent = isBridge ? getSourceBridgeLibraryLabel() : getLibraryViewLabel();
   settingsAppVersion.textContent = APP_VERSION;
@@ -20233,7 +20241,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
     }
 
     state.lastPlaybackInfoError = readableError(error);
-    console.warn("Emby PlaybackInfo failed; falling back to generated play session.", error);
+    console.warn("Emby PlaybackInfo failed; falling back to generated play session.", redact.redactText(readableError(error)));
     renderPlaybackRecoveryPanel();
     return fallbackSession;
   }
@@ -21573,7 +21581,8 @@ async function copyDiagnostics() {
 function buildDiagnostics() {
   const guidance = getDiagnosticsGuidance();
 
-  return [
+  const diagnostics = [
+    "本诊断已经隐藏服务器/账号敏感信息，可用于问题排查。",
     `${APP_NAME} ${APP_VERSION}`,
     `URL: ${location.href}`,
     `Recommended action: ${guidance}`,
@@ -21653,6 +21662,8 @@ function buildDiagnostics() {
     `Lyrics source lines: ${state.lyricsSourceDiagnostics?.lineCount || "-"}`,
     `Lyrics source error: ${state.lyricsSourceDiagnostics?.error || "-"}`,
   ].join("\n");
+
+  return redact.redactText(diagnostics);
 }
 
 function getDiagnosticsGuidance() {
@@ -21688,7 +21699,8 @@ function getDiagnosticsGuidance() {
 }
 
 function buildLoginDiagnostics() {
-  return [
+  const diagnostics = [
+    "本诊断已经隐藏服务器/账号敏感信息，可用于问题排查。",
     `${APP_NAME} ${APP_VERSION}`,
     `URL: ${location.href}`,
     `Recommended action: ${getLoginDiagnosticsGuidance()}`,
@@ -21705,6 +21717,8 @@ function buildLoginDiagnostics() {
     `Protocol: ${location.protocol}`,
     `User agent: ${navigator.userAgent}`,
   ].join("\n");
+
+  return redact.redactText(diagnostics);
 }
 
 function getLoginDiagnosticsGuidance() {
@@ -24562,7 +24576,7 @@ function syncConfiguredServerUrl() {
 
   serverUrlInput.disabled = isLocked;
   serverUrlInput.required = !isLocked;
-  serverUrlInput.placeholder = configuredServerUrl || "http://192.168.1.10:8096";
+  serverUrlInput.placeholder = configuredServerUrl ? redact.redactServer(configuredServerUrl) : "http://HOST:PORT";
 
   if (!serverUrlHint) {
     return;
@@ -25535,28 +25549,31 @@ function syncLoginActionButtons() {
 }
 
 function setMessage(text, type = "") {
-  message.textContent = text;
+  const safeText = redact.redactText(text);
+  message.textContent = safeText;
   message.className = `message ${type}`.trim();
 }
 
 function setLibraryStatus(text) {
+  const safeText = redact.redactText(text);
   clearStatusDismissTimer();
-  libraryStatus.textContent = text;
+  libraryStatus.textContent = safeText;
 
-  if (!text) {
+  if (!safeText) {
     hideNotice();
     return;
   }
 
-  if (shouldAutoDismissStatus(text)) {
-    scheduleStatusDismiss(text);
+  if (shouldAutoDismissStatus(safeText)) {
+    scheduleStatusDismiss(safeText);
   }
 }
 
 function showNotice(text, options = {}) {
+  const safeText = redact.redactText(text);
   clearNoticeDismissTimer();
   clearStatusDismissTimer();
-  appNoticeText.textContent = text;
+  appNoticeText.textContent = safeText;
   appNotice.className = `app-notice ${options.type || ""}`.trim();
   appNoticeActions.replaceChildren();
   const actions = options.actions || [];
@@ -25575,11 +25592,11 @@ function showNotice(text, options = {}) {
   });
 
   appNotice.hidden = false;
-  libraryStatus.textContent = text;
+  libraryStatus.textContent = safeText;
 
   if (!actions.length && options.autoDismiss !== false && shouldAutoDismissNotice(options)) {
     noticeDismissTimer = window.setTimeout(() => {
-      if (appNoticeText.textContent === text) {
+      if (appNoticeText.textContent === safeText) {
         hideNotice();
       }
     }, Number(options.autoDismissMs) || AUTO_DISMISS_NOTICE_MS);
@@ -26303,5 +26320,5 @@ function isAutoplayBlockedError(error) {
 }
 
 function readableError(error) {
-  return error instanceof Error ? error.message : "操作失败，请稍后重试。";
+  return redact.redactText(error instanceof Error ? error.message : "操作失败，请稍后重试。");
 }

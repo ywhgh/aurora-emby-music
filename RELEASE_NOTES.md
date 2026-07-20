@@ -11,6 +11,26 @@
 （本段由每个 PR 自动收尾，下方仅列出已经完成的动作；尚未完成的不要写在这里，留到 PR 关闭时再写。）
 
 <!-- 进度占位：每个 PR 完成后在此追加一段，按 §1 / §2.x / 验证 的标准格式 -->
+### M1 · 安全收口（S1 / S2 / S6 / S8）
+
+### 版本说明
+完成 source-bridge 的配置鉴权、远程流 SSRF 防护和受控 CORS；页面增加 CSP 与 Referrer-Policy；登录兜底、诊断输出、状态消息和服务器地址显示统一接入敏感字段脱敏。
+
+### 更新内容
+- `/configure` 支持 `SOURCE_BRIDGE_API_TOKEN` / `--api-token`，缺失或不匹配时返回 401；匿名配置必须显式开启。
+- `/remote-stream` 仅接受 HTTP/HTTPS，并在 DNS 解析后拒绝 loopback、私网、链路本地、共享地址、组播及 `.local` / `.internal` 主机。
+- CORS 改为白名单策略，默认仅允许本地开发页面，并覆盖 OPTIONS 与 `X-Bridge-Token`。
+- 页面移除 inline script / inline handler，加入 CSP、Referrer-Policy、独立登录兜底脚本与 HLS ready 脚本。
+- 诊断导出、登录兜底、状态栏、通知、错误文本和服务器 URL 显示统一通过 `src/redact.js` 脱敏。
+- bridge smoke 覆盖 token、私网目标、协议和 CORS 回归；smoke 覆盖 CSP、无 inline script 与敏感字段脱敏接线。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ### S7 · 清理私有歌词桥默认地址
 
 ### 版本说明

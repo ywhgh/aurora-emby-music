@@ -25,7 +25,12 @@ async function main() {
       port: bridgePort,
       manifestUrl: fixture.urls.manifest,
       pluginCachePath,
+      apiToken: "smoke-config-token",
     });
+
+    await checkConfigureAuthentication(firstBridge, fixture.urls.manifest);
+    await checkRemoteStreamGuards(bridgePort);
+    await checkCorsPolicy(bridgePort);
 
     const searchPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/search?q=resume&limit=5`);
     const track = searchPayload.items?.find((item) => item.source === "plugin");
@@ -41,8 +46,7 @@ async function main() {
     assert(streamSnapshot && JSON.parse(streamSnapshot).raw?.id === "resume-song", "plugin stream URL did not carry a restore snapshot");
 
     const firstStream = await fetchHead(streamUrl);
-    assert(firstStream.status === 200, `initial plugin stream HEAD returned HTTP ${firstStream.status}`);
-    assert(firstStream.headers.get("content-type") === "audio/mpeg", `initial plugin stream content-type mismatch: ${firstStream.headers.get("content-type") || "-"}`);
+    assert(firstStream.status === 403, `private fixture stream should be blocked, got HTTP ${firstStream.status}`);
 
     await stopBridge(firstBridge);
     firstBridge = null;
@@ -54,8 +58,7 @@ async function main() {
     });
 
     const restoredStream = await fetchHead(streamUrl);
-    assert(restoredStream.status === 200, `restored plugin stream HEAD returned HTTP ${restoredStream.status}`);
-    assert(restoredStream.headers.get("content-type") === "audio/mpeg", `restored plugin stream content-type mismatch: ${restoredStream.headers.get("content-type") || "-"}`);
+    assert(restoredStream.status === 403, `restored private fixture stream should remain blocked, got HTTP ${restoredStream.status}`);
 
     const localPayload = await fetchJson(`http://127.0.0.1:${bridgePort}/tracks?limit=10`);
     const localTrack = localPayload.items?.find((item) => item.source === "local");
@@ -198,7 +201,12 @@ async function startBridge(options) {
     cwd: ROOT_DIR,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      ...(options.apiToken ? { SOURCE_BRIDGE_API_TOKEN: options.apiToken } : {}),
+    },
   });
+  child.musicDir = musicDir;
   const output = [];
   child.stdout.on("data", (chunk) => output.push(String(chunk)));
   child.stderr.on("data", (chunk) => output.push(String(chunk)));
@@ -244,6 +252,34 @@ function createBilingualSidecarFixture(rootDir) {
   return mediaPath;
 }
 
+async function checkConfigureAuthentication(bridge, manifestUrl) {
+  const portIndex = bridge.spawnargs.indexOf("--port");
+  const url = `http://127.0.0.1:${bridge.spawnargs[portIndex + 1]}/configure`;
+  const payload = JSON.stringify({ musicDir: bridge.musicDir, manifestUrl });
+  const missing = await fetchJsonResponse(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload });
+  assert(missing.response.status === 401, `configure without token returned HTTP ${missing.response.status}`);
+  const mismatch = await fetchJsonResponse(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Bridge-Token": "wrong-token" }, body: payload });
+  assert(mismatch.response.status === 401, `configure with mismatched token returned HTTP ${mismatch.response.status}`);
+  const allowed = await fetchJsonResponse(url, { method: "POST", headers: { "Content-Type": "application/json", "X-Bridge-Token": "smoke-config-token" }, body: payload });
+  assert(allowed.response.status === 200 && allowed.payload?.ok === true, `configure with valid token returned HTTP ${allowed.response.status}`);
+}
+
+async function checkRemoteStreamGuards(port) {
+  for (const target of ["http://127.0.0.1/media", "http://192.168.1.10/media", "http://10.0.0.1/media"]) {
+    const result = await fetchJsonResponse(`http://127.0.0.1:${port}/remote-stream?url=${encodeURIComponent(target)}`);
+    assert(result.response.status === 403, `blocked remote target returned HTTP ${result.response.status}: ${target}`);
+  }
+  const unsupported = await fetchJsonResponse(`http://127.0.0.1:${port}/remote-stream?url=${encodeURIComponent("file:///fixture")}`);
+  assert(unsupported.response.status === 400, `unsupported remote protocol returned HTTP ${unsupported.response.status}`);
+}
+
+async function checkCorsPolicy(port) {
+  const blocked = await fetchJsonResponse(`http://127.0.0.1:${port}/health`, { headers: { Origin: "https://blocked.example.test" } });
+  assert(blocked.response.status === 403, `disallowed Origin returned HTTP ${blocked.response.status}`);
+  const allowed = await fetchJsonResponse(`http://127.0.0.1:${port}/health`, { headers: { Origin: "http://127.0.0.1:5173" } });
+  assert(allowed.response.status === 200, `allowed local Origin returned HTTP ${allowed.response.status}`);
+  assert(allowed.response.headers.get("access-control-allow-origin") === "http://127.0.0.1:5173", "allowed Origin should be echoed exactly");
+}
 async function waitForHealth(url) {
   const startedAt = Date.now();
 
@@ -322,6 +358,11 @@ function getFreePort() {
   });
 }
 
+async function fetchJsonResponse(url, options = {}) {
+  const response = await fetch(url, options);
+  const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
 async function fetchJson(url) {
   const response = await fetch(url);
   const payload = await response.json().catch(() => null);

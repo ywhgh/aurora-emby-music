@@ -80,10 +80,18 @@ function checkRedaction() {
     assert(!redactedText?.includes(secret), "redactText should scrub URLs and sensitive assignments");
   });
   assert(!/\b(?:process|globalThis|require)\b/.test(redactCode), "redact.js must stay browser-safe without process, globalThis, or require");
+
+  const app = read("app.js");
+  const fallback = read("src/login-fallback.js");
+  assert(app.includes("const redact = window.EmbyMusicRedact"), "app should use the shared redaction helper");
+  assert(app.includes("return redact.redactText(diagnostics)"), "app diagnostics should be redacted before display or copy");
+  assert(fallback.includes("return redact.redactText(diagnostics)"), "fallback diagnostics should be redacted before copy or console output");
+  assert(app.includes("settingsServerUrl.textContent = redact.redactServer"), "settings server URL should be masked for display");
 }
 
 function checkVersions() {
   const index = read("index.html");
+  const fallback = read("src/login-fallback.js");
   const config = read("src/config.js");
   const sw = read("sw.js");
   const packageJson = JSON.parse(read("package.json"));
@@ -142,6 +150,9 @@ function checkVersions() {
 
   [
     "styles.css",
+    "src/redact.js",
+    "src/login-fallback.js",
+    "src/hls-ready.js",
     "src/config.js",
     "src/format.js",
     "src/lyrics.js",
@@ -155,7 +166,7 @@ function checkVersions() {
   });
 
   assert(index.includes(`v${appVersion}`), "login version label is not synced");
-  assert(index.includes(`const version = "${appVersion}"`), "fallback script version is not synced");
+  assert(fallback.includes(`const version = "${appVersion}"`), "fallback script version is not synced");
 }
 
 function checkCss() {
@@ -1393,8 +1404,13 @@ function checkAppFunctionReferences() {
   assert(index.includes("id=\"topLyricCurrent\""), "Topbar lyric display should keep the translated/current lyric line hidden behind the feature flag");
   assert(index.includes("action-sheet-grabber"), "Missing mobile action sheet grabber");
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
-  assert(index.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
-  assert(index.includes("Main app error:"), "Fallback diagnostics should expose the app init error");
+  const fallback = read("src/login-fallback.js");
+  assert(index.includes('http-equiv="Content-Security-Policy"'), "index should define a CSP meta policy");
+  assert(index.includes('name="referrer" content="no-referrer"'), "index should disable referrer leakage");
+  assert(!/<script>(?:.|\n)*?<\/script>/.test(index), "index should not contain inline script blocks");
+  assert(!/\son[a-z]+=/i.test(index), "index should not contain inline event handlers");
+  assert(fallback.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
+  assert(fallback.includes("Main app error:"), "Fallback diagnostics should expose the app init error");
   assert(index.includes("id=\"playbackPreloadToggle\""), "Settings should include playback preload toggle");
   assert(index.includes("id=\"playbackLosslessPrecacheToggle\""), "Settings should include lossless precache toggle");
   assert(index.includes("id=\"settingsClearPlaybackCacheButton\""), "Settings should include playback cache clearing action");

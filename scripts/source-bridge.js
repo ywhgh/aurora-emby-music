@@ -3,9 +3,11 @@
 
 const crypto = require("node:crypto");
 const childProcess = require("node:child_process");
+const dns = require("node:dns").promises;
 const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -36,6 +38,14 @@ const COVER_NAMES = [
 const options = parseArgs(process.argv.slice(2));
 const host = options.host || process.env.SOURCE_BRIDGE_HOST || "127.0.0.1";
 const port = Number(options.port || process.env.SOURCE_BRIDGE_PORT || process.env.PORT || 5174);
+const configureApiToken = String(options.apiToken || process.env.SOURCE_BRIDGE_API_TOKEN || "");
+const allowAnonymousConfigure = isTruthy(options.allowAnonymousConfigure || process.env.SOURCE_BRIDGE_ALLOW_ANONYMOUS_CONFIGURE);
+const allowedCorsOrigins = new Set(uniqueStrings([
+  ...splitList(options.corsOrigin),
+  ...splitList(process.env.SOURCE_BRIDGE_CORS_ORIGINS),
+  "http://127.0.0.1:5173",
+  "http://localhost:5173",
+]));
 const shouldLoadDefaultManifestUrls = !/^(1|true|yes)$/i.test(String(
   options.noDefaultManifest
     || options.noDefaultManifests
@@ -80,13 +90,16 @@ const state = {
 };
 
 main().catch((error) => {
-  console.error(`[source-bridge] failed: ${error.message}`);
+  console.error("[source-bridge] failed; see local diagnostics.");
   process.exitCode = 1;
 });
 
 installShutdownHandlers();
 
 async function main() {
+  if (!configureApiToken && !allowAnonymousConfigure) {
+    console.warn("[source-bridge] WARNING: /configure is locked; set SOURCE_BRIDGE_API_TOKEN or pass --allow-anonymous-configure.");
+  }
   await refreshState();
 
   const server = http.createServer((request, response) => {
@@ -101,13 +114,13 @@ async function main() {
   });
 
   server.listen(port, host, () => {
-    console.log(`[source-bridge] listening on http://${host}:${port}`);
+    console.log("[source-bridge] listening");
     console.log(`[source-bridge] local tracks: ${state.tracks.length}`);
     if (musicDirs.length) {
-      console.log(`[source-bridge] music dir: ${musicDirs.join(", ")}`);
+      console.log(`[source-bridge] music dirs configured: ${musicDirs.length}`);
     }
     if (manifestUrls.length) {
-      console.log(`[source-bridge] manifest url: ${manifestUrls.join(", ")}`);
+      console.log(`[source-bridge] manifests configured: ${manifestUrls.length}`);
     }
   });
 }
@@ -130,13 +143,22 @@ const artworkCache = new Map();
 
 async function handleRequest(request, response) {
   if (request.method === "OPTIONS") {
-    sendEmpty(request, response, 204);
+    sendEmpty(request, response, isCorsOriginAllowed(request) ? 204 : 403);
+    return;
+  }
+
+  if (!isCorsOriginAllowed(request)) {
+    sendJson(request, response, 403, { error: "origin not allowed" });
     return;
   }
 
   const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
 
   if (url.pathname === "/configure" && request.method === "POST") {
+    if (!isConfigureAuthorized(request)) {
+      sendJson(request, response, 401, { error: "configure authentication required" });
+      return;
+    }
     const payload = await readJsonBody(request);
     const nextMusicDirs = uniqueStrings([
       ...splitList(payload.musicDir),
@@ -902,7 +924,7 @@ function flushPluginTrackCache() {
       tracks,
     }, null, 2));
   } catch (error) {
-    console.warn(`[source-bridge] failed to write plugin cache: ${error.message}`);
+    console.warn("[source-bridge] failed to write plugin cache.");
   }
 }
 
@@ -3111,7 +3133,21 @@ async function streamFile(request, response, filePath, contentType) {
   fs.createReadStream(filePath, { start: safeStart, end: safeEnd }).pipe(response);
 }
 
-function streamRemoteMedia(request, response, url) {
+async function streamRemoteMedia(request, response, url) {
+  const mediaUrl = normalizeRemoteUrl(url.searchParams.get("url"));
+
+  if (!mediaUrl) {
+    sendJson(request, response, 400, { error: "missing or unsupported remote media url" });
+    return;
+  }
+
+  const target = new URL(mediaUrl);
+  if (await isBlockedRemoteTarget(target)) {
+    sendJson(request, response, 403, { error: "remote media target blocked" });
+    return;
+  }
+
+  const client = target.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = () => {
@@ -3126,16 +3162,6 @@ function streamRemoteMedia(request, response, url) {
         reject(error);
       }
     };
-    const mediaUrl = normalizeRemoteUrl(url.searchParams.get("url"));
-
-    if (!mediaUrl) {
-      sendJson(request, response, 400, { error: "missing remote media url" });
-      finish();
-      return;
-    }
-
-    const target = new URL(mediaUrl);
-    const client = target.protocol === "https:" ? https : http;
     const headers = {
       "User-Agent": String(url.searchParams.get("ua") || BILIBILI_USER_AGENT),
       Accept: "*/*",
@@ -3833,6 +3859,84 @@ function pickDirectory(initialDirectory = "") {
   });
 }
 
+function isTruthy(value) {
+  return /^(1|true|yes)$/i.test(String(value || ""));
+}
+
+function isConfigureAuthorized(request) {
+  if (allowAnonymousConfigure) {
+    return true;
+  }
+
+  const suppliedToken = String(request.headers["x-bridge-token"] || "");
+  if (!configureApiToken || !suppliedToken) {
+    return false;
+  }
+
+  const expected = Buffer.from(configureApiToken);
+  const supplied = Buffer.from(suppliedToken);
+  return expected.length === supplied.length && crypto.timingSafeEqual(expected, supplied);
+}
+
+function isCorsOriginAllowed(request) {
+  const origin = String(request.headers.origin || "").trim();
+  return !origin || allowedCorsOrigins.has(origin);
+}
+
+async function isBlockedRemoteTarget(target) {
+  if (!target || !["http:", "https:"].includes(target.protocol) || target.username || target.password) {
+    return true;
+  }
+
+  const hostname = String(target.hostname || "").replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+  if (!hostname || isBlockedRemoteHostname(hostname)) {
+    return true;
+  }
+
+  try {
+    const records = await dns.lookup(hostname, { all: true, verbatim: true });
+    return !records.length || records.some((record) => isBlockedRemoteAddress(record.address));
+  } catch {
+    return true;
+  }
+}
+
+function isBlockedRemoteHostname(hostname) {
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname.endsWith(".internal")) {
+    return true;
+  }
+
+  return net.isIP(hostname) > 0 && isBlockedRemoteAddress(hostname);
+}
+
+function isBlockedRemoteAddress(address) {
+  const normalized = String(address || "").toLowerCase().split("%")[0];
+  if (net.isIPv4(normalized)) {
+    const [a, b] = normalized.split(".").map(Number);
+    return a === 0
+      || a === 10
+      || a === 127
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || a >= 224;
+  }
+
+  if (!net.isIPv6(normalized)) {
+    return true;
+  }
+
+  if (normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd")) {
+    return true;
+  }
+  const firstGroup = Number.parseInt(normalized.split(":")[0] || "0", 16);
+  if (firstGroup >= 0xfe80 && firstGroup <= 0xfebf) {
+    return true;
+  }
+  const mappedIpv4 = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1];
+  return mappedIpv4 ? isBlockedRemoteAddress(mappedIpv4) : false;
+}
 function sendJson(request, response, statusCode, payload) {
   const body = JSON.stringify(payload, null, 2);
   writeCorsHeaders(request, response);
@@ -3850,9 +3954,13 @@ function sendEmpty(request, response, statusCode) {
 }
 
 function writeCorsHeaders(request, response) {
-  response.setHeader("Access-Control-Allow-Origin", request.headers.origin || "*");
+  const origin = String(request.headers.origin || "").trim();
+  if (origin && allowedCorsOrigins.has(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
   response.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Range");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Range, X-Bridge-Token");
   response.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type");
 }
 
