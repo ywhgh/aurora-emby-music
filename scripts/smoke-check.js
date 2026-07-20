@@ -207,7 +207,7 @@ function checkVersions() {
     "src/lyrics.js",
     "src/emby-api.js",
     "src/storage.js",
-    "app.js",
+    "main.js",
     "manifest.webmanifest",
     "icon.svg",
   ].forEach((asset) => {
@@ -1321,6 +1321,15 @@ function checkStorageQueuePersistence() {
 
 function checkAppFunctionReferences() {
   const app = read("app.js");
+  const main = read("main.js");
+  const playerModule = read("src/player.js");
+  const queueModule = read("src/queue.js");
+  assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
+  assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
+  assert(main.includes('await import("./app.js?v=0.93.230")'), "main.js should load app.js through native ESM");
+  assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
+  assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
+  assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
   const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
@@ -1503,7 +1512,7 @@ function checkAppFunctionReferences() {
   assert(index.includes("id=\"playbackPreloadToggle\""), "Settings should include playback preload toggle");
   assert(index.includes("id=\"playbackLosslessPrecacheToggle\""), "Settings should include lossless precache toggle");
   assert(index.includes("id=\"settingsClearPlaybackCacheButton\""), "Settings should include playback cache clearing action");
-  assert(index.indexOf("./app.js?v=") < index.indexOf("hls.min.js"), "External hls.js should load after the main app script");
+  assert(index.indexOf("./main.js?v=") < index.indexOf("hls.min.js"), "External hls.js should load after the ESM entry script");
   assert(index.includes("hls.min.js\" async"), "External hls.js should not block main app initialization");
   assert(index.indexOf("class=\"account-menu-profile\"") < index.indexOf("id=\"connectionBadge\""), "Account menu status badge should live in the top heading");
   assert(index.includes("class=\"hero-side\""), "Home dashboard stats should live inside the hero side region");

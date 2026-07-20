@@ -60,6 +60,10 @@ const {
   setStaticMarkup,
 } = window.EmbyMusicDomHelpers;
 const {
+  player: playerOps,
+  queue: queueOps,
+} = window.EmbyMusicModules;
+const {
   clamp,
   coverClass,
   escapeHeaderValue,
@@ -18357,14 +18361,9 @@ function shuffleQueueRemainder() {
     return;
   }
 
-  const shuffled = [...range];
-  shuffleTracks(shuffled);
-
+  const shuffled = queueOps.shuffle(range);
   const startIndex = getQueueShuffleStartIndex();
-  state.queue = [
-    ...state.queue.slice(0, startIndex),
-    ...shuffled,
-  ];
+  state.queue = queueOps.replaceRemainder(state.queue, startIndex, shuffled);
 
   syncCurrentTrackIndex();
   pruneShufflePlaybackState();
@@ -18392,10 +18391,7 @@ function organizeQueueRemainder() {
   }
 
   const startIndex = getQueueShuffleStartIndex();
-  state.queue = [
-    ...state.queue.slice(0, startIndex),
-    ...organized,
-  ];
+  state.queue = queueOps.replaceRemainder(state.queue, startIndex, organized);
 
   syncCurrentTrackIndex();
   pruneShufflePlaybackState();
@@ -18432,15 +18428,7 @@ function getQueueShuffleStartIndex() {
 }
 
 function getCurrentQueueIndex() {
-  if (!state.currentTrack?.Id || !state.queue.length) {
-    return -1;
-  }
-
-  if (state.currentTrackIndex >= 0 && state.queue[state.currentTrackIndex]?.Id === state.currentTrack.Id) {
-    return state.currentTrackIndex;
-  }
-
-  return state.queue.findIndex((track) => track.Id === state.currentTrack.Id);
+  return queueOps.findCurrentIndex(state.queue, state.currentTrack, state.currentTrackIndex);
 }
 
 function resetShufflePlaybackState() {
@@ -18958,7 +18946,7 @@ function removeQueueTrack(index) {
     return;
   }
 
-  state.queue = state.queue.filter((_, itemIndex) => itemIndex !== index);
+  state.queue = queueOps.removeAt(state.queue, index);
   syncCurrentTrackIndex();
   pruneShufflePlaybackState();
   saveQueueState();
@@ -18990,10 +18978,7 @@ function reorderQueueTrack(fromIndex, toIndex, options = {}) {
     return;
   }
 
-  const nextQueue = [...state.queue];
-  const [movedTrack] = nextQueue.splice(fromIndex, 1);
-  nextQueue.splice(toIndex, 0, movedTrack);
-  state.queue = nextQueue;
+  state.queue = queueOps.move(state.queue, fromIndex, toIndex);
   syncCurrentTrackIndex();
   pruneShufflePlaybackState();
   saveQueueState();
@@ -20744,16 +20729,9 @@ function seekToPosition(positionSeconds, options = {}) {
     return false;
   }
 
-  const position = clamp(nextPosition, 0, duration);
-
-  try {
-    if (options.fastSeek && typeof audioPlayer.fastSeek === "function") {
-      audioPlayer.fastSeek(position);
-    } else {
-      audioPlayer.currentTime = position;
-    }
-  } catch {
-    audioPlayer.currentTime = position;
+  const position = playerOps.seekPlayer(audioPlayer, nextPosition, duration, options);
+  if (position === false) {
+    return false;
   }
 
   pauseLyricPlaybackClock();
@@ -21750,7 +21728,7 @@ function getLoginDiagnosticsGuidance() {
 }
 
 function applyVolumePreference() {
-  audioPlayer.volume = clamp(state.volume, 0, 1);
+  audioPlayer.volume = playerOps.normalizeVolume(state.volume);
   audioPlayer.muted = false;
   state.lastVolume = audioPlayer.volume || 1;
   volumeSlider.value = String(Math.round(audioPlayer.volume * 100));
@@ -21909,7 +21887,7 @@ function getTrackDensityLabel(density) {
 }
 
 function handleVolumeInput() {
-  const nextVolume = clamp(Number(volumeSlider.value) / 100, 0, 1);
+  const nextVolume = playerOps.normalizeVolume(Number(volumeSlider.value) / 100);
   state.volume = nextVolume;
   audioPlayer.volume = nextVolume;
   audioPlayer.muted = false;
@@ -25857,11 +25835,7 @@ function clearQueueState() {
 }
 
 function getQueuePositionSeconds() {
-  if (Number.isFinite(audioPlayer.currentTime) && audioPlayer.currentTime > 0) {
-    return audioPlayer.currentTime;
-  }
-
-  return state.savedPlaybackPositionSeconds || 0;
+  return playerOps.getPlaybackPosition(audioPlayer, state.savedPlaybackPositionSeconds);
 }
 
 function sanitizeQueueTrack(track) {
