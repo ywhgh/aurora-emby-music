@@ -1379,6 +1379,8 @@ async function checkSettingsModule() {
   const settings = await import(moduleUrl);
   assert(settings.normalizeThemePreference("dark") === "dark", "Theme settings should accept the dark preference");
   assert(settings.normalizeThemePreference("invalid") === "system", "Invalid theme settings should fall back to system");
+  assert(settings.normalizeSleepFadeSeconds(60) === 60, "Sleep fade settings should accept supported durations");
+  assert(settings.normalizeSleepFadeSeconds(45) === 30, "Sleep fade settings should reject unsupported durations");
 }
 
 async function checkStoreModule() {
@@ -1449,6 +1451,10 @@ function checkAppFunctionReferences() {
   assert(app.includes("createMediaElementSource(audioPlayer)"), "ReplayGain should route playback through WebAudio only when needed");
   assert(app.includes("replayGainNode.connect(sleepFadeGainNode)"), "ReplayGain and sleep fade should use separate serial GainNodes");
   assert(app.includes("playerOps.getReplayGainDb(playbackInfo?.MediaSources, mediaSourceId)"), "Playback sessions should read ReplayGain from Emby media streams");
+  assert(index.includes('id="sleepFadeSecondsSelect"'), "Settings should expose 30, 60, and 90 second sleep fades");
+  assert(app.includes("sleepFadeGainNode.gain.linearRampToValueAtTime?.(0, now + remainingSeconds)"), "Sleep timer should linearly fade its dedicated GainNode");
+  assert(app.includes("clearSleepTimer({ announce: false, resetFade: false })"), "Sleep expiry should pause before restoring the fade gain");
+  assert(app.includes("if (options.resetFade !== false) restoreSleepFadeGain()"), "Clearing a sleep timer should restore its gain");
   assert(app.includes("const KEYBOARD_SHORTCUTS = Object.freeze(["), "Keyboard handling and UI should share one descriptor list");
   assert(app.includes("KEYBOARD_SHORTCUTS.find((item) => item.keys.includes(event.key))"), "Keyboard events should resolve through descriptors");
   assert(app.includes("KEYBOARD_SHORTCUTS.forEach((shortcut)"), "Shortcut UI should render from descriptors");

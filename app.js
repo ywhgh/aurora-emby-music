@@ -392,6 +392,7 @@ const EXTERNAL_SOURCE_VIDEO_QUALITY_OPTIONS = [
   },
 ];
 const SLEEP_TIMER_OPTIONS = [0, 15, 30, 45, 60, 90];
+const SLEEP_FADE_OPTIONS = Object.freeze([30, 60, 90]);
 const KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: [" "], display: "Space", label: "播放 / 暂停", run: () => togglePlayback() },
   { keys: ["ArrowLeft"], display: "←", label: "快退 10 秒", run: () => seekRelative(-10) },
@@ -412,6 +413,7 @@ const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playb
 const COVER_COLOR_ENABLED_KEY = "emby-music-web/cover-color-enabled";
 const THEME_PREFERENCE_KEY = "emby-music-web/theme-preference";
 const REPLAY_GAIN_ENABLED_KEY = "emby-music-web/replay-gain-enabled";
+const SLEEP_FADE_SECONDS_KEY = "emby-music-web/sleep-fade-seconds";
 const PLAYBACK_DISPLAY_DEFAULTS = {
   volumeLeveling: false,
   backgroundMix: false,
@@ -613,6 +615,7 @@ const playerMetaTargetSelect = document.querySelector("#playerMetaTargetSelect")
 const playbackStreamSelect = document.querySelector("#playbackStreamSelect");
 const transcodeBitrateSelect = document.querySelector("#transcodeBitrateSelect");
 const sleepTimerSelect = document.querySelector("#sleepTimerSelect");
+const sleepFadeSecondsSelect = document.querySelector("#sleepFadeSecondsSelect");
 const playbackPreloadToggle = document.querySelector("#playbackPreloadToggle");
 const playbackLosslessPrecacheToggle = document.querySelector("#playbackLosslessPrecacheToggle");
 const filterBar = document.querySelector("#filterBar");
@@ -1219,8 +1222,11 @@ const store = storeOps.createStore({
   activeLyricTimelineIndex: -1,
   sleepTimerEndAt: 0,
   sleepTimerPresetMinutes: 0,
+  sleepFadeSeconds: loadSleepFadeSeconds(),
   sleepTimerTimeoutId: null,
+  sleepTimerFadeTimeoutId: null,
   sleepTimerIntervalId: null,
+  sleepFadeStarted: false,
   playlistPickerTrack: null,
   trackActionSheetTrack: null,
   trackActionSheetReturnFocus: null,
@@ -1485,6 +1491,7 @@ function init() {
   playbackStreamSelect.addEventListener("change", handlePlaybackStreamPolicyChange);
   transcodeBitrateSelect.addEventListener("change", handleTranscodeBitrateChange);
   sleepTimerSelect.addEventListener("change", handleSleepTimerSelectChange);
+  sleepFadeSecondsSelect?.addEventListener("change", handleSleepFadeSecondsChange);
   playbackPreloadToggle?.addEventListener("change", handlePlaybackPreloadToggleChange);
   playbackLosslessPrecacheToggle?.addEventListener("change", handlePlaybackLosslessPrecacheToggleChange);
   appNoticeClose.addEventListener("click", hideNotice);
@@ -7603,6 +7610,16 @@ function createSleepTimerActionSheetPage() {
     grid.append(button);
   });
   body.append(grid);
+  body.append(createActionSheetSelectRow(
+    "淡出时长",
+    `${state.sleepFadeSeconds} 秒`,
+    SLEEP_FADE_OPTIONS.map((seconds) => ({ id: seconds, label: `${seconds} 秒` })),
+    state.sleepFadeSeconds,
+    (seconds) => {
+      handleSleepFadeSecondsChange(seconds);
+      renderTrackActionSheetDetail(createActionSheetPageDetail);
+    },
+  ));
   return panel;
 }
 
@@ -9369,6 +9386,9 @@ function renderSettings() {
   }
   if (settingsReplayGainToggle) {
     settingsReplayGainToggle.checked = state.replayGainEnabled;
+  }
+  if (sleepFadeSecondsSelect) {
+    sleepFadeSecondsSelect.value = String(state.sleepFadeSeconds);
   }
   settingsPlaybackError.textContent = getSettingsPlaybackErrorLabel();
   settingsPlaybackError.classList.toggle("settings-error-value", settingsPlaybackError.textContent !== "-");
@@ -21086,6 +21106,21 @@ function handleSleepTimerSelectChange() {
   setSleepTimer(SLEEP_TIMER_OPTIONS.includes(minutes) ? minutes : 0);
 }
 
+function loadSleepFadeSeconds() {
+  return settingsOps.normalizeSleepFadeSeconds(localStorage.getItem(SLEEP_FADE_SECONDS_KEY));
+}
+
+function saveSleepFadeSeconds() {
+  localStorage.setItem(SLEEP_FADE_SECONDS_KEY, String(state.sleepFadeSeconds));
+}
+
+function handleSleepFadeSecondsChange(value = sleepFadeSecondsSelect?.value) {
+  state.sleepFadeSeconds = settingsOps.normalizeSleepFadeSeconds(value);
+  saveSleepFadeSeconds();
+  scheduleSleepTimerFade();
+  renderSettings();
+}
+
 function setSleepTimer(minutes, options = {}) {
   clearSleepTimer({ announce: false, render: false });
 
@@ -21103,18 +21138,57 @@ function setSleepTimer(minutes, options = {}) {
   state.sleepTimerEndAt = Date.now() + normalizedMinutes * 60 * 1000;
   state.sleepTimerTimeoutId = window.setTimeout(handleSleepTimerExpired, normalizedMinutes * 60 * 1000);
   state.sleepTimerIntervalId = window.setInterval(updateSleepTimerControls, 1000);
+  ensurePlaybackGainChain();
+  scheduleSleepTimerFade();
   updateSleepTimerControls();
 
   if (options.announce !== false) {
-    setLibraryStatus(`睡眠定时：${normalizedMinutes} 分钟后停止播放。`);
+    setLibraryStatus(`睡眠定时：${normalizedMinutes} 分钟后停止播放，末 ${state.sleepFadeSeconds} 秒淡出。`);
   }
+}
+
+function scheduleSleepTimerFade() {
+  if (state.sleepTimerFadeTimeoutId) {
+    window.clearTimeout(state.sleepTimerFadeTimeoutId);
+    state.sleepTimerFadeTimeoutId = null;
+  }
+  restoreSleepFadeGain();
+  if (!state.sleepTimerEndAt) return;
+
+  const fadeDelayMs = state.sleepTimerEndAt - Date.now() - state.sleepFadeSeconds * 1000;
+  if (fadeDelayMs <= 0) {
+    startSleepTimerFade();
+    return;
+  }
+  state.sleepTimerFadeTimeoutId = window.setTimeout(startSleepTimerFade, fadeDelayMs);
+}
+
+function startSleepTimerFade() {
+  state.sleepTimerFadeTimeoutId = null;
+  if (state.sleepFadeStarted || !state.sleepTimerEndAt || !ensurePlaybackGainChain()) return;
+
+  const remainingSeconds = Math.max(0, (state.sleepTimerEndAt - Date.now()) / 1000);
+  if (!remainingSeconds || !sleepFadeGainNode?.gain) return;
+  const now = playbackAudioContext?.currentTime || 0;
+  sleepFadeGainNode.gain.cancelScheduledValues?.(now);
+  sleepFadeGainNode.gain.setValueAtTime?.(1, now);
+  sleepFadeGainNode.gain.linearRampToValueAtTime?.(0, now + remainingSeconds);
+  playbackAudioContext?.resume?.().catch(() => {});
+  state.sleepFadeStarted = true;
+}
+
+function restoreSleepFadeGain() {
+  state.sleepFadeStarted = false;
+  if (sleepFadeGainNode) setGainNodeValue(sleepFadeGainNode, 1);
 }
 
 function clearSleepTimer(options = {}) {
   if (state.sleepTimerTimeoutId) {
     window.clearTimeout(state.sleepTimerTimeoutId);
   }
-
+  if (state.sleepTimerFadeTimeoutId) {
+    window.clearTimeout(state.sleepTimerFadeTimeoutId);
+  }
   if (state.sleepTimerIntervalId) {
     window.clearInterval(state.sleepTimerIntervalId);
   }
@@ -21122,7 +21196,9 @@ function clearSleepTimer(options = {}) {
   state.sleepTimerEndAt = 0;
   state.sleepTimerPresetMinutes = 0;
   state.sleepTimerTimeoutId = null;
+  state.sleepTimerFadeTimeoutId = null;
   state.sleepTimerIntervalId = null;
+  if (options.resetFade !== false) restoreSleepFadeGain();
 
   if (options.render !== false) {
     updateSleepTimerControls();
@@ -21134,11 +21210,12 @@ function clearSleepTimer(options = {}) {
 }
 
 function handleSleepTimerExpired() {
-  clearSleepTimer({ announce: false });
+  clearSleepTimer({ announce: false, resetFade: false });
 
   if (!audioPlayer.paused) {
     audioPlayer.pause();
   }
+  restoreSleepFadeGain();
 
   reportPlaybackStopped();
   updatePlaybackState();
@@ -21170,6 +21247,9 @@ function updateSleepTimerControls() {
   sleepTimerSelect.value = isActive ? String(state.sleepTimerPresetMinutes) : "0";
   settingsSleepTimer.textContent = detailLabel;
 
+  if (isActive && remainingSeconds <= state.sleepFadeSeconds && !state.sleepFadeStarted) {
+    startSleepTimerFade();
+  }
   if (state.sleepTimerEndAt && !isActive) {
     handleSleepTimerExpired();
   }
@@ -21449,6 +21529,7 @@ function resetPlayerPreferences() {
   state.coverColorEnabled = true;
   state.themePreference = "system";
   state.replayGainEnabled = false;
+  state.sleepFadeSeconds = 30;
   state.trackDensity = "comfortable";
   state.playerMetaTarget = "immersive";
   state.volume = 1;
@@ -21465,6 +21546,7 @@ function resetPlayerPreferences() {
   localStorage.removeItem(COVER_COLOR_ENABLED_KEY);
   localStorage.removeItem(THEME_PREFERENCE_KEY);
   localStorage.removeItem(REPLAY_GAIN_ENABLED_KEY);
+  localStorage.removeItem(SLEEP_FADE_SECONDS_KEY);
   storage.clearTrackDensity();
   storage.clearPlayerMetaTarget();
   storage.clearTranscodeBitrate();
@@ -21511,6 +21593,7 @@ function getExportPreferences() {
     coverColorEnabled: Boolean(state.coverColorEnabled),
     themePreference: settingsOps.normalizeThemePreference(state.themePreference),
     replayGainEnabled: Boolean(state.replayGainEnabled),
+    sleepFadeSeconds: settingsOps.normalizeSleepFadeSeconds(state.sleepFadeSeconds),
   };
 }
 
@@ -21566,6 +21649,7 @@ function applyImportedLocalData(data) {
   state.coverColorEnabled = preferences.coverColorEnabled !== false;
   state.themePreference = settingsOps.normalizeThemePreference(preferences.themePreference);
   state.replayGainEnabled = preferences.replayGainEnabled === true;
+  state.sleepFadeSeconds = settingsOps.normalizeSleepFadeSeconds(preferences.sleepFadeSeconds, state.sleepFadeSeconds);
   storage.savePlayMode(state.playMode);
   storage.saveSortKey(state.sortKey);
   storage.saveSortOrder(state.sortOrder);
@@ -21577,6 +21661,7 @@ function applyImportedLocalData(data) {
   saveCoverColorEnabled();
   saveThemePreference();
   saveReplayGainEnabled();
+  saveSleepFadeSeconds();
   saveLyricSettings();
   savePlaybackDisplaySettings(state.playbackDisplaySettings);
   saveImportedFavorites();
