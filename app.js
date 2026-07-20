@@ -411,6 +411,7 @@ const KEYBOARD_SHORTCUTS = Object.freeze([
 const IMMERSIVE_MORE_PLAYBACK_DISPLAY_KEY = "emby-music-web/immersive-more-playback-display";
 const COVER_COLOR_ENABLED_KEY = "emby-music-web/cover-color-enabled";
 const THEME_PREFERENCE_KEY = "emby-music-web/theme-preference";
+const REPLAY_GAIN_ENABLED_KEY = "emby-music-web/replay-gain-enabled";
 const PLAYBACK_DISPLAY_DEFAULTS = {
   volumeLeveling: false,
   backgroundMix: false,
@@ -686,6 +687,7 @@ const settingsCopyDiagnosticsButton = document.querySelector("#settingsCopyDiagn
 const settingsCoverColorToggle = document.querySelector("#settingsCoverColorToggle");
 const settingsThemeSelect = document.querySelector("#settingsThemeSelect");
 const settingsShortcutGrid = document.querySelector("#settingsShortcutGrid");
+const settingsReplayGainToggle = document.querySelector("#settingsReplayGainToggle");
 const shortcutCheatSheet = document.querySelector("#shortcutCheatSheet");
 const shortcutCheatSheetGrid = document.querySelector("#shortcutCheatSheetGrid");
 const shortcutCheatSheetClose = document.querySelector("#shortcutCheatSheetClose");
@@ -992,6 +994,11 @@ let trackFluidFrame = 0;
 let trackFluidPhase = 0;
 let trackFluidWidth = 50;
 let trackFluidActiveTrackId = "";
+let playbackAudioContext = null;
+let playbackMediaSourceNode = null;
+let replayGainNode = null;
+let sleepFadeGainNode = null;
+let playbackGainUnavailable = false;
 let immersiveVisualizerAudioContext = null;
 let immersiveVisualizerSource = null;
 let immersiveVisualizerAnalyser = null;
@@ -1128,6 +1135,9 @@ const store = storeOps.createStore({
   playbackLosslessPrecacheEnabled: loadPlaybackLosslessPrecacheEnabled(),
   coverColorEnabled: loadCoverColorEnabled(),
   themePreference: loadThemePreference(),
+  replayGainEnabled: loadReplayGainEnabled(),
+  currentReplayGainDb: null,
+  replayGainMultiplier: 1,
   trackDensity: loadTrackDensity(),
   playerMetaTarget: loadPlayerMetaTarget(),
   volume: loadVolume(),
@@ -1455,6 +1465,7 @@ function init() {
   settingsCopyDiagnosticsButton.addEventListener("click", copyDiagnostics);
   settingsCoverColorToggle?.addEventListener("change", handleCoverColorToggleChange);
   settingsThemeSelect?.addEventListener("change", handleThemePreferenceChange);
+  settingsReplayGainToggle?.addEventListener("change", handleReplayGainToggleChange);
   themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange);
   applyThemePreference();
   renderKeyboardShortcuts();
@@ -9355,6 +9366,9 @@ function renderSettings() {
   }
   if (settingsThemeSelect) {
     settingsThemeSelect.value = state.themePreference;
+  }
+  if (settingsReplayGainToggle) {
+    settingsReplayGainToggle.checked = state.replayGainEnabled;
   }
   settingsPlaybackError.textContent = getSettingsPlaybackErrorLabel();
   settingsPlaybackError.classList.toggle("settings-error-value", settingsPlaybackError.textContent !== "-");
@@ -19788,6 +19802,7 @@ async function playTrack(track, queue, options = {}) {
 
   state.currentMediaSourceId = playbackSession.mediaSourceId;
   state.currentPlaySessionId = playbackSession.playSessionId;
+  applyReplayGain(playbackSession.replayGainDb);
   const source = playbackSession.streamUrl;
   activePlaybackLoadProfile = playbackSession.loadProfile || null;
 
@@ -20163,6 +20178,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
         playSessionId: media.playSessionId || ensurePlaybackSessionId(track),
         streamUrl: media.streamUrl,
         loadProfile: buildExternalPlaybackLoadProfile(track, media.streamUrl, media),
+        replayGainDb: playerOps.getReplayGainDb(track.MediaSources, media.mediaSourceId),
       };
     } catch (error) {
       if (requestId !== state.playRequestId) {
@@ -20183,6 +20199,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
     mediaSourceId: fallbackMediaSourceId,
     playSessionId: fallbackPlaySessionId,
     streamUrl: getAudioStreamUrl(track, mode, fallbackPlaySessionId, fallbackMediaSourceId),
+    replayGainDb: playerOps.getReplayGainDb(track.MediaSources, fallbackMediaSourceId),
   };
 
   try {
@@ -20202,6 +20219,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
       mediaSourceId,
       playSessionId,
       streamUrl: getAudioStreamUrl(track, mode, playSessionId, mediaSourceId),
+      replayGainDb: playerOps.getReplayGainDb(playbackInfo?.MediaSources, mediaSourceId),
     };
   } catch (error) {
     if (requestId !== state.playRequestId) {
@@ -21430,6 +21448,7 @@ function resetPlayerPreferences() {
   state.playbackLosslessPrecacheEnabled = false;
   state.coverColorEnabled = true;
   state.themePreference = "system";
+  state.replayGainEnabled = false;
   state.trackDensity = "comfortable";
   state.playerMetaTarget = "immersive";
   state.volume = 1;
@@ -21445,6 +21464,7 @@ function resetPlayerPreferences() {
   storage.clearPlaybackLosslessPrecacheEnabled?.();
   localStorage.removeItem(COVER_COLOR_ENABLED_KEY);
   localStorage.removeItem(THEME_PREFERENCE_KEY);
+  localStorage.removeItem(REPLAY_GAIN_ENABLED_KEY);
   storage.clearTrackDensity();
   storage.clearPlayerMetaTarget();
   storage.clearTranscodeBitrate();
@@ -21459,6 +21479,7 @@ function resetPlayerPreferences() {
   renderLibrary();
   applyTrackAccent(state.currentTrack);
   applyThemePreference();
+  applyReplayGain(state.currentReplayGainDb);
   renderSettings();
   setLibraryStatus("播放器偏好已重置。");
 }
@@ -21489,6 +21510,7 @@ function getExportPreferences() {
     playbackLosslessPrecacheEnabled: Boolean(state.playbackLosslessPrecacheEnabled),
     coverColorEnabled: Boolean(state.coverColorEnabled),
     themePreference: settingsOps.normalizeThemePreference(state.themePreference),
+    replayGainEnabled: Boolean(state.replayGainEnabled),
   };
 }
 
@@ -21543,6 +21565,7 @@ function applyImportedLocalData(data) {
   state.playbackLosslessPrecacheEnabled = preferences.playbackLosslessPrecacheEnabled === true;
   state.coverColorEnabled = preferences.coverColorEnabled !== false;
   state.themePreference = settingsOps.normalizeThemePreference(preferences.themePreference);
+  state.replayGainEnabled = preferences.replayGainEnabled === true;
   storage.savePlayMode(state.playMode);
   storage.saveSortKey(state.sortKey);
   storage.saveSortOrder(state.sortOrder);
@@ -21553,6 +21576,7 @@ function applyImportedLocalData(data) {
   storage.savePlaybackLosslessPrecacheEnabled?.(state.playbackLosslessPrecacheEnabled);
   saveCoverColorEnabled();
   saveThemePreference();
+  saveReplayGainEnabled();
   saveLyricSettings();
   savePlaybackDisplaySettings(state.playbackDisplaySettings);
   saveImportedFavorites();
@@ -21569,6 +21593,7 @@ function applyImportedLocalData(data) {
   renderHomeSections();
   applyTrackAccent(state.currentTrack);
   applyThemePreference();
+  applyReplayGain(state.currentReplayGainDb);
   renderSettings();
   renderPlayer();
 }
@@ -22042,6 +22067,7 @@ async function preparePreloadedPlaybackSession(track, mode, playSessionId, media
       mediaSourceId: resolvedMediaSourceId,
       playSessionId: resolvedPlaySessionId,
       streamUrl: state.preloadSource,
+      replayGainDb: playerOps.getReplayGainDb(playbackInfo?.MediaSources, resolvedMediaSourceId),
     };
 
     if (state.preloadSource !== source) {
@@ -22057,6 +22083,7 @@ async function preparePreloadedPlaybackSession(track, mode, playSessionId, media
         mediaSourceId,
         playSessionId,
         streamUrl: source,
+        replayGainDb: playerOps.getReplayGainDb(track.MediaSources, mediaSourceId),
       };
       renderSettings();
     }
@@ -23082,6 +23109,77 @@ function handleCoverColorToggleChange() {
   state.coverColorEnabled = settingsCoverColorToggle?.checked !== false;
   saveCoverColorEnabled();
   applyTrackAccent(state.currentTrack);
+  renderSettings();
+}
+
+function loadReplayGainEnabled() {
+  return localStorage.getItem(REPLAY_GAIN_ENABLED_KEY) === "true";
+}
+
+function saveReplayGainEnabled() {
+  localStorage.setItem(REPLAY_GAIN_ENABLED_KEY, String(Boolean(state.replayGainEnabled)));
+}
+
+function ensurePlaybackGainChain() {
+  if (replayGainNode && sleepFadeGainNode && playbackMediaSourceNode) {
+    playbackAudioContext?.resume?.().catch(() => {});
+    return true;
+  }
+  if (playbackGainUnavailable) return false;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass || !audioPlayer) {
+    playbackGainUnavailable = true;
+    return false;
+  }
+
+  try {
+    playbackAudioContext = new AudioContextClass();
+    playbackMediaSourceNode = playbackAudioContext.createMediaElementSource(audioPlayer);
+    replayGainNode = playbackAudioContext.createGain();
+    sleepFadeGainNode = playbackAudioContext.createGain();
+    replayGainNode.gain.value = 1;
+    sleepFadeGainNode.gain.value = 1;
+    playbackMediaSourceNode.connect(replayGainNode);
+    replayGainNode.connect(sleepFadeGainNode);
+    sleepFadeGainNode.connect(playbackAudioContext.destination);
+    playbackAudioContext.resume?.().catch(() => {});
+    return true;
+  } catch {
+    playbackGainUnavailable = true;
+    playbackAudioContext?.close?.().catch(() => {});
+    playbackAudioContext = null;
+    playbackMediaSourceNode = null;
+    replayGainNode = null;
+    sleepFadeGainNode = null;
+    return false;
+  }
+}
+
+function setGainNodeValue(node, value) {
+  if (!node?.gain) return;
+  const now = playbackAudioContext?.currentTime || 0;
+  const normalized = Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 1;
+  node.gain.cancelScheduledValues?.(now);
+  node.gain.setValueAtTime?.(normalized, now);
+}
+
+function applyReplayGain(replayGainDb) {
+  const numeric = replayGainDb === null || replayGainDb === undefined || replayGainDb === ""
+    ? Number.NaN
+    : Number(replayGainDb);
+  state.currentReplayGainDb = Number.isFinite(numeric) ? numeric : null;
+  state.replayGainMultiplier = state.replayGainEnabled
+    ? playerOps.replayGainToMultiplier(state.currentReplayGainDb)
+    : 1;
+  if (!state.replayGainEnabled && !replayGainNode) return;
+  if (ensurePlaybackGainChain()) setGainNodeValue(replayGainNode, state.replayGainMultiplier);
+}
+
+function handleReplayGainToggleChange() {
+  state.replayGainEnabled = settingsReplayGainToggle?.checked === true;
+  saveReplayGainEnabled();
+  applyReplayGain(state.currentReplayGainDb);
   renderSettings();
 }
 

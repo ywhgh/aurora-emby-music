@@ -489,7 +489,7 @@ function checkLyrics() {
   assert(app.includes("function getImmersiveVisualizerAudioStats"), "Immersive music visualizer should derive RMS/peak/frequency energy from captured audio");
   assert(app.includes("function getImmersiveVisualizerReactiveLevels"), "Immersive music visualizer should render audio-reactive waveform levels");
   assert(app.includes("createMediaStreamSource(immersiveVisualizerStream)"), "Immersive music visualizer should keep the safe captureStream MediaStreamSource path");
-  assert(!app.includes("createMediaElementSource(audioPlayer)"), "Immersive music visualizer must not use MediaElementSource on the shared audio element");
+  assert(!app.includes("immersiveVisualizerAudioContext.createMediaElementSource"), "Immersive music visualizer must not use MediaElementSource on the shared audio element");
   assert(app.includes("function scheduleImmersiveVisualizerSync"), "Immersive music visualizer should have a retryable playback sync scheduler");
   assert(/function handleAudioPlay\(\) \{[\s\S]*?scheduleImmersiveVisualizerSync\(\);/.test(app), "Audio play should immediately trigger the immersive music visualizer");
   assert(/function handleAudioBufferingEnd\(\) \{[\s\S]*?scheduleImmersiveVisualizerSync\(\);/.test(app), "Audio playing/canplay should retrigger the immersive music visualizer after buffering");
@@ -1361,6 +1361,18 @@ async function checkLocalDataModule() {
   assert(rejected, "Local import should reject payloads containing sensitive fields or hosts");
 }
 
+async function checkPlayerModule() {
+  const source = read("src/player.js");
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  const player = await import(moduleUrl);
+  const replayGain = player.getReplayGainDb([{
+    Id: "fixture-source",
+    MediaStreams: [{ Type: "Audio", ReplayGain: -6 }],
+  }], "fixture-source");
+  assert(replayGain === -6, "Player should read ReplayGain from the selected Emby audio stream");
+  assert(Math.abs(player.replayGainToMultiplier(-6) - Math.pow(10, -6 / 20)) < 1e-12, "Player should convert ReplayGain dB to a linear multiplier");
+}
+
 async function checkSettingsModule() {
   const source = read("src/settings.js");
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -1432,6 +1444,11 @@ function checkAppFunctionReferences() {
   assert(app.includes('window.matchMedia?.("(prefers-color-scheme: dark)")'), "System theme should observe the browser dark-mode query");
   assert(app.includes('themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange)'), "System theme should react to preference changes");
   assert(index.includes('id="settingsThemeSelect"'), "Settings should expose light, dark, and system theme choices");
+  assert(index.includes('id="settingsReplayGainToggle"'), "Settings should expose the optional ReplayGain control");
+  assert(app.includes('localStorage.getItem(REPLAY_GAIN_ENABLED_KEY) === "true"'), "ReplayGain should stay disabled unless explicitly enabled");
+  assert(app.includes("createMediaElementSource(audioPlayer)"), "ReplayGain should route playback through WebAudio only when needed");
+  assert(app.includes("replayGainNode.connect(sleepFadeGainNode)"), "ReplayGain and sleep fade should use separate serial GainNodes");
+  assert(app.includes("playerOps.getReplayGainDb(playbackInfo?.MediaSources, mediaSourceId)"), "Playback sessions should read ReplayGain from Emby media streams");
   assert(app.includes("const KEYBOARD_SHORTCUTS = Object.freeze(["), "Keyboard handling and UI should share one descriptor list");
   assert(app.includes("KEYBOARD_SHORTCUTS.find((item) => item.keys.includes(event.key))"), "Keyboard events should resolve through descriptors");
   assert(app.includes("KEYBOARD_SHORTCUTS.forEach((shortcut)"), "Shortcut UI should render from descriptors");
@@ -1789,6 +1806,7 @@ async function main() {
   checkStorageQueuePersistence();
   await checkCoverColorModule();
   await checkLocalDataModule();
+  await checkPlayerModule();
   await checkSettingsModule();
   await checkStoreModule();
   checkAppFunctionReferences();
