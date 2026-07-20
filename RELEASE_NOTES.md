@@ -71,6 +71,27 @@
 - `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
 - `git diff --check`
 
+
+### M3 · 死代码清理与安全 DOM 底座（R1 / R2）
+
+### 版本说明
+移除未接入运行路径的旧模块，并以共享 DOM helper 收敛加载态、空态、HTML 转义和静态 SVG 注入；业务代码不再直接写入 `innerHTML`。
+
+### 更新内容
+- 删除 `state-management.js`、`accessibility.js`、`color-extractor.js`、`performance.js`、`theme.js`、`ui-helpers.js` 及对应 script 标签。
+- 新增 `src/dom-helpers.js`，统一提供 `appendLoading`、`appendEmpty`、`escapeHtml`、`setStaticMarkup`。
+- 动态文本通过 `textContent` 构建；静态 SVG 片段集中经 `setStaticMarkup` 的危险标签与事件属性检查。
+- `src/format.js` 复用共享 `escapeHtml`，避免多份转义实现漂移。
+- Service Worker app shell 纳入 DOM helper、脱敏、登录兜底和 HLS ready 脚本。
+- smoke 增加 DOM helper 单元用例、删除模块检查以及业务源码直接 `innerHTML` 写入约束。
+
+### 验证
+- `npm run check`
+- `npm run smoke`
+- `npm run smoke:bridge`
+- `$env:BROWSER_SMOKE_RUN='1'; $env:BROWSER_SMOKE_TIMEOUT_MS='90000'; npm run smoke:browser`
+- `git diff --check`
+
 ---
 
 ## 0.93.230

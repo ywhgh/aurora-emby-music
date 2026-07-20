@@ -55,6 +55,11 @@ const redact = window.EmbyMusicRedact || {
   redactUrl: (value) => String(value || ""),
 };
 const {
+  appendEmpty,
+  appendLoading,
+  setStaticMarkup,
+} = window.EmbyMusicDomHelpers;
+const {
   clamp,
   coverClass,
   escapeHeaderValue,
@@ -5176,7 +5181,7 @@ function createMobileProfileContentButton(item) {
 
   const cover = document.createElement("span");
   cover.className = `mobile-profile-playlist-cover ${item.tone || ""}`.trim();
-  cover.innerHTML = getMobileProfileIconMarkup(item.icon);
+  setStaticMarkup(cover, getMobileProfileIconMarkup(item.icon));
 
   const copy = document.createElement("span");
   copy.className = "mobile-profile-playlist-copy";
@@ -5191,7 +5196,7 @@ function createMobileProfileContentButton(item) {
   const dots = document.createElement("span");
   dots.className = "mobile-profile-more-dots";
   dots.setAttribute("aria-hidden", "true");
-  dots.innerHTML = "<i></i><i></i><i></i>";
+  setStaticMarkup(dots, "<i></i><i></i><i></i>");
 
   button.append(cover, copy, dots);
   return button;
@@ -6479,22 +6484,24 @@ function renderLoadingShell() {
   homeRecentQueueButton.disabled = true;
   homeRecentAddPlayButton.disabled = true;
   homeRecentAddQueueButton.disabled = true;
-  homeRecentPlayedList.innerHTML = state.recentTracks.length
-    ? homeTrackSkeletonMarkup("正在加载最近播放...")
-    : "";
-  homePlaylistGrid.innerHTML = loadingMarkup("正在加载歌单...");
-  homeFavoriteAlbumGrid.innerHTML = loadingMarkup("正在加载收藏专辑...");
-  allAlbumGrid.innerHTML = loadingMarkup("正在加载专辑...");
-  playlistGrid.innerHTML = loadingMarkup("正在加载歌单...");
-  favoritePlaylistGrid.innerHTML = loadingMarkup("正在加载收藏歌单...");
-  favoriteAlbumGrid.innerHTML = loadingMarkup("正在加载收藏专辑...");
-  favoriteArtistGrid.innerHTML = loadingMarkup("正在加载收藏艺人...");
-  recentTrackList.innerHTML = homeTrackSkeletonMarkup("正在加载歌曲...");
-  libraryTrackList.innerHTML = loadingMarkup("正在加载歌曲...");
-  artistGrid.innerHTML = loadingMarkup("正在加载艺人...");
-  favoriteTrackList.innerHTML = loadingMarkup("正在加载收藏...");
+  if (state.recentTracks.length) {
+    setStaticMarkup(homeRecentPlayedList, homeTrackSkeletonMarkup("正在加载最近播放..."));
+  } else {
+    homeRecentPlayedList.replaceChildren();
+  }
+  appendLoading(homePlaylistGrid, "正在加载歌单...");
+  appendLoading(homeFavoriteAlbumGrid, "正在加载收藏专辑...");
+  appendLoading(allAlbumGrid, "正在加载专辑...");
+  appendLoading(playlistGrid, "正在加载歌单...");
+  appendLoading(favoritePlaylistGrid, "正在加载收藏歌单...");
+  appendLoading(favoriteAlbumGrid, "正在加载收藏专辑...");
+  appendLoading(favoriteArtistGrid, "正在加载收藏艺人...");
+  setStaticMarkup(recentTrackList, homeTrackSkeletonMarkup("正在加载歌曲..."));
+  appendLoading(libraryTrackList, "正在加载歌曲...");
+  appendLoading(artistGrid, "正在加载艺人...");
+  appendLoading(favoriteTrackList, "正在加载收藏...");
   renderRecent();
-  queueTrackList.innerHTML = emptyMarkup("播放队列为空。");
+  appendEmpty(queueTrackList, { text: "播放队列为空。" });
   loadMoreTracksButton.hidden = true;
   loadMoreAlbumsButton.hidden = true;
   loadMoreArtistsButton.hidden = true;
@@ -6512,18 +6519,18 @@ function renderLibraryError(text) {
   homeRecentQueueButton.disabled = true;
   homeRecentAddPlayButton.disabled = true;
   homeRecentAddQueueButton.disabled = true;
-  homeRecentPlayedList.innerHTML = emptyMarkup(message);
-  homePlaylistGrid.innerHTML = emptyMarkup(message);
-  homeFavoriteAlbumGrid.innerHTML = emptyMarkup(message);
-  allAlbumGrid.innerHTML = emptyMarkup(message);
-  playlistGrid.innerHTML = emptyMarkup(message);
-  favoritePlaylistGrid.innerHTML = emptyMarkup(message);
-  favoriteAlbumGrid.innerHTML = emptyMarkup(message);
-  favoriteArtistGrid.innerHTML = emptyMarkup(message);
-  recentTrackList.innerHTML = emptyMarkup(message);
-  libraryTrackList.innerHTML = emptyMarkup(message);
-  favoriteTrackList.innerHTML = emptyMarkup(message);
-  artistGrid.innerHTML = emptyMarkup(message);
+  appendEmpty(homeRecentPlayedList, { text: message });
+  appendEmpty(homePlaylistGrid, { text: message });
+  appendEmpty(homeFavoriteAlbumGrid, { text: message });
+  appendEmpty(allAlbumGrid, { text: message });
+  appendEmpty(playlistGrid, { text: message });
+  appendEmpty(favoritePlaylistGrid, { text: message });
+  appendEmpty(favoriteAlbumGrid, { text: message });
+  appendEmpty(favoriteArtistGrid, { text: message });
+  appendEmpty(recentTrackList, { text: message });
+  appendEmpty(libraryTrackList, { text: message });
+  appendEmpty(favoriteTrackList, { text: message });
+  appendEmpty(artistGrid, { text: message });
 }
 
 function renderAlbumGrid(container, albums, options = {}) {
@@ -7327,7 +7334,7 @@ function createActionIcon(icon) {
     return wrapper;
   }
 
-  wrapper.innerHTML = `<svg class="line-icon action-icon-${iconName}" viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICON_PATHS[iconName]}</svg>`;
+  setStaticMarkup(wrapper, `<svg class="line-icon action-icon-${iconName}" viewBox="0 0 24 24" aria-hidden="true">${ACTION_ICON_PATHS[iconName]}</svg>`);
   return wrapper;
 }
 
@@ -8543,7 +8550,7 @@ function renderQueue() {
   settingsClearQueueButton.disabled = !state.queue.length;
 
   if (!state.queue.length) {
-    queueTrackList.innerHTML = emptyMarkup("播放队列为空。点一首歌曲或使用随机播放。");
+    appendEmpty(queueTrackList, { text: "播放队列为空。点一首歌曲或使用随机播放。" });
     closeQuickQueue({ restoreFocus: false });
     closeImmersiveQueue({ restoreFocus: false });
     renderUpNext();
@@ -8638,7 +8645,7 @@ function renderQuickQueue() {
   quickQueueList.replaceChildren();
 
   if (!state.queue.length) {
-    quickQueueList.innerHTML = emptyMarkup("播放队列为空。");
+    appendEmpty(quickQueueList, { text: "播放队列为空。" });
     return;
   }
 
@@ -14169,14 +14176,14 @@ function renderUpNextList(container, limit) {
   container.replaceChildren();
 
   if (!state.queue.length || state.currentTrackIndex < 0) {
-    container.innerHTML = emptyMarkup("暂无后续播放。");
+    appendEmpty(container, { text: "暂无后续播放。" });
     return;
   }
 
   const nextItems = getUpcomingTracks(limit);
 
   if (!nextItems.length) {
-    container.innerHTML = emptyMarkup("当前已经是队列最后一首。");
+    appendEmpty(container, { text: "当前已经是队列最后一首。" });
     return;
   }
 
@@ -14211,7 +14218,7 @@ function renderImmersiveQueue() {
   immersiveUpNextList.replaceChildren();
 
   if (!state.queue.length) {
-    immersiveUpNextList.innerHTML = emptyMarkup("播放队列为空。");
+    appendEmpty(immersiveUpNextList, { text: "播放队列为空。" });
     return;
   }
 
@@ -17397,7 +17404,7 @@ function renderAlbumDetail(album, tracks, isLoading) {
   updateFavoriteButton(favoriteAlbumButton, album, "收藏专辑");
 
   if (isLoading) {
-    albumTrackList.innerHTML = loadingMarkup("正在加载专辑歌曲...");
+    appendLoading(albumTrackList, "正在加载专辑歌曲...");
     return;
   }
 
@@ -17577,8 +17584,8 @@ function renderArtistDetail(artist, albums, tracks, isLoading) {
   updateFavoriteButton(favoriteArtistButton, artist, "收藏艺人");
 
   if (isLoading) {
-    artistAlbumGrid.innerHTML = loadingMarkup("正在加载艺人专辑...");
-    artistTrackList.innerHTML = loadingMarkup("正在加载艺人歌曲...");
+    appendLoading(artistAlbumGrid, "正在加载艺人专辑...");
+    appendLoading(artistTrackList, "正在加载艺人歌曲...");
     return;
   }
 
@@ -17855,7 +17862,7 @@ function renderPlaylistDetail(playlist, tracks, isLoading) {
     if (loadMorePlaylistTracksButton) {
       loadMorePlaylistTracksButton.hidden = true;
     }
-    playlistTrackList.innerHTML = loadingMarkup("正在加载歌单歌曲...");
+    appendLoading(playlistTrackList, "正在加载歌单歌曲...");
     return;
   }
 
@@ -22822,14 +22829,14 @@ function ensureFloatingVideoShell() {
   floatingVideoMinimizeButton.className = "floating-video-control";
   floatingVideoMinimizeButton.setAttribute("aria-label", "缩小视频窗口");
   floatingVideoMinimizeButton.title = "缩小视频窗口";
-  floatingVideoMinimizeButton.innerHTML = '<svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H6.8A1.8 1.8 0 0 0 5 6.8V9"></path><path d="M15 5h2.2A1.8 1.8 0 0 1 19 6.8V9"></path><path d="M19 15v2.2a1.8 1.8 0 0 1-1.8 1.8H15"></path><path d="M9 19H6.8A1.8 1.8 0 0 1 5 17.2V15"></path></svg>';
+  setStaticMarkup(floatingVideoMinimizeButton, '<svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H6.8A1.8 1.8 0 0 0 5 6.8V9"></path><path d="M15 5h2.2A1.8 1.8 0 0 1 19 6.8V9"></path><path d="M19 15v2.2a1.8 1.8 0 0 1-1.8 1.8H15"></path><path d="M9 19H6.8A1.8 1.8 0 0 1 5 17.2V15"></path></svg>');
 
   floatingVideoHideButton = document.createElement("button");
   floatingVideoHideButton.type = "button";
   floatingVideoHideButton.className = "floating-video-control";
   floatingVideoHideButton.setAttribute("aria-label", "隐藏视频窗口");
   floatingVideoHideButton.title = "隐藏视频窗口";
-  floatingVideoHideButton.innerHTML = '<svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10"></path><path d="M17 7 7 17"></path></svg>';
+  setStaticMarkup(floatingVideoHideButton, '<svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10"></path><path d="M17 7 7 17"></path></svg>');
 
   controls.append(floatingVideoMinimizeButton, floatingVideoHideButton);
   floatingVideoShell.append(controls);
@@ -23166,7 +23173,7 @@ function syncCurrentAccentStatus() {
   }
 
   const accent = state.currentAccent || DEFAULT_TRACK_ACCENT;
-  settingsAccentColor.innerHTML = "";
+  settingsAccentColor.replaceChildren();
   const swatch = document.createElement("span");
   swatch.className = "settings-accent-swatch";
   swatch.style.background = `linear-gradient(135deg, ${accent.color}, ${accent.deep})`;
@@ -25456,10 +25463,6 @@ function getArtistSubtitle(artist) {
   ].filter(Boolean).join(" · ") || "Artist";
 }
 
-function loadingMarkup(text) {
-  return `<div class="loading-state">${escapeHtml(text)}</div>`;
-}
-
 function homeTrackSkeletonMarkup(text) {
   const rows = Array.from({ length: 4 }, (_, index) => `
     <div class="home-track-skeleton-row" aria-hidden="true">
@@ -25479,10 +25482,6 @@ function homeTrackSkeletonMarkup(text) {
   `.trim()).join("");
 
   return `<div class="home-track-skeleton-list" role="status" aria-live="polite" aria-label="${escapeHtml(text)}">${rows}<span class="sr-only">${escapeHtml(text)}</span></div>`;
-}
-
-function emptyMarkup(text) {
-  return `<div class="empty-state">${escapeHtml(text)}</div>`;
 }
 
 function createEmptyState(text, actions = []) {

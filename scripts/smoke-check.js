@@ -89,6 +89,55 @@ function checkRedaction() {
   assert(app.includes("settingsServerUrl.textContent = redact.redactServer"), "settings server URL should be masked for display");
 }
 
+
+function checkDomHelpers() {
+  const helperCode = read("src/dom-helpers.js");
+  const created = [];
+  const document = {
+    createElement(tagName) {
+      const element = {
+        tagName: String(tagName).toUpperCase(),
+        className: "",
+        textContent: "",
+        attributes: {},
+        setAttribute(name, value) { this.attributes[name] = String(value); },
+      };
+      created.push(element);
+      return element;
+    },
+  };
+  const context = { document, TypeError, window: {} };
+  vm.runInNewContext(helperCode, context, { filename: "src/dom-helpers.js" });
+  const helpers = context.window.EmbyMusicDomHelpers;
+  const container = { children: [], replaceChildren(...children) { this.children = children; } };
+
+  assert(helpers?.escapeHtml('<img src=x onerror="x">') === "&lt;img src=x onerror=&quot;x&quot;&gt;", "DOM escapeHtml should encode untrusted markup");
+  helpers?.appendLoading(container, "加载 <外部>");
+  assert(container.children[0]?.textContent === "加载 <外部>", "appendLoading should use textContent instead of parsing markup");
+  helpers?.appendEmpty(container, { text: "空 <外部>" });
+  assert(container.children[0]?.textContent === "空 <外部>", "appendEmpty should use textContent instead of parsing markup");
+
+  const app = read("app.js");
+  const sourceFiles = fs.readdirSync(path.join(root, "src")).filter((name) => name.endsWith(".js") && name !== "dom-helpers.js");
+  const rawInnerHtml = ["app.js", ...sourceFiles.map((name) => `src/${name}`)]
+    .filter((file) => /\.innerHTML\s*=/.test(read(file)));
+  assert(!rawInnerHtml.length, `Only setStaticMarkup may assign innerHTML: ${rawInnerHtml.join(", ")}`);
+  assert(app.includes("setStaticMarkup(wrapper"), "Static SVG fragments should use setStaticMarkup");
+  assert(app.includes("appendLoading(homePlaylistGrid"), "Loading states should use appendLoading");
+  assert(app.includes("appendEmpty(homeRecentPlayedList, { text: message })"), "Dynamic empty states should use appendEmpty");
+
+  const index = read("index.html");
+  const sw = read("sw.js");
+  const removed = ["state-management.js", "accessibility.js", "color-extractor.js", "performance.js", "theme.js", "ui-helpers.js"];
+  removed.forEach((name) => {
+    assert(!fs.existsSync(path.join(root, "src", name)), `${name} should be removed`);
+    assert(!index.includes(name), `${name} should not be loaded by index.html`);
+    assert(!sw.includes(name), `${name} should not be cached by the service worker`);
+  });
+  assert(index.includes("./src/dom-helpers.js"), "index.html should load the shared DOM helpers before app.js");
+  assert(sw.includes('versioned("./src/dom-helpers.js")'), "service worker app shell should cache DOM helpers");
+}
+
 function checkVersions() {
   const index = read("index.html");
   const fallback = read("src/login-fallback.js");
@@ -1593,6 +1642,7 @@ function findMissingHtmlIdReferences(html, ids, attribute) {
 
 async function main() {
   checkRedaction();
+  checkDomHelpers();
   checkVersions();
   checkCss();
   checkLyrics();
