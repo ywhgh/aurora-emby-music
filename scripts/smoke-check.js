@@ -1190,8 +1190,9 @@ async function checkExternalSourceLyrics() {
   }
 
   const bridge = read("scripts/source-bridge.js");
+  const sourcePins = read("scripts/source-pins.js");
   assert(bridge.includes("DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS"), "Source bridge should include built-in default manifests");
-  assert(bridge.includes("https://13413.kstore.vip/yuanli/yuanli.json"), "Source bridge should include the default yuanli manifest");
+  assert(sourcePins.includes("https://13413.kstore.vip/yuanli/yuanli.json"), "Source pins should include the default yuanli manifest");
   assert(bridge.includes("function getDefaultSourceBridgeManifestUrls"), "Source bridge should expose a default manifest helper");
   assert(bridge.includes("return shouldLoadDefaultManifestUrls ? DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS : []"), "Source bridge should load the built-in manifest by default unless disabled");
   assert(bridge.includes("SOURCE_BRIDGE_NO_DEFAULT_MANIFESTS"), "Source bridge should allow tests to disable built-in manifests");
@@ -1227,7 +1228,11 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes('require("node:worker_threads")'), "Source bridge should isolate plugins in worker threads");
   assert(bridge.includes('source-plugin-worker.mjs'), "Source bridge should use the dedicated plugin worker entry");
   assert(bridge.includes("maxOldGenerationSizeMb: 256"), "Plugin workers should have a 256 MB old-generation limit");
-  assert(bridge.includes("PLUGIN_CALL_TIMEOUT_MS = 3000"), "Plugin calls should have a 3 second execution budget");
+  assert(bridge.includes("PLUGIN_CPU_BUDGET_MS = 3000"), "Plugin workers should enforce a 3 second CPU budget");
+  assert(bridge.includes("PLUGIN_CALL_TIMEOUT_MS = 15000"), "Plugin network calls should have a bounded wall timeout");
+ assert(sourcePins.includes("BUILT_IN_SOURCE_PINS"), "Built-in source manifests should use pinned SHA-256 trust");
+  assert(bridge.includes("verifyBuiltInManifestContent") && bridge.includes("verifyBuiltInPluginContent"), "Built-in manifests and plugin payloads should both be pinned");
+  assert((sourcePins.match(/[a-f0-9]{64}/g) || []).length >= 7, "Built-in manifest and all six plugins should have pinned hashes");
   assert(bridge.includes("EMBY_BRIDGE_TRUSTED_KEYS"), "Source bridge should load trusted plugin signing keys from the environment");
   assert(bridge.includes("SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS"), "Source bridge should expose an explicit unsigned-plugin override");
   assert(bridge.includes('crypto.verify("sha256"'), "Source bridge should verify detached manifest and plugin signatures");
@@ -1235,6 +1240,8 @@ async function checkExternalSourceLyrics() {
   assert(pluginWorker.includes('new Set(["search", "getMediaSource", "getLyric"])'), "Plugin worker should expose only the approved RPC methods");
   assert(pluginWorker.includes("validatePluginSource"), "Plugin worker should reject privileged source constructs before execution");
   assert(pluginWorker.includes("safeRequire"), "Plugin worker should expose only the dependency allowlist");
+  assert(pluginWorker.includes("callable.default = callable"), "Safe axios should preserve CommonJS default-import compatibility");
+  assert(!pluginWorker.includes("plugin dependency access blocked"), "Plugin worker should not reject require words stored as inert obfuscation data");
   assert(pluginWorker.includes("assertSafeRemoteUrl"), "Plugin worker network capabilities should apply private-host guards");
   assert(pluginWorker.includes("lockDownWorkerRealm"), "Plugin worker should remove privileged runtime globals before plugin execution");
   assert(!pluginWorker.includes('from "node:fs"'), "Plugin worker should not import filesystem capabilities");
@@ -1439,7 +1446,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.5")'), "main.js should load app.js through native ESM");
+  assert(main.includes('await import("./app.js?v=0.94.6")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");

@@ -7,13 +7,22 @@ const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
+const { Worker } = require("node:worker_threads");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const BRIDGE_SCRIPT = path.join(ROOT_DIR, "scripts", "source-bridge.js");
+const {
+  BUILT_IN_SOURCE_PINS,
+  DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS,
+  isPinnedSha256,
+  verifyBuiltInManifestContent,
+} = require("./source-pins.js");
 const FIXTURE_MEDIA = Buffer.from("ID3\u0003\u0000\u0000\u0000\u0000\u0000\u0000EMBY_MUSIC_BRIDGE_SMOKE");
 const HEALTH_TIMEOUT_MS = 20000;
 
 async function main() {
+  checkBuiltInSourcePins();
+  await checkWorkerDependencyGuard();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "emby-music-source-bridge-smoke-"));
   const pluginCachePath = path.join(tempDir, "plugin-cache.json");
   const fixture = await createFixtureServer();
@@ -151,6 +160,9 @@ function createFixtureServer() {
   });
   const lrclibRequests = { exact: 0, search: 0 };
   const pluginCodeForOrigin = (origin) => `
+const axios_1 = require("axios");
+const compatibilityMarker = "bundled require keyword";
+if (typeof axios_1.default !== "function") { throw new Error("axios default import missing"); }
 module.exports = {
   platform: "Smoke",
   supportedSearchType: ["music"],
@@ -292,6 +304,50 @@ module.exports = {
       });
     });
   });
+}
+
+async function checkWorkerDependencyGuard() {
+  const worker = new Worker(path.join(ROOT_DIR, "scripts", "source-plugin-worker.mjs"), {
+    workerData: {
+      pluginName: "Blocked Dependency Fixture",
+      code: 'const dependencyName = "node:fs"; require(dependencyName); module.exports = {};',
+    },
+    resourceLimits: { maxOldGenerationSizeMb: 256 },
+    execArgv: [...new Set([...process.execArgv, "--preserve-symlinks"])],
+  });
+  try {
+    const message = await Promise.race([
+      new Promise((resolve, reject) => {
+        worker.once("message", resolve);
+        worker.once("error", reject);
+      }),
+      delay(5000).then(() => { throw new Error("blocked dependency worker timed out"); }),
+    ]);
+    assert(message?.type === "fatal", "dynamic dependency access outside the allowlist should be blocked");
+  } finally {
+    await worker.terminate();
+  }
+}
+
+function checkBuiltInSourcePins() {
+  const manifestBody = {
+    plugins: [
+      { name: "网易", url: "https://13413.kstore.vip/yuanli/wy.js", version: "1.2.0" },
+      { name: "酷我", url: "https://13413.kstore.vip/yuanli/kw.js", version: "1.2.0" },
+      { name: "酷gou", url: "https://13413.kstore.vip/yuanli/kg.js", version: "1.2.0" },
+      { name: "qq", url: "https://13413.kstore.vip/yuanli/qq.js", version: "1.2.0" },
+      { name: "bilibili", url: "https://gitee.com/maotoumao/MusicFreePlugins/raw/v0.1/dist/bilibili/index.js", version: "0.1.0" },
+      { name: "mg", url: "https://13413.kstore.vip/yuanli/xiaomi.js", version: "1.2.0" },
+    ],
+  };
+  const manifestUrl = DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS[0];
+  assert(BUILT_IN_SOURCE_PINS.get(manifestUrl)?.plugins.size === 6, "built-in source pin set should cover all six plugins");
+  assert(verifyBuiltInManifestContent(manifestUrl, stableStringify(manifestBody)), "built-in manifest pin should match the catalog snapshot");
+  manifestBody.plugins[0].version = "tampered";
+  assert(!verifyBuiltInManifestContent(manifestUrl, stableStringify(manifestBody)), "modified built-in manifest content should fail pin verification");
+  const fixtureHash = crypto.createHash("sha256").update("fixture plugin").digest("hex");
+  assert(isPinnedSha256("fixture plugin", fixtureHash), "SHA-256 pin helper should accept matching content");
+  assert(!isPinnedSha256("modified plugin", fixtureHash), "SHA-256 pin helper should reject modified content");
 }
 
 function stableStringify(value) {

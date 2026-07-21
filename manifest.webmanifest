@@ -1,7 +1,7 @@
 {
   "name": "Aurora Music",
   "short_name": "Aurora",
-  "version": "0.94.5",
+  "version": "0.94.6",
   "description": "A responsive music player for your personal library.",
   "start_url": "./index.html",
   "scope": "./",

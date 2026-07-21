@@ -12,6 +12,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { URL } = require("node:url");
 const { Worker } = require("node:worker_threads");
+const {
+  DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS,
+  getBuiltInSourcePin,
+  verifyBuiltInManifestContent,
+  verifyBuiltInPluginContent,
+} = require("./source-pins.js");
 
 const BRIDGE_VERSION = "0.1.0";
 const AUDIO_EXTENSIONS = new Set([".mp3", ".flac", ".m4a", ".aac", ".wav", ".ogg", ".opus"]);
@@ -24,9 +30,7 @@ const ARTWORK_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const LRCLIB_DEFAULT_API_URL = "https://lrclib.net";
 const LRCLIB_REQUEST_TIMEOUT_MS = 6500;
 const MAX_LYRIC_BYTES = 1024 * 1024;
-const DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS = [
-  "https://13413.kstore.vip/yuanli/yuanli.json",
-];
+const DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS = DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS;
 const COVER_NAMES = [
   "cover.jpg",
   "cover.jpeg",
@@ -46,7 +50,10 @@ const allowAnonymousConfigure = isTruthy(options.allowAnonymousConfigure || proc
 const allowUnsignedPlugins = isTruthy(options.allowUnsignedPlugins || process.env.SOURCE_BRIDGE_ALLOW_UNSIGNED_PLUGINS);
 const trustedPluginKeys = parseTrustedPluginKeys(process.env.EMBY_BRIDGE_TRUSTED_KEYS);
 const verifiedPluginCode = new Map();
-const PLUGIN_CALL_TIMEOUT_MS = 3000;
+const PLUGIN_CPU_BUDGET_MS = 3000;
+const PLUGIN_CALL_TIMEOUT_MS = 15000;
+const PLUGIN_CPU_SAMPLE_MS = 250;
+const PLUGIN_INITIALIZATION_TIMEOUT_MS = 3000;
 const allowedCorsOrigins = new Set(uniqueStrings([
   ...splitList(options.corsOrigin),
   ...splitList(process.env.SOURCE_BRIDGE_CORS_ORIGINS),
@@ -122,7 +129,7 @@ async function main() {
   }
   if (allowUnsignedPlugins) {
     console.warn("[source-bridge] WARNING: unsigned plugins are enabled for this session.");
-  } else if (!trustedPluginKeys.length && manifestUrls.length) {
+  } else if (!trustedPluginKeys.length && manifestUrls.some((url) => !getBuiltInSourcePin(url))) {
     console.warn("[source-bridge] WARNING: plugin manifests require EMBY_BRIDGE_TRUSTED_KEYS.");
   }
   await refreshState();
@@ -610,8 +617,9 @@ async function loadPluginRuntime(plugin) {
     return cached;
   }
 
-  const code = verifiedPluginCode.get(normalizeComparableUrl(plugin.url)) || await fetchText(plugin.url);
-  if (!verifyDetachedSignature(code, plugin.signature, { allowMissing: allowUnsignedPlugins })) {
+  const verifiedCode = verifiedPluginCode.get(normalizeComparableUrl(plugin.url));
+  const code = verifiedCode || await fetchText(plugin.url);
+  if (!verifiedCode && !verifyDetachedSignature(code, plugin.signature, { allowMissing: allowUnsignedPlugins })) {
     throw new Error("plugin code signature verification failed");
   }
 
@@ -647,7 +655,7 @@ function createPluginWorkerRuntime(plugin, code) {
     const initTimer = setTimeout(() => {
       closePluginRuntime(runtime, "plugin initialization timeout");
       reject(new Error("plugin initialization timeout"));
-    }, PLUGIN_CALL_TIMEOUT_MS);
+    }, PLUGIN_INITIALIZATION_TIMEOUT_MS);
 
     worker.on("message", (message) => {
       if (message?.type === "ready") {
@@ -673,7 +681,7 @@ function createPluginWorkerRuntime(plugin, code) {
         return;
       }
       runtime.pending.delete(message.id);
-      clearTimeout(pending.timer);
+      clearPluginPendingTimers(pending);
       if (message.ok) {
         pending.resolve(message.value);
       } else {
@@ -704,17 +712,68 @@ function callPluginWorker(runtime, method, args) {
     const id = runtime.nextCallId++;
     const timer = setTimeout(() => {
       runtime.pending.delete(id);
-      reject(new Error(`${method} exceeded ${PLUGIN_CALL_TIMEOUT_MS}ms CPU budget`));
+      reject(new Error(`${method} exceeded ${PLUGIN_CALL_TIMEOUT_MS}ms wall timeout`));
       closePluginRuntime(runtime, "plugin method timeout");
     }, PLUGIN_CALL_TIMEOUT_MS);
-    runtime.pending.set(id, { resolve, reject, timer });
+    const pending = { resolve, reject, timer, cpuTimer: null, cpuStart: null, cpuCheckPending: false };
+    runtime.pending.set(id, pending);
+    startPluginCpuWatch(runtime, id, method, pending);
     runtime.worker.postMessage({ type: "call", id, method, args });
   });
 }
 
+async function readPluginCpuMillis(worker) {
+  if (typeof worker?.cpuUsage === "function") {
+    const usage = await worker.cpuUsage();
+    return (usage.user + usage.system) / 1000;
+  }
+  const utilization = worker?.performance?.eventLoopUtilization?.();
+  return utilization && Number.isFinite(utilization.active) ? utilization.active : null;
+}
+
+async function startPluginCpuWatch(runtime, id, method, pending) {
+  try {
+    pending.cpuStart = await readPluginCpuMillis(runtime?.worker);
+  } catch {
+    return;
+  }
+  if (!Number.isFinite(pending.cpuStart)) {
+    return;
+  }
+  if (runtime.pending.get(id) !== pending) {
+    return;
+  }
+  pending.cpuTimer = setInterval(async () => {
+    if (pending.cpuCheckPending || runtime.pending.get(id) !== pending) {
+      return;
+    }
+    pending.cpuCheckPending = true;
+    try {
+      const current = await readPluginCpuMillis(runtime.worker);
+      const usedMillis = Number.isFinite(current) ? Math.max(0, current - pending.cpuStart) : 0;
+      if (usedMillis > PLUGIN_CPU_BUDGET_MS && runtime.pending.delete(id)) {
+        clearPluginPendingTimers(pending);
+        pending.reject(new Error(`${method} exceeded ${PLUGIN_CPU_BUDGET_MS}ms CPU budget`));
+        closePluginRuntime(runtime, "plugin CPU budget exceeded");
+      }
+    } catch {
+      clearInterval(pending.cpuTimer);
+      pending.cpuTimer = null;
+    } finally {
+      pending.cpuCheckPending = false;
+    }
+  }, PLUGIN_CPU_SAMPLE_MS);
+  pending.cpuTimer.unref?.();
+}
+
+function clearPluginPendingTimers(pending) {
+  clearTimeout(pending?.timer);
+  clearInterval(pending?.cpuTimer);
+}
+
 function rejectPendingPluginCalls(runtime, reason) {
   runtime.pending.forEach((pending) => {
-    clearTimeout(pending.timer);
+    clearPluginPendingTimers(pending);
     pending.reject(new Error(reason));
   });
   runtime.pending.clear();
@@ -2408,7 +2467,10 @@ async function loadManifestSummary(url) {
     }
     const manifestBody = { ...payload };
     delete manifestBody.signature;
-    if (!verifyDetachedSignature(stableStringify(manifestBody), payload.signature, { allowMissing: allowUnsignedPlugins })) {
+    const manifestContent = stableStringify(manifestBody);
+    const signatureVerified = verifyDetachedSignature(manifestContent, payload.signature);
+    const contentPinned = verifyBuiltInManifestContent(url, manifestContent);
+    if (!signatureVerified && !contentPinned && !verifyDetachedSignature(manifestContent, payload.signature, { allowMissing: allowUnsignedPlugins })) {
       throw new Error("manifest signature verification failed");
     }
     const rawPlugins = Array.isArray(payload.plugins) ? payload.plugins : [];
@@ -2419,7 +2481,9 @@ async function loadManifestSummary(url) {
         throw new Error("manifest plugin URL invalid");
       }
       const code = await fetchText(pluginUrl);
-      if (!verifyDetachedSignature(code, plugin?.signature, { allowMissing: allowUnsignedPlugins })) {
+      const pluginSignatureVerified = verifyDetachedSignature(code, plugin?.signature);
+      const pluginContentPinned = contentPinned && verifyBuiltInPluginContent(url, pluginUrl, code);
+      if (!pluginSignatureVerified && !pluginContentPinned && !verifyDetachedSignature(code, plugin?.signature, { allowMissing: allowUnsignedPlugins })) {
         throw new Error("plugin code signature verification failed");
       }
       verifiedPluginCode.set(normalizeComparableUrl(pluginUrl), code);
@@ -2438,9 +2502,11 @@ async function loadManifestSummary(url) {
       pluginCount: plugins.length,
       plugins,
       executable: Boolean(plugins.length),
-      signatureVerified: true,
+      signatureVerified,
+      contentPinned,
+      verification: contentPinned ? "pinned-sha256" : (signatureVerified ? "signature" : "unsigned-override"),
       note: plugins.length
-        ? "已验证音源插件清单与插件代码签名。"
+        ? (contentPinned ? "已验证内置音源清单与插件内容。" : "已验证音源插件清单与插件代码签名。")
         : "已验证空清单。",
     };
   } catch {

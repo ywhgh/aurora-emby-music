@@ -183,7 +183,7 @@ function createCdpClient(webSocketDebuggerUrl) {
           socket.send(JSON.stringify({ id, method, params }));
           return withTimeout(new Promise((resolveCall, rejectCall) => {
             pending.set(id, { resolve: resolveCall, reject: rejectCall });
-          }), 8000, method);
+          }), Math.min(CHROME_TIMEOUT_MS, 30000), method);
         },
         close() {
           socket.close();

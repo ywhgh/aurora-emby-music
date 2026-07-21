@@ -12,7 +12,6 @@ import qs from "qs";
 
 const METHODS = new Set(["search", "getMediaSource", "getLyric"]);
 const SAFE_DEPENDENCIES = new Set(["axios", "big-integer", "cheerio", "crypto-js", "dayjs", "he", "qs"]);
-const root = Function("return this")();
 
 function validatePluginSource(value) {
   const code = String(value || "");
@@ -30,14 +29,10 @@ function validatePluginSource(value) {
   if (blocked.some((pattern) => pattern.test(code))) {
     throw new Error("plugin source blocked");
   }
-  const withoutSafeImports = code.replace(/\brequire\s*\(\s*(["'])([^"']+)\1\s*\)/g, (match, quote, name) => {
-    if (!SAFE_DEPENDENCIES.has(name)) {
+  for (const match of code.matchAll(/\brequire\s*\(\s*(["'])([^"']+)\1\s*\)/g)) {
+    if (!SAFE_DEPENDENCIES.has(match[2])) {
       throw new Error("plugin dependency blocked");
     }
-    return "undefined";
-  });
-  if (/\brequire\b/.test(withoutSafeImports)) {
-    throw new Error("plugin dependency access blocked");
   }
   return code;
 }
@@ -61,18 +56,6 @@ function lockDownWorkerRealm(factory) {
       // Already locked by the runtime.
     }
   });
-  ["process", "global", "require", "module", "exports", "Function", "eval"].forEach((name) => {
-    try {
-      Reflect.deleteProperty(root, name);
-    } catch {
-      // The signed plugin still receives only explicit capabilities.
-    }
-  });
-  try {
-    Reflect.deleteProperty(root, "globalThis");
-  } catch {
-    // The direct binding is shadowed inside the plugin factory as well.
-  }
 }
 
 function isBlockedAddress(address) {
@@ -148,6 +131,7 @@ function createSafeAxios(instance = axios) {
   callable.defaults = instance.defaults;
   callable.interceptors = instance.interceptors;
   callable.isAxiosError = axios.isAxiosError;
+  callable.default = callable;
   return callable;
 }
 
