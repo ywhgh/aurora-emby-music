@@ -162,6 +162,9 @@ function checkVersions() {
   assert(packageJson.scripts?.check?.includes("npm run smoke:browser"), "npm run check should include browser smoke checks");
   assert(browserSmoke.includes('process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1"'), "Browser smoke should run mobile viewport by default with a desktop-only escape hatch");
   assert(browserSmoke.includes('{ name: "mobile", width: 390, height: 844 }'), "Browser smoke should include a mobile viewport check");
+  assert(browserSmoke.includes('typeof process.getuid === "function" && process.getuid() === 0') && browserSmoke.includes('"--no-sandbox"'), "Browser smoke should support root Chromium runs without weakening non-root launches");
+  assert(browserSmoke.includes("readDevToolsPortFromOutput") && browserSmoke.includes("chrome.stderr?.on"), "Browser smoke should recover the DevTools port from Chromium stderr");
+  assert(browserSmoke.includes('process.platform === "win32"') && browserSmoke.includes('runDetachedCleanup("sh"'), "Browser smoke cleanup should support Windows and POSIX process trees");
   assert(browserSmoke.includes('playerbarVisible: isVisible(".playerbar")'), "Browser smoke should verify playerbar visibility");
   assert(browserSmoke.includes('mobileBottomNavVisible: isVisible(".mobile-bottom-nav")'), "Browser smoke should verify mobile bottom navigation visibility");
   assert(browserSmoke.includes('check.name === "mobile"'), "Browser smoke should apply viewport-specific assertions");

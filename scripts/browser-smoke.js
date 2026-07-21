@@ -97,11 +97,16 @@ async function withTimeout(promise, timeoutMs, label) {
   }
 }
 
-async function readDevToolsPort(profileDir) {
+async function readDevToolsPort(profileDir, output = []) {
   const activePortPath = path.join(profileDir, "DevToolsActivePort");
   const deadline = Date.now() + Math.min(CHROME_TIMEOUT_MS, 15000);
 
   while (Date.now() < deadline) {
+    const outputPort = readDevToolsPortFromOutput(output);
+    if (outputPort) {
+      return outputPort;
+    }
+
     try {
       const [portLine] = fs.readFileSync(activePortPath, "utf8").trim().split(/\r?\n/);
       const port = Number(portLine);
@@ -116,6 +121,14 @@ async function readDevToolsPort(profileDir) {
   }
 
   throw new Error(`Chrome DevTools port file did not appear in ${profileDir}`);
+}
+
+function readDevToolsPortFromOutput(output) {
+  const text = output.join("");
+  const match = text.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//);
+  const port = Number(match?.[1]);
+
+  return Number.isInteger(port) && port > 0 ? port : 0;
 }
 
 async function waitForTarget(port) {
@@ -387,11 +400,21 @@ function killProcessTree(pid) {
     return;
   }
 
-  runDetachedCleanup("taskkill.exe", ["/PID", String(pid), "/T", "/F"]);
+  if (process.platform === "win32") {
+    runDetachedCleanup("taskkill.exe", ["/PID", String(pid), "/T", "/F"]);
+    return;
+  }
+
+  runDetachedCleanup("sh", ["-c", `kill -TERM ${Number(pid)} 2>/dev/null || true; pkill -TERM -P ${Number(pid)} 2>/dev/null || true`]);
 }
 
 function killChromeByProfile(profileDir) {
   if (!profileDir) {
+    return;
+  }
+
+  if (process.platform !== "win32") {
+    runDetachedCleanup("sh", ["-c", `pkill -TERM -f ${shellQuote(profileDir)} 2>/dev/null || true`]);
     return;
   }
 
@@ -401,6 +424,10 @@ function killChromeByProfile(profileDir) {
     "-Command",
     `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${escapedProfile}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
   ]);
+}
+
+function shellQuote(value) {
+  return `'${String(value || "").replace(/'/g, "'\\''")}'`;
 }
 
 async function removeDirectoryWithRetry(directory, options = {}) {
@@ -488,7 +515,7 @@ function removeDirectoryInBackground(directory) {
 
 async function createBrowser(chromePath) {
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "emby-music-browser-smoke-"));
-  const chrome = childProcess.spawn(chromePath, [
+  const args = [
     "--remote-debugging-port=0",
     `--user-data-dir=${profileDir}`,
     "--headless=new",
@@ -502,15 +529,23 @@ async function createBrowser(chromePath) {
     "--no-default-browser-check",
     "--window-size=1366,900",
     "about:blank",
-  ], {
+  ];
+
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    args.splice(3, 0, "--no-sandbox");
+  }
+
+  const chrome = childProcess.spawn(chromePath, args, {
     detached: false,
-    stdio: "ignore",
+    stdio: ["ignore", "ignore", "pipe"],
     windowsHide: true,
   });
+  const output = [];
+  chrome.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
   activeBrowserProfileDir = profileDir;
   activeChromePid = chrome.pid;
-  const port = await readDevToolsPort(profileDir);
+  const port = await readDevToolsPort(profileDir, output);
   return { chrome, port, profileDir };
 }
 
