@@ -12,6 +12,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { URL } = require("node:url");
 const { Worker } = require("node:worker_threads");
+const APP_VERSION = require("../package.json").version;
 const {
   DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS,
   getBuiltInSourcePin,
@@ -53,7 +54,7 @@ const verifiedPluginCode = new Map();
 const PLUGIN_CPU_BUDGET_MS = 3000;
 const PLUGIN_CALL_TIMEOUT_MS = 15000;
 const PLUGIN_CPU_SAMPLE_MS = 250;
-const PLUGIN_INITIALIZATION_TIMEOUT_MS = 3000;
+const PLUGIN_INITIALIZATION_TIMEOUT_MS = 15000;
 const allowedCorsOrigins = new Set(uniqueStrings([
   ...splitList(options.corsOrigin),
   ...splitList(process.env.SOURCE_BRIDGE_CORS_ORIGINS),
@@ -2149,7 +2150,7 @@ async function fetchLrclibJson(url) {
   try {
     return await fetchJsonWithHeaders(url.toString(), {
       Accept: "application/json",
-      "User-Agent": "Aurora-Music/0.94.5 (source-bridge)",
+      "User-Agent": `Aurora-Music/${APP_VERSION} (source-bridge)`,
     }, LRCLIB_REQUEST_TIMEOUT_MS);
   } catch {
     return null;

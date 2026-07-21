@@ -149,11 +149,14 @@ function checkVersions() {
   const assetVersion = extract(/ASSET_VERSION\s*=\s*"([^"]+)"/, sw, "service worker asset version");
   const browserSmoke = read("scripts/browser-smoke.js");
   const gitignore = read(".gitignore");
+  const sourceBridge = read("scripts/source-bridge.js");
   const runtimeConfigExample = read("runtime-config.example.js");
 
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
   assert(appVersion === packageJson.version, `APP_VERSION ${appVersion} != package.json ${packageJson.version}`);
+  assert(sourceBridge.includes('const APP_VERSION = require("../package.json").version'), "Source bridge should derive its request version from package.json");
+  assert(sourceBridge.includes('`Aurora-Music/${APP_VERSION} (source-bridge)`'), "Source bridge User-Agent should use the shared package version");
   assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: ""'), "Default source bridge URL should stay empty");
   assert(config.includes('DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: ""'), "Default Emby lyrics bridge URL should stay empty");
   assert(config.includes('LYRICS_SOURCE_BRIDGE_API_KEY: "emby-music-web/lyrics-source-bridge-api-url"'), "Emby lyrics bridge should use a dedicated localStorage key");
@@ -1229,6 +1232,7 @@ async function checkExternalSourceLyrics() {
   assert(bridge.includes('source-plugin-worker.mjs'), "Source bridge should use the dedicated plugin worker entry");
   assert(bridge.includes("maxOldGenerationSizeMb: 256"), "Plugin workers should have a 256 MB old-generation limit");
   assert(bridge.includes("PLUGIN_CPU_BUDGET_MS = 3000"), "Plugin workers should enforce a 3 second CPU budget");
+  assert(bridge.includes("PLUGIN_INITIALIZATION_TIMEOUT_MS = 15000"), "Concurrent plugin startup should have a separate 15 second wall timeout");
   assert(bridge.includes("PLUGIN_CALL_TIMEOUT_MS = 15000"), "Plugin network calls should have a bounded wall timeout");
  assert(sourcePins.includes("BUILT_IN_SOURCE_PINS"), "Built-in source manifests should use pinned SHA-256 trust");
   assert(bridge.includes("verifyBuiltInManifestContent") && bridge.includes("verifyBuiltInPluginContent"), "Built-in manifests and plugin payloads should both be pinned");
@@ -1446,7 +1450,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.6")'), "main.js should load app.js through native ESM");
+  assert(main.includes(`await import("./app.js?v=${JSON.parse(read("package.json")).version}")`), "main.js should load the versioned app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
