@@ -3301,6 +3301,30 @@ function collectBrowserSmokeDesktopImmersiveState() {
     return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
   };
 
+  const getPlayButtonLoadingStyle = () => {
+    if (!immersivePlayButton) {
+      return {};
+    }
+
+    const hadBufferingClass = document.body.classList.contains("is-playback-buffering");
+    document.body.classList.add("is-playback-buffering");
+    const pseudoStyle = window.getComputedStyle(immersivePlayButton, "::before");
+    const loadingStyle = {
+      animationName: pseudoStyle.animationName || "",
+      animationDuration: pseudoStyle.animationDuration || "",
+      backgroundImage: pseudoStyle.backgroundImage || "",
+      borderRadius: pseudoStyle.borderRadius || "",
+      maskImage: pseudoStyle.maskImage || pseudoStyle.webkitMaskImage || "",
+      transform: pseudoStyle.transform || "",
+    };
+
+    if (!hadBufferingClass) {
+      document.body.classList.remove("is-playback-buffering");
+    }
+
+    return loadingStyle;
+  };
+
   const previousTrack = state.currentTrack;
   const previousTimeline = state.lyricTimeline;
   const previousLines = state.lyricLines;
@@ -3331,6 +3355,7 @@ function collectBrowserSmokeDesktopImmersiveState() {
   const translated = immersiveDesktopCurrentLyric?.querySelector(".immersive-desktop-current-lyric-translated");
   const originalStyle = original ? window.getComputedStyle(original) : null;
   const translatedStyle = translated ? window.getComputedStyle(translated) : null;
+  const playButtonLoadingStyle = getPlayButtonLoadingStyle();
   const before = {
     view: shell?.getAttribute("data-desktop-view") || "",
     currentLyricVisible: isVisibleElement(immersiveDesktopCurrentLyric),
@@ -3343,6 +3368,12 @@ function collectBrowserSmokeDesktopImmersiveState() {
     translatedFontSizePx: Number.parseFloat(translatedStyle?.fontSize || "0") || 0,
     originalLineHeight: originalStyle?.lineHeight || "",
     translatedLineHeight: translatedStyle?.lineHeight || "",
+    playButtonLoadingAnimationName: playButtonLoadingStyle.animationName || "",
+    playButtonLoadingAnimationDuration: playButtonLoadingStyle.animationDuration || "",
+    playButtonLoadingBackgroundImage: playButtonLoadingStyle.backgroundImage || "",
+    playButtonLoadingBorderRadius: playButtonLoadingStyle.borderRadius || "",
+    playButtonLoadingMaskImage: playButtonLoadingStyle.maskImage || "",
+    playButtonLoadingTransform: playButtonLoadingStyle.transform || "",
   };
 
   immersiveDesktopStageToggle?.click();
