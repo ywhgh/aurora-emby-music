@@ -1431,7 +1431,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.3")'), "main.js should load app.js through native ESM");
+  assert(main.includes('await import("./app.js?v=0.94.4")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
@@ -1744,10 +1744,10 @@ function checkAppFunctionReferences() {
   assert(css.includes(".is-audio-playing .tonearm-arm"), "Smart playback hub tonearm should react to playing state");
   assert(css.includes("transform: rotate(20deg)"), "Smart playback hub tonearm should drop near the album art while playing");
   assert(!css.includes(".home-start-spindle"), "Smart playback hub should not keep old spindle styles");
-  assert(/\.is-playback-buffering \.play-button::before \{[\s\S]*?animation: playbackLoadingArc 0\.78s linear infinite/.test(css), "Playback buffering should use the reference-style rotating arc");
-  assert(/is-playback-buffering \.immersive-player-shell[\s\S]*?immersive-play-core\.play-button::before \{[\s\S]*?animation: playbackLoadingArc 0\.78s linear infinite/.test(css), "Desktop and mobile immersive buffering should use the rotating arc");
+  assert(/\.is-playback-buffering \.play-button::before \{[\s\S]*?conic-gradient[\s\S]*?animation: playbackLoadingOrbit 0\.82s linear infinite/.test(css), "Playback buffering should use the original gradient orbit");
+  assert(/is-playback-buffering \.immersive-player-shell[\s\S]*?immersive-play-core\.play-button::before \{[\s\S]*?conic-gradient[\s\S]*?animation: playbackLoadingOrbit 0\.82s linear infinite/.test(css), "Desktop and mobile immersive buffering should use the original gradient orbit");
   assert(!css.includes("@keyframes playbackLoadingWave"), "Playback buffering should not retain the equalizer wave");
-  assert(!css.includes("@keyframes playbackLoadingOrbit"), "Playback buffering should not retain the old gradient orbit spinner");
+  assert(!css.includes("@keyframes playbackLoadingArc"), "Playback buffering should not retain the plain border arc");
 
   assert(app.includes("homeStartArtButton?.addEventListener(\"click\", openMobileImmersivePlayer)"), "Smart playback hub artwork should open immersive playback");
   assert(app.includes("homeStartFavoriteButton?.addEventListener(\"click\", () => toggleFavorite(state.currentTrack))"), "Smart playback hub favorite action should reuse current track favorite logic");

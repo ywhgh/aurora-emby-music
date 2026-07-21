@@ -1,5 +1,5 @@
 (() => {
-  const version = "0.94.3";
+  const version = "0.94.4";
   const appName = "Aurora Music";
   const sessionKey = "emby-music-web/session";
   const accountProfilesKey = "emby-music-web/account-profiles";
