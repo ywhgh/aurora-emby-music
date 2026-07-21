@@ -1744,7 +1744,9 @@ function checkAppFunctionReferences() {
   assert(css.includes(".is-audio-playing .tonearm-arm"), "Smart playback hub tonearm should react to playing state");
   assert(css.includes("transform: rotate(20deg)"), "Smart playback hub tonearm should drop near the album art while playing");
   assert(!css.includes(".home-start-spindle"), "Smart playback hub should not keep old spindle styles");
-  assert(!/is-playback-buffering[\s\S]*?immersive-play-core\.play-button::before[\s\S]*?transform:\s*rotate\(0deg\)\s*!important/.test(css), "Mobile immersive loading spinner should not lock the orbit animation with an important transform");
+  assert(/\.is-playback-buffering \.play-button::before \{[\s\S]*?animation: playbackLoadingWave/.test(css), "Playback buffering should use the home-style equalizer wave");
+  assert(/immersive-play-core\.play-button::before \{[\s\S]*?animation: playbackLoadingWave 0\.82s ease-in-out infinite !important/.test(css), "Mobile immersive buffering should use the same equalizer wave");
+  assert(!css.includes("@keyframes playbackLoadingOrbit"), "Playback buffering should not retain the old orbit spinner");
 
   assert(app.includes("homeStartArtButton?.addEventListener(\"click\", openMobileImmersivePlayer)"), "Smart playback hub artwork should open immersive playback");
   assert(app.includes("homeStartFavoriteButton?.addEventListener(\"click\", () => toggleFavorite(state.currentTrack))"), "Smart playback hub favorite action should reuse current track favorite logic");
