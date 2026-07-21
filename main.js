@@ -21,4 +21,4 @@ window.EmbyMusicModules = Object.freeze({
   store,
 });
 
-await import("./app.js?v=0.94.1");
+await import("./app.js?v=0.94.2");
