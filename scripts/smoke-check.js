@@ -1431,7 +1431,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.1")'), "main.js should load app.js through native ESM");
+  assert(main.includes('await import("./app.js?v=0.94.2")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
