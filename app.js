@@ -9429,7 +9429,7 @@ function renderSettings() {
     lyricsSourceBridgeApiUrlInput.value = loadLyricsSourceBridgeApiUrl();
   }
   if (settingsLyricsSourceBridgeStatus) {
-    settingsLyricsSourceBridgeStatus.textContent = loadLyricsSourceBridgeApiUrl() ? "已配置" : "未配置";
+    settingsLyricsSourceBridgeStatus.textContent = getLyricsSourceBridgeConfigStatus();
   }
   settingsLyrics.textContent = state.lyricLines.length
     ? `${state.lyricLines.length} 行${state.isLyricSynced ? " / 已同步" : ""}`
@@ -10606,6 +10606,10 @@ async function fetchEmbySidecarLyricsFromSourceBridge(track) {
   try {
     const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/lyric-by-path?${toQueryString({
       path: track.Path,
+      trackName: track.Name || "",
+      artistName: getArtists(track),
+      albumName: track.Album || "",
+      duration: getTrackDurationSeconds(track),
     })}`, {
       headers: { Accept: "application/json" },
     });
@@ -10724,7 +10728,27 @@ function getLyricsSourceBridgeApiUrl() {
 }
 
 function getConfiguredEmbyLyricsSourceBridgeApiUrl() {
-  return loadLyricsSourceBridgeApiUrl();
+  return loadLyricsSourceBridgeApiUrl()
+    || normalizeLyricsSourceBridgeApiUrl(window.AuroraRuntimeConfig?.lyricsBridgeUrl || "")
+    || getSameHostLyricsSourceBridgeApiUrl();
+}
+
+function getSameHostLyricsSourceBridgeApiUrl() {
+  if (!/^https?:$/.test(location.protocol) || !location.hostname) {
+    return "";
+  }
+
+  return normalizeLyricsSourceBridgeApiUrl(`${location.protocol}//${location.hostname}:5174`);
+}
+
+function getLyricsSourceBridgeConfigStatus() {
+  if (loadLyricsSourceBridgeApiUrl()) {
+    return "手动配置";
+  }
+  if (normalizeLyricsSourceBridgeApiUrl(window.AuroraRuntimeConfig?.lyricsBridgeUrl || "")) {
+    return "部署配置";
+  }
+  return getSameHostLyricsSourceBridgeApiUrl() ? "自动发现" : "未配置";
 }
 
 function getConfiguredSourceBridgeApiUrl() {
@@ -24921,7 +24945,7 @@ function saveLyricsSourceBridgeApiUrlFromSettings() {
     lyricsSourceBridgeApiUrlInput.value = apiUrl;
   }
   if (settingsLyricsSourceBridgeStatus) {
-    settingsLyricsSourceBridgeStatus.textContent = apiUrl ? "已配置" : "未配置";
+    settingsLyricsSourceBridgeStatus.textContent = getLyricsSourceBridgeConfigStatus();
   }
   showNotice(apiUrl ? "歌词源桥地址已保存。" : "歌词源桥地址已清除。", { type: "success" });
 }

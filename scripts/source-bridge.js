@@ -21,6 +21,9 @@ const LYRIC_EXTENSIONS = [".lrc", ".txt"];
 const BILIBILI_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 const ARTWORK_LOOKUP_TIMEOUT_MS = 6500;
 const ARTWORK_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const LRCLIB_DEFAULT_API_URL = "https://lrclib.net";
+const LRCLIB_REQUEST_TIMEOUT_MS = 6500;
+const MAX_LYRIC_BYTES = 1024 * 1024;
 const DEFAULT_SOURCE_BRIDGE_MANIFEST_URLS = [
   "https://13413.kstore.vip/yuanli/yuanli.json",
 ];
@@ -61,6 +64,19 @@ const pluginTrackCachePath = options.pluginCache
   || process.env.SOURCE_BRIDGE_PLUGIN_CACHE
   || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir(), "emby-music-source-bridge", "plugin-tracks.json");
 const isPluginTrackCacheDisabled = /^(1|true|yes)$/i.test(String(options.noPluginCache || process.env.SOURCE_BRIDGE_DISABLE_PLUGIN_CACHE || ""));
+const lrclibEnabled = !isTruthy(options.noLrclib || process.env.SOURCE_BRIDGE_DISABLE_LRCLIB)
+  && !/^(0|false|no)$/i.test(String(process.env.SOURCE_BRIDGE_LRCLIB_ENABLED || "true"));
+const lrclibApiUrl = normalizeLrclibApiUrl(
+  options.lrclibApiUrl
+    || process.env.SOURCE_BRIDGE_LRCLIB_API_URL
+    || LRCLIB_DEFAULT_API_URL
+);
+const lyricCacheDir = path.resolve(
+  options.lyricCacheDir
+    || options.lyricCache
+    || process.env.SOURCE_BRIDGE_LYRIC_CACHE_DIR
+    || path.join(process.env.LOCALAPPDATA || process.env.APPDATA || os.tmpdir(), "emby-music-source-bridge", "lyrics")
+);
 const PLUGIN_TRACK_CACHE_VERSION = 1;
 const PLUGIN_TRACK_CACHE_LIMIT = 2000;
 const PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS = 250;
@@ -369,23 +385,52 @@ async function handleRequest(request, response) {
       return;
     }
 
-    const lyric = findLyric(mediaPath);
+    const localLyric = findLyric(mediaPath);
+    if (localLyric) {
+      sendJson(request, response, 200, createLyricPayload(readTextFile(localLyric), {
+        local: true,
+        mediaPath,
+        lyricPath: localLyric,
+      }));
+      return;
+    }
 
-    if (!lyric) {
+    const cachedLyric = findCachedLyric(mediaPath);
+    if (cachedLyric) {
+      sendJson(request, response, 200, createLyricPayload(readTextFile(cachedLyric), {
+        local: true,
+        cached: true,
+        source: "lrclib",
+        cacheLocation: "cache",
+        mediaPath,
+        lyricPath: cachedLyric,
+      }));
+      return;
+    }
+
+    const matched = await fetchLrclibLyrics({
+      trackName: url.searchParams.get("trackName"),
+      artistName: url.searchParams.get("artistName"),
+      albumName: url.searchParams.get("albumName"),
+      duration: url.searchParams.get("duration"),
+      mediaPath,
+    });
+
+    if (!matched?.lrc) {
       sendJson(request, response, 404, { error: "lyric not found" });
       return;
     }
 
-    const lrc = readTextFile(lyric);
-    sendJson(request, response, 200, {
-      lrc,
-      local: true,
+    const cached = cacheLrclibLyrics(mediaPath, matched.lrc);
+    sendJson(request, response, 200, createLyricPayload(matched.lrc, {
+      local: false,
+      matched: true,
+      source: "lrclib",
+      cached: Boolean(cached.filePath),
+      cacheLocation: cached.location,
       mediaPath,
-      lyricPath: lyric,
-      hasCjk: hasLikelyChineseText(lrc),
-      hasBilingual: hasLikelyBilingualLyric(lrc),
-      lineCount: parseLrcLines(lrc).length,
-    });
+      lyricPath: cached.filePath,
+    }));
     return;
   }
 
@@ -1948,6 +1993,227 @@ function findCover(dir) {
   }
 
   return "";
+}
+
+function createLyricPayload(lrc, details = {}) {
+  return {
+    lrc,
+    ...details,
+    hasCjk: hasLikelyChineseText(lrc),
+    hasBilingual: hasLikelyBilingualLyric(lrc),
+    lineCount: parseLrcLines(lrc).length,
+  };
+}
+
+function findCachedLyric(audioPath) {
+  const filePath = getCachedLyricPath(audioPath);
+  return fs.existsSync(filePath) ? filePath : "";
+}
+
+function getCachedLyricPath(audioPath) {
+  const cacheKey = crypto.createHash("sha256").update(path.resolve(audioPath)).digest("hex");
+  return path.join(lyricCacheDir, `${cacheKey}.lrc`);
+}
+
+async function fetchLrclibLyrics(details) {
+  if (!lrclibEnabled || !lrclibApiUrl) {
+    return null;
+  }
+
+  const metadata = getLrclibTrackMetadata(details);
+  if (!metadata.trackName || !metadata.artistName) {
+    return null;
+  }
+
+  const exact = await fetchLrclibExact(metadata);
+  const exactMatch = selectBestLrclibMatch([exact].filter(Boolean), metadata);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const candidates = await fetchLrclibSearch(metadata);
+  return selectBestLrclibMatch(Array.isArray(candidates) ? candidates : [], metadata);
+}
+
+function getLrclibTrackMetadata(details) {
+  const parsed = parseTrackMetadataFromPath(details.mediaPath);
+  return {
+    trackName: cleanMetadataValue(details.trackName) || parsed.trackName,
+    artistName: cleanMetadataValue(details.artistName) || parsed.artistName,
+    albumName: cleanMetadataValue(details.albumName),
+    duration: normalizeDuration(details.duration),
+  };
+}
+
+function parseTrackMetadataFromPath(mediaPath) {
+  const stem = path.parse(mediaPath || "").name.trim();
+  const parts = stem.split(/\s+-\s+/).map((item) => item.trim()).filter(Boolean);
+  if (parts.length < 2) {
+    return { trackName: stem, artistName: "" };
+  }
+  return { artistName: parts.shift(), trackName: parts.join(" - ") };
+}
+
+function cleanMetadataValue(value) {
+  return String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
+function normalizeDuration(value) {
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+}
+
+async function fetchLrclibExact(metadata) {
+  if (!metadata.albumName || !metadata.duration) {
+    return null;
+  }
+
+  const url = new URL("/api/get", `${lrclibApiUrl}/`);
+  url.searchParams.set("track_name", metadata.trackName);
+  url.searchParams.set("artist_name", metadata.artistName);
+  url.searchParams.set("album_name", metadata.albumName);
+  url.searchParams.set("duration", String(metadata.duration));
+  return fetchLrclibJson(url);
+}
+
+async function fetchLrclibSearch(metadata) {
+  const url = new URL("/api/search", `${lrclibApiUrl}/`);
+  url.searchParams.set("track_name", metadata.trackName);
+  url.searchParams.set("artist_name", metadata.artistName);
+  if (metadata.albumName) {
+    url.searchParams.set("album_name", metadata.albumName);
+  }
+  return fetchLrclibJson(url);
+}
+
+async function fetchLrclibJson(url) {
+  try {
+    return await fetchJsonWithHeaders(url.toString(), {
+      Accept: "application/json",
+      "User-Agent": "Aurora-Music/0.94.5 (source-bridge)",
+    }, LRCLIB_REQUEST_TIMEOUT_MS);
+  } catch {
+    return null;
+  }
+}
+
+function selectBestLrclibMatch(candidates, metadata) {
+  const match = candidates
+    .map((candidate) => ({ candidate, score: scoreLrclibMatch(candidate, metadata) }))
+    .filter((item) => item.score >= 75)
+    .sort((left, right) => right.score - left.score)[0];
+  return match ? toLrclibLyric(match.candidate) : null;
+}
+
+function scoreLrclibMatch(candidate, metadata) {
+  const lrc = String(candidate?.syncedLyrics || candidate?.plainLyrics || "").trim();
+  if (!lrc || Buffer.byteLength(lrc, "utf8") > MAX_LYRIC_BYTES) {
+    return -1;
+  }
+
+  const titleScore = getMetadataMatchScore(metadata.trackName, candidate.trackName);
+  const artistScore = getMetadataMatchScore(metadata.artistName, candidate.artistName);
+  if (titleScore < 0.72 || artistScore < 0.5) {
+    return -1;
+  }
+
+  const candidateDuration = normalizeDuration(candidate.duration);
+  const durationDelta = metadata.duration && candidateDuration
+    ? Math.abs(metadata.duration - candidateDuration)
+    : 0;
+  if (metadata.duration && candidateDuration && durationDelta > 5) {
+    return -1;
+  }
+
+  const albumScore = metadata.albumName
+    ? getMetadataMatchScore(metadata.albumName, candidate.albumName)
+    : 0;
+  return (titleScore * 50)
+    + (artistScore * 30)
+    + (albumScore * 5)
+    + (candidate.syncedLyrics ? 10 : 0)
+    + (durationDelta <= 3 ? 5 : 2);
+}
+
+function getMetadataMatchScore(expected, actual) {
+  const left = normalizeMetadataForMatch(expected);
+  const right = normalizeMetadataForMatch(actual);
+  if (!left || !right) {
+    return 0;
+  }
+  if (left === right) {
+    return 1;
+  }
+  if (left.includes(right) || right.includes(left)) {
+    return 0.9;
+  }
+
+  const leftTokens = new Set(left.split(" ").filter(Boolean));
+  const rightTokens = new Set(right.split(" ").filter(Boolean));
+  const shared = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  return shared / Math.max(leftTokens.size, rightTokens.size, 1);
+}
+
+function normalizeMetadataForMatch(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\b(?:feat|ft)\.?\s+.*$/i, "")
+    .replace(/[\p{P}\p{S}_]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toLrclibLyric(candidate) {
+  const lrc = String(candidate?.syncedLyrics || candidate?.plainLyrics || "").trim();
+  return lrc ? { lrc, synced: Boolean(candidate?.syncedLyrics) } : null;
+}
+
+function cacheLrclibLyrics(audioPath, lrc) {
+  if (!lrc || Buffer.byteLength(lrc, "utf8") > MAX_LYRIC_BYTES) {
+    return { filePath: "", location: "" };
+  }
+
+  const sidecarPath = path.join(path.dirname(audioPath), `${path.parse(audioPath).name}.lrc`);
+  if (writeTextFileAtomic(sidecarPath, lrc)) {
+    return { filePath: sidecarPath, location: "sidecar" };
+  }
+
+  const cachePath = getCachedLyricPath(audioPath);
+  if (writeTextFileAtomic(cachePath, lrc)) {
+    return { filePath: cachePath, location: "cache" };
+  }
+
+  return { filePath: "", location: "" };
+}
+
+function writeTextFileAtomic(filePath, text) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(tempPath, `${String(text).trim()}\n`, { encoding: "utf8", flag: "wx" });
+    fs.renameSync(tempPath, filePath);
+    return true;
+  } catch {
+    try {
+      fs.rmSync(tempPath, { force: true });
+    } catch {
+      // Best-effort temporary file cleanup.
+    }
+    return false;
+  }
+}
+
+function normalizeLrclibApiUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) {
+      return "";
+    }
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
 }
 
 function findLyric(audioPath) {

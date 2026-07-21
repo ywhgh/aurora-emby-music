@@ -66,6 +66,8 @@ async function main() {
       port: bridgePort,
       pluginCachePath,
       noDefaultManifest: true,
+      lrclibApiUrl: fixture.urls.lrclib,
+      lyricCacheDir: path.join(tempDir, "lyric-cache"),
     });
 
     const restoredStream = await fetchHead(streamUrl);
@@ -82,6 +84,46 @@ async function main() {
     const suffixSidecarLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?path=${encodeURIComponent(remoteSidecarPath)}`);
     assert(suffixSidecarLyric.hasBilingual === true, "lyric-by-path should resolve Emby paths by music-dir suffix fallback");
     assert(String(suffixSidecarLyric.mediaPath || "") === sidecarTrackPath, `suffix fallback resolved wrong media path: ${suffixSidecarLyric.mediaPath || "-"}`);
+
+    const exactTrackPath = createLrclibTrackFixture(secondBridge.musicDir, "Fixture Artist - LRCLIB Exact.mp3");
+    const exactQuery = new URLSearchParams({
+      path: exactTrackPath,
+      trackName: "LRCLIB Exact",
+      artistName: "Fixture Artist",
+      albumName: "Fixture Album",
+      duration: "120",
+    });
+    const exactLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?${exactQuery}`);
+    assert(exactLyric.source === "lrclib" && exactLyric.matched === true, "lyric-by-path should use LRCLIB exact matching after local sidecars");
+    assert(exactLyric.cacheLocation === "sidecar", "LRCLIB lyrics should be cached beside writable audio files");
+    assert(String(exactLyric.lrc || "").includes("LRCLIB exact synced line"), "LRCLIB should prefer synced lyrics");
+    const exactRequestCount = fixture.lrclibRequests.exact;
+    const cachedExactLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?${exactQuery}`);
+    assert(cachedExactLyric.local === true, "a second LRCLIB request should reuse the local sidecar cache");
+    assert(fixture.lrclibRequests.exact === exactRequestCount, "cached lyrics should avoid a second LRCLIB request");
+
+    const searchTrackPath = createLrclibTrackFixture(secondBridge.musicDir, "Fixture Artist - LRCLIB Search.mp3");
+    const searchQuery = new URLSearchParams({
+      path: searchTrackPath,
+      trackName: "LRCLIB Search",
+      artistName: "Fixture Artist",
+      albumName: "Fixture Album",
+      duration: "181",
+    });
+    const searchLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-path?${searchQuery}`);
+    assert(String(searchLyric.lrc || "").includes("LRCLIB search synced line"), "LRCLIB search should select the matching synced candidate");
+    assert(fixture.lrclibRequests.search > 0, "LRCLIB search should run after an exact miss");
+
+    const rejectedTrackPath = createLrclibTrackFixture(secondBridge.musicDir, "Fixture Artist - LRCLIB Rejected.mp3");
+    const rejectedQuery = new URLSearchParams({
+      path: rejectedTrackPath,
+      trackName: "LRCLIB Rejected",
+      artistName: "Fixture Artist",
+      albumName: "Fixture Album",
+      duration: "200",
+    });
+    const rejectedLyric = await fetchJsonResponse(`http://127.0.0.1:${bridgePort}/lyric-by-path?${rejectedQuery}`);
+    assert(rejectedLyric.response.status === 404, "LRCLIB candidates with mismatched title and artist should be rejected");
 
     await waitForPluginCache(pluginCachePath, "resume-song");
     const cachePayload = JSON.parse(fs.readFileSync(pluginCachePath, "utf8"));
@@ -107,6 +149,7 @@ function createFixtureServer() {
     publicKeyEncoding: { type: "spki", format: "pem" },
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
+  const lrclibRequests = { exact: 0, search: 0 };
   const pluginCodeForOrigin = (origin) => `
 module.exports = {
   platform: "Smoke",
@@ -156,6 +199,52 @@ module.exports = {
         signature: crypto.sign("sha256", Buffer.from(stableStringify(manifestBody)), privateKey).toString("base64"),
       };
 
+      if (url.pathname === "/api/get") {
+        lrclibRequests.exact += 1;
+        const trackName = url.searchParams.get("track_name");
+        if (trackName === "LRCLIB Exact") {
+          sendJson(response, {
+            trackName,
+            artistName: "Fixture Artist",
+            albumName: "Fixture Album",
+            duration: 120,
+            syncedLyrics: "[00:01.00]LRCLIB exact synced line",
+            plainLyrics: "LRCLIB exact plain line",
+          });
+          return;
+        }
+        sendJson(response, { error: "not found" }, 404);
+        return;
+      }
+      if (url.pathname === "/api/search") {
+        lrclibRequests.search += 1;
+        const trackName = url.searchParams.get("track_name");
+        if (trackName === "LRCLIB Search") {
+          sendJson(response, [{
+            trackName: "Unrelated Song",
+            artistName: "Different Artist",
+            albumName: "Wrong Album",
+            duration: 181,
+            syncedLyrics: "[00:01.00]wrong result",
+          }, {
+            trackName,
+            artistName: "Fixture Artist",
+            albumName: "Fixture Album",
+            duration: 181,
+            syncedLyrics: "[00:01.00]LRCLIB search synced line",
+          }]);
+          return;
+        }
+        sendJson(response, [{
+          trackName: "Unrelated Song",
+          artistName: "Different Artist",
+          albumName: "Wrong Album",
+          duration: 200,
+          syncedLyrics: "[00:01.00]wrong result",
+        }]);
+        return;
+      }
+
       if (url.pathname === "/manifest.json") {
         sendJson(response, manifest);
         return;
@@ -197,7 +286,9 @@ module.exports = {
           manifest: `http://127.0.0.1:${port}/manifest.json`,
           unsignedManifest: `http://127.0.0.1:${port}/unsigned-manifest.json`,
           tamperedManifest: `http://127.0.0.1:${port}/tampered-manifest.json`,
+          lrclib: `http://127.0.0.1:${port}`,
         },
+        lrclibRequests,
       });
     });
   });
@@ -247,6 +338,16 @@ async function startBridge(options) {
     musicDir,
   ];
 
+  if (options.lrclibApiUrl) {
+    args.push("--lrclib-api-url", options.lrclibApiUrl);
+  } else {
+    args.push("--no-lrclib");
+  }
+
+  if (options.lyricCacheDir) {
+    args.push("--lyric-cache-dir", options.lyricCacheDir);
+  }
+
   if (options.manifestUrl) {
     args.push("--manifest-url", options.manifestUrl);
   }
@@ -285,6 +386,14 @@ function createLocalMusicFixture(pluginCachePath) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "Smoke Artist - Bridge Resume Smoke.mp3"), FIXTURE_MEDIA);
   return dir;
+}
+
+function createLrclibTrackFixture(musicDir, fileName) {
+  const dir = path.join(musicDir, "lrclib", path.parse(fileName).name);
+  const mediaPath = path.join(dir, fileName);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(mediaPath, FIXTURE_MEDIA);
+  return mediaPath;
 }
 
 function createBilingualSidecarFixture(rootDir) {

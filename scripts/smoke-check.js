@@ -148,6 +148,8 @@ function checkVersions() {
   const cacheVersion = extract(/CACHE_NAME\s*=\s*"emby-music-web-v([^"]+)"/, sw, "service worker cache version");
   const assetVersion = extract(/ASSET_VERSION\s*=\s*"([^"]+)"/, sw, "service worker asset version");
   const browserSmoke = read("scripts/browser-smoke.js");
+  const gitignore = read(".gitignore");
+  const runtimeConfigExample = read("runtime-config.example.js");
 
   assert(appVersion === cacheVersion, `APP_VERSION ${appVersion} != CACHE_NAME ${cacheVersion}`);
   assert(appVersion === assetVersion, `APP_VERSION ${appVersion} != ASSET_VERSION ${assetVersion}`);
@@ -156,6 +158,12 @@ function checkVersions() {
   assert(config.includes('DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: ""'), "Default Emby lyrics bridge URL should stay empty");
   assert(config.includes('LYRICS_SOURCE_BRIDGE_API_KEY: "emby-music-web/lyrics-source-bridge-api-url"'), "Emby lyrics bridge should use a dedicated localStorage key");
   assert(!/DEFAULT_(?:EXTERNAL_SOURCE|EMBY_LYRICS_SOURCE_BRIDGE)_API_URL:\s*"https?:\/\//.test(config), "Bridge URL defaults must not contain a concrete host");
+  assert(gitignore.includes("/runtime-config.js"), "Deployment runtime config should stay outside Git tracking");
+  assert(runtimeConfigExample.includes("window.AuroraRuntimeConfig"), "Repository should include a runtime config template");
+  assert(/lyricsBridgeUrl:\s*""/.test(runtimeConfigExample), "Runtime config template should not include a deployment host");
+  assert(index.includes('./runtime-config.js?v=1'), "index.html should load the deployment runtime config");
+  assert(index.indexOf('./runtime-config.js?v=1') < index.indexOf('./src/config.js?v='), "Runtime config should load before src/config.js");
+  assert(!sw.includes("runtime-config.js"), "Service worker should not precache deployment runtime config");
   assert(/<input id="lyricsSourceBridgeApiUrl" type="password"[^>]*>/.test(index), "Emby lyrics bridge settings should mask the persisted host");
   assert(index.includes('id="settingsSaveLyricsSourceBridgeButton"'), "Emby lyrics bridge settings should expose an explicit save action");
   assert(packageJson.scripts?.["smoke:browser"] === "node ./scripts/browser-smoke.js", "package.json should expose browser smoke checks");
@@ -1431,7 +1439,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.4")'), "main.js should load app.js through native ESM");
+  assert(main.includes('await import("./app.js?v=0.94.5")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
@@ -1584,9 +1592,10 @@ function checkAppFunctionReferences() {
   assert(/export function normalizeHttpUrl\(value, normalizer\) \{[\s\S]*?new URL\(raw\);[\s\S]*?\["http:", "https:"\]\.includes\(url\.protocol\)[\s\S]*?!url\.hostname[\s\S]*?return "";/.test(bridgeModule), "Bridge module should reject malformed or non-HTTP service URLs");
   assert(/function loadLyricsSourceBridgeApiUrl\(\) \{\s*return normalizeLyricsSourceBridgeApiUrl\(localStorage\.getItem\(LYRICS_SOURCE_BRIDGE_API_KEY\) \|\| ""\);\s*\}/.test(app), "Emby lyrics bridge should load only from its dedicated localStorage key");
   assert(/function saveLyricsSourceBridgeApiUrl\(apiUrl\) \{[\s\S]*?localStorage\.setItem\(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl\);[\s\S]*?localStorage\.removeItem\(LYRICS_SOURCE_BRIDGE_API_KEY\);[\s\S]*?\}/.test(app), "Emby lyrics bridge should save and clear only its dedicated localStorage key");
-  assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{\s*return loadLyricsSourceBridgeApiUrl\(\);\s*\}/.test(app), "Emby lyrics bridge should not fall back to a concrete host");
+  assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{[\s\S]*?loadLyricsSourceBridgeApiUrl\(\)[\s\S]*?window\.AuroraRuntimeConfig\?\.lyricsBridgeUrl[\s\S]*?getSameHostLyricsSourceBridgeApiUrl\(\)/.test(app), "Emby lyrics bridge should prefer manual config, then deployment config, then same-host discovery");
+  assert(/function getSameHostLyricsSourceBridgeApiUrl\(\) \{[\s\S]*?location\.protocol[\s\S]*?location\.hostname[\s\S]*?:5174/.test(app), "Emby lyrics bridge should discover port 5174 on the current HTTP(S) host");
+  assert(/lyric-by-path\?\$\{toQueryString\(\{[\s\S]*?trackName:[\s\S]*?artistName:[\s\S]*?albumName:[\s\S]*?duration:/.test(app), "Lyric sidecar lookup should pass metadata for LRCLIB matching");
   assert(!app.includes("getDefaultRemoteSourceBridgeApiUrl"), "Emby lyrics bridge should not retain the hard-coded remote fallback");
-  assert(!app.includes("getSameHostSourceBridgeApiUrl"), "Emby lyrics bridge should not infer a bridge from the current page host");
   assert(app.includes("function getExternalTrackApiUrl"), "External source playback should centralize restored track bridge URL resolution");
   assert(/function getExternalTrackApiUrl\(track, session = state\.session\) \{[\s\S]*?const sessionApiUrl = getSessionExternalSourceApiUrl\(session\)[\s\S]*?loadExternalSourceApiUrl\(\);[\s\S]*?if \(sessionApiUrl\) \{[\s\S]*?return sessionApiUrl;[\s\S]*?const trackApiUrl = track\?\.ExternalSource\?\.apiUrl;/.test(app), "Restored external tracks should prefer the current bridge session URL over stale per-track URLs");
   assert(/fetchLyricsText\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");
