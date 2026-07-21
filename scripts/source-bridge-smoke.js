@@ -28,6 +28,7 @@ async function main() {
       pluginCachePath,
       apiToken: "smoke-config-token",
       trustedKey: fixture.publicKey,
+      noDefaultManifest: true,
     });
 
     await checkConfigureAuthentication(firstBridge, fixture.urls.manifest);
