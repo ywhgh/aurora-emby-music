@@ -21526,7 +21526,7 @@ function resetPlayerPreferences() {
   state.transcodeBitrate = DEFAULT_AUDIO_QUALITY_PROFILE.bitrate || normalizeTranscodeBitrate(TRANSCODE_BITRATES[0]?.value);
   state.playbackPreloadEnabled = true;
   state.playbackLosslessPrecacheEnabled = false;
-  state.coverColorEnabled = true;
+  state.coverColorEnabled = false;
   state.themePreference = "system";
   state.replayGainEnabled = false;
   state.sleepFadeSeconds = 30;
@@ -21646,7 +21646,7 @@ function applyImportedLocalData(data) {
   state.playbackDisplaySettings = normalizePlaybackDisplaySettings(preferences.playbackDisplaySettings);
   state.playbackPreloadEnabled = preferences.playbackPreloadEnabled !== false;
   state.playbackLosslessPrecacheEnabled = preferences.playbackLosslessPrecacheEnabled === true;
-  state.coverColorEnabled = preferences.coverColorEnabled !== false;
+  state.coverColorEnabled = preferences.coverColorEnabled === true;
   state.themePreference = settingsOps.normalizeThemePreference(preferences.themePreference);
   state.replayGainEnabled = preferences.replayGainEnabled === true;
   state.sleepFadeSeconds = settingsOps.normalizeSleepFadeSeconds(preferences.sleepFadeSeconds, state.sleepFadeSeconds);
@@ -23183,7 +23183,7 @@ function setTrackAccent(accent, secondaryRgb = accent.rgb, requestId = state.alb
 }
 
 function loadCoverColorEnabled() {
-  return localStorage.getItem(COVER_COLOR_ENABLED_KEY) !== "false";
+  return localStorage.getItem(COVER_COLOR_ENABLED_KEY) === "true";
 }
 
 function saveCoverColorEnabled() {
