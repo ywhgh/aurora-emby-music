@@ -1428,7 +1428,7 @@ function checkAppFunctionReferences() {
   assert(main.includes('import * as search from "./src/search.js"'), "main.js should wire the search ESM module");
   assert(main.includes('import * as player from "./src/player.js"'), "main.js should wire the player ESM module");
   assert(main.includes('import * as queue from "./src/queue.js"'), "main.js should wire the queue ESM module");
-  assert(main.includes('await import("./app.js?v=0.94.0")'), "main.js should load app.js through native ESM");
+  assert(main.includes('await import("./app.js?v=0.94.1")'), "main.js should load app.js through native ESM");
   assert(playerModule.includes("export function seekPlayer"), "player module should own bounded media seeking");
   assert(queueModule.includes("export function move"), "queue module should own immutable queue reordering");
   assert(libraryModule.includes("export function sortTracks"), "library module should own collection sorting");
@@ -1443,6 +1443,9 @@ function checkAppFunctionReferences() {
   assert(app.includes("storeOps.createStore") && app.includes('store.derive("filteredTracks"'), "app wiring should use the store for state and derived filters");
   assert(app.includes("localDataOps.createExportPayload") && app.includes("localDataOps.validateImportPayload"), "settings should use the local data safety module");
   assert(app.includes("coverColorOps.sampleCoverColors") && coverColorModule.includes('image.crossOrigin = "anonymous"'), "Current tracks should use the isolated CORS-safe cover sampler");
+  assert(app.includes('localStorage.getItem(COVER_COLOR_ENABLED_KEY) === "true"'), "Cover color sampling should stay disabled unless explicitly enabled");
+  assert(!/id="settingsCoverColorToggle"[^>]*\schecked(?:\s|\/|>)/.test(index), "Cover color sampling toggle should be off by default");
+  assert(app.includes("state.coverColorEnabled = preferences.coverColorEnabled === true;"), "Imported preferences should only enable cover colors explicitly");
   assert(app.includes('window.matchMedia?.("(prefers-color-scheme: dark)")'), "System theme should observe the browser dark-mode query");
   assert(app.includes('themeMediaQuery?.addEventListener?.("change", handleSystemThemeChange)'), "System theme should react to preference changes");
   assert(index.includes('id="settingsThemeSelect"'), "Settings should expose light, dark, and system theme choices");
@@ -1633,6 +1636,10 @@ function checkAppFunctionReferences() {
   assert(index.includes("aria-describedby=\"trackActionSheetSubtitle\""), "Action sheet should expose subtitle to assistive tech");
   const fallback = read("src/login-fallback.js");
   assert(index.includes('http-equiv="Content-Security-Policy"'), "index should define a CSP meta policy");
+  const csp = index.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] || "";
+  assert(/img-src[^;]*\bhttp:/.test(csp), "CSP should allow artwork from user-configured HTTP Emby servers");
+  assert(/media-src[^;]*\bhttp:/.test(csp), "CSP should allow media from user-configured HTTP Emby servers");
+  assert(/connect-src[^;]*\bhttp:/.test(csp), "CSP should allow API requests to user-configured HTTP Emby servers");
   assert(index.includes('name="referrer" content="no-referrer"'), "index should disable referrer leakage");
   assert(!/<script>(?:.|\n)*?<\/script>/.test(index), "index should not contain inline script blocks");
   assert(!/\son[a-z]+=/i.test(index), "index should not contain inline event handlers");
