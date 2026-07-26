@@ -3772,6 +3772,9 @@ function collectBrowserSmokeMobileImmersiveState() {
     lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
   }
   const lyricFontSizeAfterSetting = Number.parseFloat(window.getComputedStyle(activeImmersiveLyricLine || immersiveLyricList || document.body).fontSize) || 0;
+  // Sample the coalesced save while only the font-size drag has run; settings that persist
+  // immediately (like the translation toggle below) clear the shared debounce timer.
+  const lyricSettingsSavePendingBeforeClose = Boolean(lyricSettingsSaveTimer);
   const originalAutoTranslateForSmoke = state.lyricSettings.autoTranslateMissingLyrics;
   const currentTrackBeforeTranslationToggle = state.currentTrack;
   moreActionSheet.lyricSettingsOpened = Boolean(lyricSettingsModal && !lyricSettingsModal.hidden);
@@ -3790,7 +3793,6 @@ function collectBrowserSmokeMobileImmersiveState() {
   } catch {
     moreActionSheet.lyricSettingsStoredAutoTranslateAfterClick = null;
   }
-  const lyricSettingsSavePendingBeforeClose = Boolean(lyricSettingsSaveTimer);
   moreActionSheet.lyricSettingsLayer = getImmersiveModalLayerState(lyricSettingsModal, ".lyric-settings-card");
   moreActionSheet.lyricFontSizeBeforeSetting = lyricFontSizeBeforeSetting;
   moreActionSheet.lyricFontSizeAfterSetting = lyricFontSizeAfterSetting;
@@ -3802,6 +3804,12 @@ function collectBrowserSmokeMobileImmersiveState() {
     moreActionSheet.lyricSettingsStoredFontScaleAfterClose = JSON.parse(localStorage.getItem(LYRIC_SETTINGS_KEY) || "{}")?.fontScale;
   } catch {
     moreActionSheet.lyricSettingsStoredFontScaleAfterClose = null;
+  }
+  if (state.lyricSettings.autoTranslateMissingLyrics !== originalAutoTranslateForSmoke) {
+    const trackBeforeTranslationRestore = state.currentTrack;
+    state.currentTrack = null;
+    updateLyricSetting("autoTranslateMissingLyrics", originalAutoTranslateForSmoke);
+    state.currentTrack = trackBeforeTranslationRestore;
   }
   if (lyricFontSizeRange) {
     lyricFontSizeRange.value = originalLyricFontSizeRangeValue;

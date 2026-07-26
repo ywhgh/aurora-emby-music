@@ -1680,6 +1680,11 @@ function checkAppFunctionReferences() {
   assert(/media-src[^;]*\bhttp:/.test(csp), "CSP should allow media from user-configured HTTP Emby servers");
   assert(/connect-src[^;]*\bhttp:/.test(csp), "CSP should allow API requests to user-configured HTTP Emby servers");
   assert(index.includes('name="referrer" content="no-referrer"'), "index should disable referrer leakage");
+  for (const remoteScript of index.match(/<script[^>]*\ssrc="https?:\/\/[^"]+"[^>]*>/g) || []) {
+    const scriptSrc = remoteScript.match(/\ssrc="([^"]+)"/)?.[1] || "";
+    assert(/\sintegrity="sha(?:256|384|512)-[A-Za-z0-9+/=]+"/.test(remoteScript), `Third-party script ${scriptSrc} must pin a Subresource Integrity hash`);
+    assert(/\scrossorigin="anonymous"/.test(remoteScript), `Third-party script ${scriptSrc} must set crossorigin="anonymous" so integrity is enforced`);
+  }
   assert(!/<script>(?:.|\n)*?<\/script>/.test(index), "index should not contain inline script blocks");
   assert(!/\son[a-z]+=/i.test(index), "index should not contain inline event handlers");
   assert(fallback.includes("Recommended action:"), "Fallback diagnostics should include a recommended action");
@@ -1688,7 +1693,8 @@ function checkAppFunctionReferences() {
   assert(index.includes("id=\"playbackLosslessPrecacheToggle\""), "Settings should include lossless precache toggle");
   assert(index.includes("id=\"settingsClearPlaybackCacheButton\""), "Settings should include playback cache clearing action");
   assert(index.indexOf("./main.js?v=") < index.indexOf("hls.min.js"), "External hls.js should load after the ESM entry script");
-  assert(index.includes("hls.min.js\" async"), "External hls.js should not block main app initialization");
+  const hlsScriptTag = index.match(/<script[^>]*hls\.min\.js[^>]*>/)?.[0] || "";
+  assert(/\sasync\b/.test(hlsScriptTag), "External hls.js should not block main app initialization");
   assert(index.indexOf("class=\"account-menu-profile\"") < index.indexOf("id=\"connectionBadge\""), "Account menu status badge should live in the top heading");
   assert(index.includes("class=\"hero-side\""), "Home dashboard stats should live inside the hero side region");
   assert(index.includes("server-card stat-connection"), "Home server summary should be merged into the dashboard stats grid");
