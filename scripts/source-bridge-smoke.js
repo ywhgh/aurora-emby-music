@@ -94,6 +94,17 @@ async function main() {
     assert(suffixSidecarLyric.hasBilingual === true, "lyric-by-path should resolve Emby paths by music-dir suffix fallback");
     assert(String(suffixSidecarLyric.mediaPath || "") === sidecarTrackPath, `suffix fallback resolved wrong media path: ${suffixSidecarLyric.mediaPath || "-"}`);
 
+    const metadataQuery = new URLSearchParams({
+      path: "/mnt/music/does-not-exist/Metadata Exact.mp3",
+      trackName: "Metadata Exact",
+      artistName: "Fixture Artist",
+      albumName: "Fixture Album",
+      duration: "122",
+    });
+    const metadataLyric = await fetchJson(`http://127.0.0.1:${bridgePort}/lyric-by-metadata?${metadataQuery}`);
+    assert(String(metadataLyric.lrc || "").includes("metadata exact synced line"), "metadata endpoint should continue when the media path is unavailable");
+    assert(metadataLyric.matchMode === "lrclib-get", `metadata endpoint should expose match mode, got ${metadataLyric.matchMode || "-"}`);
+
     const exactTrackPath = createLrclibTrackFixture(secondBridge.musicDir, "Fixture Artist - LRCLIB Exact.mp3");
     const exactQuery = new URLSearchParams({
       path: exactTrackPath,
@@ -214,14 +225,15 @@ module.exports = {
       if (url.pathname === "/api/get") {
         lrclibRequests.exact += 1;
         const trackName = url.searchParams.get("track_name");
-        if (trackName === "LRCLIB Exact") {
+        if (trackName === "LRCLIB Exact" || trackName === "Metadata Exact") {
+          const metadataFixture = trackName === "Metadata Exact";
           sendJson(response, {
             trackName,
             artistName: "Fixture Artist",
             albumName: "Fixture Album",
-            duration: 120,
-            syncedLyrics: "[00:01.00]LRCLIB exact synced line",
-            plainLyrics: "LRCLIB exact plain line",
+            duration: metadataFixture ? 122 : 120,
+            syncedLyrics: metadataFixture ? "[00:01.00]metadata exact synced line" : "[00:01.00]LRCLIB exact synced line",
+            plainLyrics: metadataFixture ? "metadata exact plain line" : "LRCLIB exact plain line",
           });
           return;
         }

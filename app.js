@@ -267,6 +267,7 @@ const DEFAULT_LYRIC_SETTINGS = Object.freeze({
   letterSpacing: 0,
   autoScroll: true,
   autoImmersiveLyrics: false,
+  autoTranslateMissingLyrics: false,
 });
 const LYRIC_FONT_FAMILY_OPTIONS = Object.freeze([
   { id: "system", label: "系统默认", detail: "跟随设备字体" },
@@ -883,6 +884,8 @@ const lyricLetterSpacingRange = document.querySelector("#lyricLetterSpacingRange
 const lyricLetterSpacingValue = document.querySelector("#lyricLetterSpacingValue");
 const lyricAutoScrollToggle = document.querySelector("#lyricAutoScrollToggle");
 const lyricAutoImmersiveToggle = document.querySelector("#lyricAutoImmersiveToggle");
+const lyricAutoTranslateToggle = document.querySelector("#lyricAutoTranslateToggle");
+const lyricAutoTranslateState = document.querySelector("#lyricAutoTranslateState");
 const playerStyleModal = document.querySelector("#playerStyleModal");
 const playerStyleClose = document.querySelector("#playerStyleClose");
 const playerThemeButtons = [...document.querySelectorAll("[data-player-theme]")];
@@ -1212,6 +1215,7 @@ const store = storeOps.createStore({
   preloadCacheStatus: "",
   lyricsTrackId: null,
   lyricsLoadRequestId: 0,
+  lyricsAbortController: null,
   lyricsStatus: "",
   lyricsSourceDiagnostics: null,
   lyricLines: [],
@@ -1262,6 +1266,8 @@ const themeMediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)") || n
 const MINI_PLAYER_LYRIC_REVEAL_DELAY_MS = 30000;
 const MINI_PLAYER_PROGRESS_LYRIC_TAIL_GUARD_SECONDS = 0.85;
 let miniPlayerLyricRevealTimer = 0;
+let lyricsPrefetchHandle = 0;
+let lyricsPrefetchAbortController = null;
 let miniPlayerLyricText = "";
 let miniPlayerLyricRefreshTimer = 0;
 let miniPlayerLyricIdleListenersBound = false;
@@ -1616,6 +1622,9 @@ function init() {
   });
   lyricAutoImmersiveToggle?.addEventListener("change", () => {
     updateLyricSetting("autoImmersiveLyrics", lyricAutoImmersiveToggle.checked);
+  });
+  lyricAutoTranslateToggle?.addEventListener("change", () => {
+    updateLyricSetting("autoTranslateMissingLyrics", lyricAutoTranslateToggle.checked);
   });
   lyricSettingsModal?.addEventListener("click", (event) => {
     if (isBackdropCloseEvent(event, lyricSettingsModal)) {
@@ -3763,10 +3772,25 @@ function collectBrowserSmokeMobileImmersiveState() {
     lyricFontSizeRange.dispatchEvent(new Event("input", { bubbles: true }));
   }
   const lyricFontSizeAfterSetting = Number.parseFloat(window.getComputedStyle(activeImmersiveLyricLine || immersiveLyricList || document.body).fontSize) || 0;
-  const lyricSettingsSavePendingBeforeClose = Boolean(lyricSettingsSaveTimer);
+  const originalAutoTranslateForSmoke = state.lyricSettings.autoTranslateMissingLyrics;
+  const currentTrackBeforeTranslationToggle = state.currentTrack;
   moreActionSheet.lyricSettingsOpened = Boolean(lyricSettingsModal && !lyricSettingsModal.hidden);
   moreActionSheet.lyricSettingsAutoScrollChecked = Boolean(lyricAutoScrollToggle?.checked);
   moreActionSheet.lyricSettingsAutoImmersiveChecked = Boolean(lyricAutoImmersiveToggle?.checked);
+  moreActionSheet.lyricSettingsAutoTranslateChecked = Boolean(lyricAutoTranslateToggle?.checked);
+  moreActionSheet.lyricSettingsAutoTranslateLabel = lyricSettingsModal?.querySelector("#lyricAutoTranslateLabel")?.textContent?.trim() || "";
+  state.currentTrack = null;
+  lyricAutoTranslateToggle?.closest("label")?.click();
+  state.currentTrack = currentTrackBeforeTranslationToggle;
+  moreActionSheet.lyricSettingsAutoTranslateAfterClick = Boolean(lyricAutoTranslateToggle?.checked);
+  moreActionSheet.lyricSettingsAutoTranslateAriaChecked = lyricAutoTranslateToggle?.getAttribute("aria-checked") || "";
+  moreActionSheet.lyricSettingsAutoTranslateStateText = lyricAutoTranslateState?.textContent?.trim() || "";
+  try {
+    moreActionSheet.lyricSettingsStoredAutoTranslateAfterClick = JSON.parse(localStorage.getItem(LYRIC_SETTINGS_KEY) || "{}")?.autoTranslateMissingLyrics;
+  } catch {
+    moreActionSheet.lyricSettingsStoredAutoTranslateAfterClick = null;
+  }
+  const lyricSettingsSavePendingBeforeClose = Boolean(lyricSettingsSaveTimer);
   moreActionSheet.lyricSettingsLayer = getImmersiveModalLayerState(lyricSettingsModal, ".lyric-settings-card");
   moreActionSheet.lyricFontSizeBeforeSetting = lyricFontSizeBeforeSetting;
   moreActionSheet.lyricFontSizeAfterSetting = lyricFontSizeAfterSetting;
@@ -10494,6 +10518,10 @@ async function loadLyricsFromServer(track) {
   }
 
   const requestId = ++state.lyricsLoadRequestId;
+  state.lyricsAbortController?.abort();
+  lyricsPrefetchAbortController?.abort();
+  const controller = new AbortController();
+  state.lyricsAbortController = controller;
   state.lyricsSourceDiagnostics = null;
   state.lyricsStatus = isExternalSourceTrack(track)
     ? "正在从音源桥尝试读取歌词..."
@@ -10504,7 +10532,7 @@ async function loadLyricsFromServer(track) {
   renderImmersiveLyricFocus();
 
   try {
-    const text = await fetchLyricsText(track);
+    const text = await fetchLyricsText(track, { signal: controller.signal });
 
     if (requestId !== state.lyricsLoadRequestId || state.currentTrack?.Id !== track.Id) {
       return;
@@ -10524,7 +10552,7 @@ async function loadLyricsFromServer(track) {
     renderLyrics(track);
     renderSettings();
   } catch (error) {
-    if (requestId !== state.lyricsLoadRequestId || state.currentTrack?.Id !== track.Id) {
+    if (error?.name === "AbortError" || requestId !== state.lyricsLoadRequestId || state.currentTrack?.Id !== track.Id) {
       return;
     }
 
@@ -10534,6 +10562,8 @@ async function loadLyricsFromServer(track) {
     renderNowLyricFocus();
     renderImmersiveLyricFocus();
     renderSettings();
+  } finally {
+    if (state.lyricsAbortController === controller) state.lyricsAbortController = null;
   }
 }
 
@@ -10563,95 +10593,132 @@ function getLyricsEmptyActions() {
   return actions;
 }
 
-async function fetchLyricsText(track) {
+async function fetchLyricsText(track, options = {}) {
   if (isExternalSourceTrack(track)) {
     const apiUrl = getExternalTrackApiUrl(track);
-
-    if (!apiUrl) {
-      return "";
-    }
-
-    const text = await externalSourceApi.fetchLyric(apiUrl, track);
+    if (!apiUrl) return "";
+    const text = await externalSourceApi.fetchLyric(apiUrl, track, { signal: options.signal, timeoutMs: 12000 });
+    if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     setLyricsSourceDiagnostics({
-      source: "external-source",
-      apiUrl,
-      hasText: Boolean(text.trim()),
-      hasCjk: hasLikelyChineseText(text),
-      hasBilingual: hasLikelyBilingualText(text),
+      source: "external-source", apiUrl, hasText: Boolean(text.trim()),
+      hasCjk: hasLikelyChineseText(text), hasBilingual: hasLikelyBilingualText(text),
       lineCount: countLyricLikeLines(text),
     });
     return text;
   }
 
-  const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge(track);
-  if (sidecarText.trim()) {
-    return sidecarText;
-  }
-
-  return fetchMatchedLyricsFromSourceBridge(track);
+  const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge(track, options);
+  if (sidecarText.trim()) return sidecarText;
+  if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  return fetchMatchedLyricsFromSourceBridge(track, options);
 }
 
-async function fetchEmbySidecarLyricsFromSourceBridge(track) {
-  const apiUrl = getLyricsSourceBridgeApiUrl();
-  if (!apiUrl || !track?.Path) {
-    setLyricsSourceDiagnostics({
-      source: "emby-sidecar",
-      apiUrl: apiUrl || "",
-      path: track?.Path || "",
-      error: apiUrl ? "missing track path" : "missing source bridge url",
-    });
-    return "";
-  }
+function getLyricsBridgeMetadata(track) {
+  return {
+    trackName: track?.Name || "",
+    artistName: getArtists(track),
+    albumName: track?.Album || "",
+    duration: getTrackDurationSeconds(track),
+    path: track?.Path || "",
+  };
+}
 
+async function fetchLyricsBridgeJson(apiUrl, endpoint, track, options = {}) {
+  const timeoutController = new AbortController();
+  const abortFromParent = () => timeoutController.abort();
+  options.signal?.addEventListener("abort", abortFromParent, { once: true });
+  const timer = window.setTimeout(() => timeoutController.abort(), 12000);
   try {
-    const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/lyric-by-path?${toQueryString({
-      path: track.Path,
-      trackName: track.Name || "",
-      artistName: getArtists(track),
-      albumName: track.Album || "",
-      duration: getTrackDurationSeconds(track),
-    })}`, {
-      headers: { Accept: "application/json" },
+    const query = {
+      ...getLyricsBridgeMetadata(track),
+      ...(state.lyricSettings?.autoTranslateMissingLyrics ? { translate: 1 } : {}),
+    };
+    const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/${endpoint}?${toQueryString(query)}`, {
+      headers: { Accept: "application/json" }, signal: timeoutController.signal,
     });
+    let payload = null;
+    try { payload = await response.json(); } catch { payload = {}; }
+    return { response, payload };
+  } finally {
+    window.clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abortFromParent);
+  }
+}
 
-    if (!response.ok) {
-      setLyricsSourceDiagnostics({
-        source: "emby-sidecar",
-        apiUrl,
-        path: track.Path,
-        status: response.status,
-        error: "source bridge lyric-by-path failed",
-      });
-      return "";
+function setBridgeLyricDiagnostics(apiUrl, track, response, payload, source = "emby-lyrics-bridge") {
+  setLyricsSourceDiagnostics({
+    source: payload?.source || source,
+    translationSource: payload?.translationSource || "",
+    matchMode: payload?.matchMode || "",
+    confidence: Number(payload?.confidence || 0),
+    cached: Boolean(payload?.cached),
+    cacheLocation: payload?.cacheLocation || "",
+    apiUrl, path: track?.Path || "", mediaPath: payload?.mediaPath || "",
+    lyricPath: payload?.lyricPath || "", status: response?.status || 0,
+    hasText: Boolean(payload?.lrc), hasCjk: Boolean(payload?.hasCjk),
+    hasBilingual: Boolean(payload?.hasBilingual), lineCount: Number(payload?.lineCount || 0),
+    error: payload?.error || "",
+  });
+}
+
+function scheduleNextLyricsPrefetch(currentTrack) {
+  if (!state.session || isExternalSourceSession() || !currentTrack?.Id) return;
+  if (lyricsPrefetchHandle) {
+    if (window.cancelIdleCallback) window.cancelIdleCallback(lyricsPrefetchHandle);
+    else window.clearTimeout(lyricsPrefetchHandle);
+  }
+  lyricsPrefetchAbortController?.abort();
+  const run = async () => {
+    lyricsPrefetchHandle = 0;
+    if (state.currentTrack?.Id !== currentTrack.Id) return;
+    const nextTrack = getNextPreviewTrack();
+    const apiUrl = getLyricsSourceBridgeApiUrl();
+    if (!nextTrack?.Id || nextTrack.Id === currentTrack.Id || !apiUrl) return;
+    const controller = new AbortController();
+    lyricsPrefetchAbortController = controller;
+    try {
+      await fetchLyricsBridgeJson(apiUrl, "lyric-by-metadata", nextTrack, { signal: controller.signal });
+    } catch {
+      // Background prefetch never changes playback or lyric UI state.
+    } finally {
+      if (lyricsPrefetchAbortController === controller) lyricsPrefetchAbortController = null;
     }
+  };
+  lyricsPrefetchHandle = window.requestIdleCallback
+    ? window.requestIdleCallback(run, { timeout: 2500 })
+    : window.setTimeout(run, 800);
+}
 
-    const payload = await response.json();
-    const text = extractLyricsTextFromResponse(payload);
-    setLyricsSourceDiagnostics({
-      source: "emby-sidecar",
-      apiUrl,
-      path: track.Path,
-      mediaPath: payload?.mediaPath || "",
-      lyricPath: payload?.lyricPath || "",
-      status: response.status,
-      hasText: Boolean(text.trim()),
-      hasCjk: Boolean(payload?.hasCjk) || hasLikelyChineseText(text),
-      hasBilingual: Boolean(payload?.hasBilingual) || hasLikelyBilingualText(text),
-      lineCount: Number(payload?.lineCount || countLyricLikeLines(text)),
-    });
-    return text;
+async function fetchEmbySidecarLyricsFromSourceBridge(track, options = {}) {
+  const apiUrl = getLyricsSourceBridgeApiUrl();
+  if (!apiUrl || !track?.Name) {
+    setLyricsSourceDiagnostics({ source: "emby-lyrics-bridge", error: apiUrl ? "missing track metadata" : "missing source bridge url" });
+    return "";
+  }
+  try {
+    if (track.Path) {
+      const pathResult = await fetchLyricsBridgeJson(apiUrl, "lyric-by-path", track, options);
+      const pathText = extractLyricsTextFromResponse(pathResult.payload);
+      if (pathResult.response.ok && pathText.trim()) {
+        setBridgeLyricDiagnostics(apiUrl, track, pathResult.response, pathResult.payload);
+        return pathText;
+      }
+      const pathUnavailable = pathResult.response.status === 404
+        || /media path not found|path-unavailable/i.test(`${pathResult.payload?.error || ""} ${pathResult.payload?.matchMode || ""}`);
+      if (!pathUnavailable) setBridgeLyricDiagnostics(apiUrl, track, pathResult.response, pathResult.payload);
+    }
+    const metadataResult = await fetchLyricsBridgeJson(apiUrl, "lyric-by-metadata", track, options);
+    const metadataText = extractLyricsTextFromResponse(metadataResult.payload);
+    setBridgeLyricDiagnostics(apiUrl, track, metadataResult.response, metadataResult.payload);
+    return metadataResult.response.ok ? metadataText : "";
   } catch (error) {
-    setLyricsSourceDiagnostics({
-      source: "emby-sidecar",
-      apiUrl,
-      path: track.Path,
-      error: readableError(error),
-    });
+    if (error?.name === "AbortError" && options.signal?.aborted) throw error;
+    setLyricsSourceDiagnostics({ source: "emby-lyrics-bridge", apiUrl, error: readableError(error) });
     return "";
   }
 }
 
-async function fetchMatchedLyricsFromSourceBridge(track) {
+async function fetchMatchedLyricsFromSourceBridge(track, options = {}) {
   const apiUrl = getLyricsSourceBridgeApiUrl();
   if (!apiUrl || !track?.Name) {
     return "";
@@ -10669,8 +10736,10 @@ async function fetchMatchedLyricsFromSourceBridge(track) {
       limit: 8,
       localOnly: true,
       timeoutMs: 12000,
+      signal: options.signal,
     });
   } catch {
+    if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     result = null;
   }
 
@@ -10681,16 +10750,18 @@ async function fetchMatchedLyricsFromSourceBridge(track) {
         query,
         limit: 12,
         timeoutMs: 15000,
+        signal: options.signal,
       });
       matchedTracks = findMatchedLyricTracks(track, pluginResult?.Items || []);
     } catch {
+      if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       matchedTracks = [];
     }
   }
 
   for (const matchedTrack of matchedTracks) {
     try {
-      const lyric = await externalSourceApi.fetchLyric(apiUrl, matchedTrack);
+      const lyric = await externalSourceApi.fetchLyric(apiUrl, matchedTrack, { signal: options.signal, timeoutMs: 12000 });
       if (lyric.trim()) {
         setLyricsSourceDiagnostics({
           source: "matched-source-bridge",
@@ -10705,6 +10776,7 @@ async function fetchMatchedLyricsFromSourceBridge(track) {
         return lyric;
       }
     } catch {
+      if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       // Try the next matched source; individual plugins can fail or have missing lyrics.
     }
   }
@@ -11108,11 +11180,16 @@ function flushLyricSettingsSave() {
 }
 
 function normalizeLyricSettings(settings = {}) {
-  return settingsOps.normalizeLyricSettings(settings, {
+  const normalized = settingsOps.normalizeLyricSettings(settings, {
     defaults: DEFAULT_LYRIC_SETTINGS,
     fontFamilies: LYRIC_FONT_FAMILY_MAP,
     clamp,
   });
+
+  return {
+    ...normalized,
+    autoTranslateMissingLyrics: settings?.autoTranslateMissingLyrics === true,
+  };
 }
 
 function applyLyricSettings(options = {}) {
@@ -11167,6 +11244,15 @@ function renderLyricSettingsControls() {
   if (lyricAutoImmersiveToggle) {
     lyricAutoImmersiveToggle.checked = state.lyricSettings.autoImmersiveLyrics;
   }
+  if (lyricAutoTranslateToggle) {
+    const enabled = state.lyricSettings.autoTranslateMissingLyrics;
+    lyricAutoTranslateToggle.checked = enabled;
+    lyricAutoTranslateToggle.setAttribute("aria-checked", String(enabled));
+    lyricAutoTranslateToggle.title = enabled ? "歌词翻译已开启" : "歌词翻译已关闭";
+  }
+  if (lyricAutoTranslateState) {
+    lyricAutoTranslateState.textContent = state.lyricSettings.autoTranslateMissingLyrics ? "开启" : "关闭";
+  }
 }
 
 function updateLyricSetting(key, value) {
@@ -11186,6 +11272,9 @@ function updateLyricSetting(key, value) {
   }
   if (key === "autoScroll" && state.lyricSettings.autoScroll) {
     updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
+  }
+  if (key === "autoTranslateMissingLyrics" && state.lyricSettings.autoTranslateMissingLyrics && state.currentTrack?.Id) {
+    loadLyricsFromServer(state.currentTrack);
   }
   if ((key === "fontScale" || key === "fontFamily" || key === "letterSpacing") && state.lyricSettings.autoScroll) {
     refreshLyricLayoutAfterSettingsChange();
@@ -19906,6 +19995,7 @@ async function playTrack(track, queue, options = {}) {
         setLibraryStatus("");
         addRecentTrack(track);
         preloadNextTrack();
+        scheduleNextLyricsPrefetch(track);
         reportPlaybackStarted(track);
       }
     })
@@ -21856,6 +21946,11 @@ function buildDiagnostics() {
     `Lyrics status: ${state.lyricsStatus || "-"}`,
     `Lyrics track id: ${state.lyricsTrackId || "-"}`,
     `Lyrics source: ${state.lyricsSourceDiagnostics?.source || "-"}`,
+    `Lyrics translation source: ${state.lyricsSourceDiagnostics?.translationSource || "-"}`,
+    `Lyrics match mode: ${state.lyricsSourceDiagnostics?.matchMode || "-"}`,
+    `Lyrics confidence: ${state.lyricsSourceDiagnostics?.confidence || "-"}`,
+    `Lyrics cached: ${state.lyricsSourceDiagnostics?.cached ? "yes" : "no"}`,
+    `Lyrics cache location: ${state.lyricsSourceDiagnostics?.cacheLocation || "-"}`,
     `Lyrics source API: ${state.lyricsSourceDiagnostics?.apiUrl || "-"}`,
     `Lyrics source path: ${state.lyricsSourceDiagnostics?.path || "-"}`,
     `Lyrics media path: ${state.lyricsSourceDiagnostics?.mediaPath || "-"}`,

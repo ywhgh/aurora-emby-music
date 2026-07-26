@@ -11,6 +11,7 @@ export function normalizeLyricSettings(settings = {}, options = {}) {
     letterSpacing: Math.round(clamp(Number.isFinite(letterSpacing) ? letterSpacing : defaults.letterSpacing, 0, 12) * 10) / 10,
     autoScroll: settings?.autoScroll !== false,
     autoImmersiveLyrics: settings?.autoImmersiveLyrics === true,
+    autoTranslateMissingLyrics: settings?.autoTranslateMissingLyrics === true,
   };
 }
 

@@ -14,6 +14,17 @@ const { URL } = require("node:url");
 const { Worker } = require("node:worker_threads");
 const APP_VERSION = require("../package.json").version;
 const {
+  createLyricResponse: createUnifiedLyricResponse,
+  createLyricsService,
+  createTranslationProvider,
+  hasBilingualLrc,
+  isExcludedLyricFile,
+  isUsableLyric,
+  normalizeMetadata: normalizeLyricsMetadata,
+  scoreLyricCandidate,
+  scoreMetadataCandidate,
+} = require("./lyrics-service.js");
+const {
   DEFAULT_BUILT_IN_SOURCE_MANIFEST_URLS,
   getBuiltInSourcePin,
   verifyBuiltInManifestContent,
@@ -88,6 +99,25 @@ const lyricCacheDir = path.resolve(
 const PLUGIN_TRACK_CACHE_VERSION = 1;
 const PLUGIN_TRACK_CACHE_LIMIT = 2000;
 const PLUGIN_TRACK_CACHE_FLUSH_DELAY_MS = 250;
+const lyricsTranslationProvider = createTranslationProvider({
+  endpoint: process.env.LYRICS_TRANSLATION_PROVIDER_URL,
+  token: process.env.LYRICS_TRANSLATION_PROVIDER_TOKEN,
+  model: process.env.LYRICS_TRANSLATION_PROVIDER_MODEL,
+  name: process.env.LYRICS_TRANSLATION_PROVIDER_NAME,
+  timeoutMs: process.env.LYRICS_TRANSLATION_TIMEOUT_MS || 10000,
+});
+const lyricsService = createLyricsService({
+  cacheDir: lyricCacheDir,
+  version: APP_VERSION,
+  negativeTtlMs: Number(process.env.LYRICS_NEGATIVE_CACHE_TTL_MS || 6 * 60 * 60 * 1000),
+  translationProvider: lyricsTranslationProvider,
+  resolveMediaPath: async (requestedPath) => resolveEmbyMediaPath(requestedPath),
+  findLocalCandidate: async (mediaPath) => getLocalLyricCandidate(mediaPath),
+  fetchStructured: async ({ metadata, mediaPath }) => getStructuredLyricCandidate(mediaPath, metadata),
+  fetchSource: async ({ metadata }) => getPluginLyricCandidate(metadata),
+  fetchExact: async ({ metadata }) => getLrclibExactCandidate(metadata),
+  fetchSearch: async ({ metadata }) => getLrclibSearchCandidate(metadata),
+});
 let musicDirs = uniqueStrings([
   ...splitList(options.musicDir),
   ...splitList(process.env.MUSIC_DIR),
@@ -385,60 +415,41 @@ async function handleRequest(request, response) {
     return;
   }
 
-  if (url.pathname === "/lyric-by-path") {
-    const mediaPath = resolveEmbyMediaPath(url.searchParams.get("path"));
-
-    if (!mediaPath) {
-      sendJson(request, response, 404, { error: "media path not found" });
+  if (url.pathname === "/lyric-by-path" || url.pathname === "/lyric-by-metadata") {
+    const requiresPath = url.pathname === "/lyric-by-path";
+    const requestedPath = url.searchParams.get("path") || "";
+    const resolvedPath = resolveEmbyMediaPath(requestedPath);
+    if (requiresPath && !resolvedPath) {
+      sendJson(request, response, 404, {
+        ...createUnifiedLyricResponse({ source: "none", matchMode: "path-unavailable" }),
+        error: "media path not found",
+      });
       return;
     }
-
-    const localLyric = findLyric(mediaPath);
-    if (localLyric) {
-      sendJson(request, response, 200, createLyricPayload(readTextFile(localLyric), {
-        local: true,
-        mediaPath,
-        lyricPath: localLyric,
-      }));
-      return;
-    }
-
-    const cachedLyric = findCachedLyric(mediaPath);
-    if (cachedLyric) {
-      sendJson(request, response, 200, createLyricPayload(readTextFile(cachedLyric), {
-        local: true,
-        cached: true,
-        source: "lrclib",
-        cacheLocation: "cache",
-        mediaPath,
-        lyricPath: cachedLyric,
-      }));
-      return;
-    }
-
-    const matched = await fetchLrclibLyrics({
-      trackName: url.searchParams.get("trackName"),
-      artistName: url.searchParams.get("artistName"),
+    const pathMetadata = parseTrackMetadataFromPath(resolvedPath);
+    const metadata = normalizeLyricsMetadata({
+      trackName: url.searchParams.get("trackName") || pathMetadata.trackName,
+      artistName: url.searchParams.get("artistName") || pathMetadata.artistName,
       albumName: url.searchParams.get("albumName"),
       duration: url.searchParams.get("duration"),
-      mediaPath,
     });
-
-    if (!matched?.lrc) {
-      sendJson(request, response, 404, { error: "lyric not found" });
+    if (!metadata.trackName || !metadata.artistName) {
+      sendJson(request, response, 400, {
+        ...createUnifiedLyricResponse({ source: "none", matchMode: "invalid-metadata" }),
+        error: "trackName and artistName are required",
+      });
       return;
     }
-
-    const cached = cacheLrclibLyrics(mediaPath, matched.lrc);
-    sendJson(request, response, 200, createLyricPayload(matched.lrc, {
-      local: false,
-      matched: true,
-      source: "lrclib",
-      cached: Boolean(cached.filePath),
-      cacheLocation: cached.location,
-      mediaPath,
-      lyricPath: cached.filePath,
-    }));
+    const result = await lyricsService.resolve({
+      metadata,
+      path: requestedPath,
+      refresh: url.searchParams.get("refresh") === "1",
+      translate: url.searchParams.get("translate") === "1",
+      write: url.searchParams.get("write") !== "0",
+      overwrite: url.searchParams.get("overwrite") === "1",
+    });
+    const payload = createUnifiedLyricResponse(result);
+    sendJson(request, response, payload.lrc ? 200 : 404, payload.lrc ? payload : { ...payload, error: "lyric not found" });
     return;
   }
 
@@ -2065,6 +2076,138 @@ function createLyricPayload(lrc, details = {}) {
   };
 }
 
+function getLocalLyricCandidate(mediaPath) {
+  const candidate = findBestLyricCandidate(mediaPath);
+  if (!candidate || !Number.isFinite(candidate.score) || !isUsableLyric(candidate.text)) return null;
+  const parsed = path.parse(mediaPath);
+  const descriptorPaths = [
+    path.join(parsed.dir, `${parsed.name}.lyrics.meta.json`),
+    path.join(parsed.dir, `${parsed.name}.lyrics.json`),
+  ];
+  let descriptor = null;
+  for (const descriptorPath of descriptorPaths) {
+    try { descriptor = JSON.parse(fs.readFileSync(descriptorPath, "utf8")); } catch { descriptor = null; }
+    if (descriptor?.generator === "Aurora Lyrics Bridge") break;
+  }
+  const generated = descriptor?.generator === "Aurora Lyrics Bridge"
+    && descriptor?.contentSha256 === crypto.createHash("sha256").update(candidate.text).digest("hex");
+  return {
+    lrc: candidate.text,
+    local: true,
+    cached: generated,
+    source: generated ? (descriptor.source || "sidecar") : "sidecar",
+    translationSource: generated ? (descriptor.translationSource || "") : "",
+    lyricPath: candidate.filePath,
+    cacheLocation: "sidecar",
+    hasBilingual: hasBilingualLrc(candidate.text),
+  };
+}
+
+function getStructuredLyricCandidate(mediaPath, metadata) {
+  if (!mediaPath) return null;
+  const parsed = path.parse(mediaPath);
+  const candidates = [
+    path.join(parsed.dir, `${parsed.name}.lyrics.json`),
+    path.join(parsed.dir, `${parsed.name}.lddc.json`),
+  ];
+  for (const filePath of candidates) {
+    let payload;
+    try { payload = JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { continue; }
+    const lrc = extractPluginLyricText(payload);
+    if (!isUsableLyric(lrc)) continue;
+    const source = pickFirstString(payload.source, payload.provider, payload.platform, payload.data?.source) || "structured";
+    const hasTranslation = hasBilingualLrc(lrc) || Boolean(pickStructuredTranslation(payload));
+    return {
+      lrc,
+      local: false,
+      source,
+      translationSource: hasTranslation ? source : "",
+      matchMode: "structured-sidecar",
+      confidence: 1,
+      lyricPath: filePath,
+      cacheLocation: "sidecar",
+      metadata,
+      verbatimLrc: readTextFile(path.join(parsed.dir, `${parsed.name}.lddc.verbatim.lrc`)),
+      rawLyricsData: payload,
+    };
+  }
+  return null;
+}
+
+function pickStructuredTranslation(payload) {
+  return pickFirstString(
+    payload?.translation, payload?.translatedLyric, payload?.translatedLyrics,
+    payload?.transLyric, payload?.tlyric, payload?.tlrc,
+    payload?.data?.translation, payload?.data?.translatedLyric, payload?.data?.translatedLyrics,
+    payload?.result?.translation, payload?.result?.translatedLyric, payload?.result?.translatedLyrics,
+  );
+}
+
+async function getPluginLyricCandidate(metadata) {
+  const query = [metadata.trackName, metadata.artistName].filter(Boolean).join(" ").trim();
+  if (!query || !state.plugins.length) return null;
+  const candidates = await searchPluginTracksForLyric(query);
+  const ranked = candidates.map((track) => ({
+    track,
+    match: scoreMetadataCandidate(metadata, {
+      trackName: track.title, artistName: track.artist, albumName: track.album, duration: track.duration,
+    }, { maxDurationDelta: 8 }),
+  })).filter((item) => item.match.valid).sort((a, b) => b.match.score - a.match.score);
+  for (const item of ranked) {
+    const lrc = await resolvePluginLyric(item.track).catch(() => "");
+    if (!isUsableLyric(lrc)) continue;
+    const source = item.track.pluginName || item.track.pluginKey || "source-plugin";
+    return {
+      lrc,
+      source,
+      translationSource: hasBilingualLrc(lrc) ? source : "",
+      metadata: {
+        trackName: item.track.title, artistName: item.track.artist,
+        albumName: item.track.album, duration: item.track.duration,
+      },
+      matchMode: "source-plugin",
+      confidence: Math.max(0, Math.min(1, item.match.score / 100)),
+      rawLyricsData: item.track.raw || null,
+    };
+  }
+  return null;
+}
+
+function createLrclibCandidate(candidate, metadata, matchMode) {
+  if (!candidate) return null;
+  const candidateMetadata = {
+    trackName: candidate.trackName,
+    artistName: candidate.artistName,
+    albumName: candidate.albumName,
+    duration: candidate.duration,
+  };
+  const match = scoreMetadataCandidate(metadata, candidateMetadata, { maxDurationDelta: 8 });
+  const lyric = toLrclibLyric(candidate);
+  if (!match.valid || !lyric?.lrc || !isUsableLyric(lyric.lrc)) return null;
+  return {
+    ...lyric,
+    source: "lrclib",
+    metadata: candidateMetadata,
+    matchMode,
+    confidence: Math.max(0, Math.min(1, match.score / 100)),
+    rawLyricsData: candidate,
+  };
+}
+
+async function getLrclibExactCandidate(metadata) {
+  if (!lrclibEnabled || !lrclibApiUrl) return null;
+  return createLrclibCandidate(await fetchLrclibExact(metadata), metadata, "lrclib-get");
+}
+
+async function getLrclibSearchCandidate(metadata) {
+  if (!lrclibEnabled || !lrclibApiUrl) return null;
+  const payload = await fetchLrclibSearch(metadata);
+  return (Array.isArray(payload) ? payload : [])
+    .map((candidate) => createLrclibCandidate(candidate, metadata, "lrclib-search"))
+    .filter(Boolean)
+    .sort((left, right) => right.confidence - left.confidence)[0] || null;
+}
+
 function findCachedLyric(audioPath) {
   const filePath = getCachedLyricPath(audioPath);
   return fs.existsSync(filePath) ? filePath : "";
@@ -2295,9 +2438,10 @@ function findBestLyricCandidate(audioPath) {
     }))
     .map((candidate) => ({
       ...candidate,
-      score: getLyricCandidateScore(candidate, parsed.name),
+      score: scoreLyricCandidate(candidate, parsed.name),
     }))
-    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath, "zh-Hans"))[0];
+    .filter((candidate) => Number.isFinite(candidate.score))
+    .sort((left, right) => right.score - left.score || left.filePath.localeCompare(right.filePath, "zh-Hans"))[0] || null;
 }
 
 function collectLyricCandidates(parsedAudioPath) {
@@ -2327,7 +2471,7 @@ function collectLyricCandidates(parsedAudioPath) {
 function addLyricCandidate(candidates, seen, filePath, exactBaseName) {
   const resolved = path.resolve(filePath);
 
-  if (seen.has(resolved) || !fs.existsSync(resolved)) {
+  if (seen.has(resolved) || isExcludedLyricFile(resolved) || !fs.existsSync(resolved)) {
     return;
   }
 

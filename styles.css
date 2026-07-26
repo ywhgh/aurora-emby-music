@@ -8323,12 +8323,63 @@ body.action-sheet-open .content {
 
 .lyric-settings-toggle {
   grid-template-columns: minmax(0, 1fr) auto;
+  cursor: pointer;
+  user-select: none;
 }
 
-.lyric-settings-toggle input {
+.lyric-toggle-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.48rem;
+}
+
+.lyric-toggle-state {
+  min-width: 2rem;
+  color: #6b7280;
+  font-size: 0.72rem;
+  font-weight: 760;
+  text-align: right;
+}
+
+.lyric-settings-toggle input[type="checkbox"] {
+  position: relative;
   width: 2.75rem;
-  height: 1.45rem;
-  accent-color: var(--red);
+  height: 1.5rem;
+  margin: 0;
+  border: 1px solid rgba(17, 24, 39, 0.14);
+  border-radius: 999px;
+  appearance: none;
+  background: #d1d5db;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.lyric-settings-toggle input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 0.14rem;
+  left: 0.15rem;
+  width: 1.08rem;
+  height: 1.08rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.24);
+  transition: transform 160ms ease;
+}
+
+.lyric-settings-toggle input[type="checkbox"]:checked {
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.lyric-settings-toggle input[type="checkbox"]:checked::before {
+  transform: translateX(1.22rem);
+}
+
+.lyric-settings-toggle input[type="checkbox"]:focus-visible {
+  outline: 3px solid rgba(236, 65, 65, 0.22);
+  outline-offset: 2px;
 }
 
 .lyric-settings-offset-actions {

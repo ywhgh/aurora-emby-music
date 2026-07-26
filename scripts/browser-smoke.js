@@ -1053,6 +1053,7 @@ function checkPageState(check, page) {
   assert(isWarmDarkCard(moreActionSheet.lyricSettingsLayer), `${label} lyric settings modal should use the immersive warm dark card style: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoScrollChecked === true, `${label} lyric auto-scroll setting should default on: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsAutoImmersiveChecked === false, `${label} lyric auto immersive setting should default off: ${JSON.stringify(moreActionSheet)}`);
+  assert(moreActionSheet.lyricSettingsAutoTranslateChecked === false, `${label} lyric missing-translation setting should default off: ${JSON.stringify(moreActionSheet)}`);
   assert((moreActionSheet.lyricFontSizeAfterSetting || 0) > (moreActionSheet.lyricFontSizeBeforeSetting || 0) + 1, `${label} lyric font-size setting should immediately resize immersive lyrics: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricFontSizeRangeValue === "125", `${label} lyric font-size range should apply the selected value before restore: ${JSON.stringify(moreActionSheet)}`);
   assert(moreActionSheet.lyricSettingsSavePendingBeforeClose === true, `${label} lyric font-size drag should coalesce save before closing: ${JSON.stringify(moreActionSheet)}`);

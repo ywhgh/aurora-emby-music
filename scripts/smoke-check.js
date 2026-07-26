@@ -417,6 +417,15 @@ function checkLyrics() {
   assert(bilingualOffsetLine.translatedWordTimeline?.[1]?.time === 1.5, `LRC offset should shift translated word time to 1.5, got ${bilingualOffsetLine.translatedWordTimeline?.[1]?.time}`);
 
   const app = read("app.js");
+  const sourceBridge = read("scripts/source-bridge.js");
+  assert(index.includes('id="lyricAutoTranslateToggle"'), "Lyric settings should expose the missing-Chinese translation toggle");
+  const lyricAutoTranslateInput = index.match(/<input id="lyricAutoTranslateToggle"[^>]*>/)?.[0] || "";
+  assert(/type="checkbox"/.test(lyricAutoTranslateInput), "Missing-Chinese translation toggle should stay a checkbox input");
+  assert(!/(?<![-\w])checked\b/.test(lyricAutoTranslateInput), "Missing-Chinese translation should default off in markup");
+  assert(app.includes("autoTranslateMissingLyrics: false"), "Missing-Chinese translation should default off in app state");
+  assert(app.includes("state.lyricSettings?.autoTranslateMissingLyrics ? { translate: 1 } : {}"), "Lyric bridge requests should opt in with translate=1 only when enabled");
+  assert(app.includes('loadLyricsFromServer(state.currentTrack)'), "Opening missing-Chinese translation should reload the current track lyrics");
+  assert(sourceBridge.includes('translate: url.searchParams.get("translate") === "1"'), "Source bridge should parse explicit translation opt-in");
   assert(app.includes("function appendLyricLineContent"), "Missing shared lyric line renderer");
   assert(app.includes("renderNowLyricFocusLine"), "Missing now lyric focus renderer");
   assert(app.includes("renderImmersiveLyricFocus"), "Missing immersive lyric renderer");
@@ -1403,6 +1412,12 @@ async function checkSettingsModule() {
   assert(settings.normalizeThemePreference("invalid") === "system", "Invalid theme settings should fall back to system");
   assert(settings.normalizeSleepFadeSeconds(60) === 60, "Sleep fade settings should accept supported durations");
   assert(settings.normalizeSleepFadeSeconds(45) === 30, "Sleep fade settings should reject unsupported durations");
+  const lyricOptions = {
+    defaults: { fontScale: 1, fontFamily: "system", letterSpacing: 0 },
+    fontFamilies: { system: "system-ui" },
+  };
+  assert(settings.normalizeLyricSettings({}, lyricOptions).autoTranslateMissingLyrics === false, "Missing-Chinese translation should default off");
+  assert(settings.normalizeLyricSettings({ autoTranslateMissingLyrics: true }, lyricOptions).autoTranslateMissingLyrics === true, "Missing-Chinese translation should require explicit true");
 }
 
 async function checkStoreModule() {
@@ -1605,11 +1620,12 @@ function checkAppFunctionReferences() {
   assert(/function saveLyricsSourceBridgeApiUrl\(apiUrl\) \{[\s\S]*?localStorage\.setItem\(LYRICS_SOURCE_BRIDGE_API_KEY, normalizedApiUrl\);[\s\S]*?localStorage\.removeItem\(LYRICS_SOURCE_BRIDGE_API_KEY\);[\s\S]*?\}/.test(app), "Emby lyrics bridge should save and clear only its dedicated localStorage key");
   assert(/function getConfiguredEmbyLyricsSourceBridgeApiUrl\(\) \{[\s\S]*?loadLyricsSourceBridgeApiUrl\(\)[\s\S]*?window\.AuroraRuntimeConfig\?\.lyricsBridgeUrl[\s\S]*?getSameHostLyricsSourceBridgeApiUrl\(\)/.test(app), "Emby lyrics bridge should prefer manual config, then deployment config, then same-host discovery");
   assert(/function getSameHostLyricsSourceBridgeApiUrl\(\) \{[\s\S]*?location\.protocol[\s\S]*?location\.hostname[\s\S]*?:5174/.test(app), "Emby lyrics bridge should discover port 5174 on the current HTTP(S) host");
-  assert(/lyric-by-path\?\$\{toQueryString\(\{[\s\S]*?trackName:[\s\S]*?artistName:[\s\S]*?albumName:[\s\S]*?duration:/.test(app), "Lyric sidecar lookup should pass metadata for LRCLIB matching");
+  assert(/function getLyricsBridgeMetadata\(track\) \{[\s\S]*?trackName:[\s\S]*?artistName:[\s\S]*?albumName:[\s\S]*?duration:[\s\S]*?path:/.test(app)
+    && /fetchLyricsBridgeJson\(apiUrl, "lyric-by-path", track, options\)/.test(app), "Lyric sidecar lookup should pass metadata for matching");
   assert(!app.includes("getDefaultRemoteSourceBridgeApiUrl"), "Emby lyrics bridge should not retain the hard-coded remote fallback");
   assert(app.includes("function getExternalTrackApiUrl"), "External source playback should centralize restored track bridge URL resolution");
   assert(/function getExternalTrackApiUrl\(track, session = state\.session\) \{[\s\S]*?const sessionApiUrl = getSessionExternalSourceApiUrl\(session\)[\s\S]*?loadExternalSourceApiUrl\(\);[\s\S]*?if \(sessionApiUrl\) \{[\s\S]*?return sessionApiUrl;[\s\S]*?const trackApiUrl = track\?\.ExternalSource\?\.apiUrl;/.test(app), "Restored external tracks should prefer the current bridge session URL over stale per-track URLs");
-  assert(/fetchLyricsText\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");
+  assert(/fetchLyricsText\(track, options = \{\}\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External lyrics should use the current bridge URL after app re-entry");
   assert(/preparePlaybackSession\(track, mode, requestId, options = \{\}\)[\s\S]*?fetchMediaSource\(getExternalTrackApiUrl\(track\), track/.test(app), "External playback should use the current bridge URL after app re-entry");
   assert(/testExternalPlaybackChain\(track\)[\s\S]*?fetchMediaSource\(getExternalTrackApiUrl\(track\), track/.test(app), "External playback tests should use the current bridge URL after app re-entry");
   assert(/getExternalTrackQualityResolveKey\(track\)[\s\S]*?const apiUrl = getExternalTrackApiUrl\(track\)/.test(app), "External quality probing should use the current bridge URL after app re-entry");

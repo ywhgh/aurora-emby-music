@@ -228,7 +228,7 @@ function createExternalSourceApi() {
     }
   }
 
-  async function fetchLyric(apiUrl, track) {
+  async function fetchLyric(apiUrl, track, options = {}) {
     const inlineLyric = pickString(
       track?.ExternalSource?.lyric,
       track?.ExternalSource?.lyrics,
@@ -253,7 +253,7 @@ function createExternalSourceApi() {
     appendExternalTrackSnapshot(url, track);
 
     try {
-      const payload = await requestJson(url);
+      const payload = await requestJson(url, { signal: options.signal, timeoutMs: options.timeoutMs });
       return extractLyricText(payload);
     } catch (error) {
       if (String(error?.message || "").includes("404")) {
