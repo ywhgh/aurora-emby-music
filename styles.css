@@ -24285,3 +24285,128 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     100% { transform: translateY(0); opacity: 1; }
   }
 }
+
+/* Touch layout corrections v0.94.9
+   Two mobile layout defects measured at 390x844 and 360x780:
+   1. `.track-list.unified-track-list .track-actions` reserves 10.9rem for a
+      three-button cluster, but touch layouts hide all of them except the
+      overflow button. The dead reservation starved the artist/album line down
+      to a single character ("Q..." / "H.").
+   2. `.collection-quick-actions` is anchored to the card box, so once touch
+      layouts pin it visible it lands on the card title instead of the cover. */
+
+@media (hover: none) {
+  body:not(.immersive-player-open) :is(#homeRecentPlayedList, #recentTrackList, .track-list.unified-track-list) .track-actions {
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  /* The artist is the more useful half of the line, so let the album give up
+     room first instead of both shrinking proportionally to their text width. */
+  body:not(.immersive-player-open) .home-track-meta .home-track-artist {
+    flex-shrink: 1;
+  }
+
+  body:not(.immersive-player-open) .home-track-meta .home-track-album {
+    flex-shrink: 4;
+  }
+}
+
+/* Phone portrait cannot fit artist + album + quality badge on one 12px line,
+   so drop the album the way `.track-album` is already dropped for the other
+   row variant and let the artist read in full. */
+@media (hover: none) and (max-width: 430px) {
+  body:not(.immersive-player-open) .home-track-meta .home-track-album,
+  body:not(.immersive-player-open) .home-track-meta .home-track-separator {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  /* Square cover art means the cover's height equals the card's inline size,
+     so container units put the quick actions back inside the artwork. */
+  .album-card,
+  .playlist-card,
+  .artist-card {
+    container-type: inline-size;
+  }
+
+  .collection-quick-actions {
+    top: max(0.5rem, 100cqw - 3.25rem);
+    right: 0.5rem;
+    bottom: auto;
+  }
+
+  .artist-card .collection-quick-actions {
+    top: max(0.5rem, 100cqw - 3.25rem);
+    right: 50%;
+    bottom: auto;
+    transform: translateX(50%);
+  }
+}
+
+/* The mini player reserves a 56px control track (styles.css:21968), sized for a
+   lone play button. It actually renders quality badge + favorite + play, which
+   need 125px, so the cluster centres in the track and overflows ~34.5px each
+   way: left under the title/artist copy, right past the bar's own
+   `overflow: hidden` edge, which sliced 24.5px off the 44px play button. Let the
+   track size to what it holds; the meta button is `flex: 1 1 auto` and gives the
+   room back. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .player-center {
+    width: auto;
+    height: auto;
+  }
+
+  /* The pause state (styles.css:22005) paints `background` plus an offset
+     `box-shadow` to draw two bars, but it never clears the play triangle's
+     borders. Since the triangle is `width: 0; height: 0`, the background still
+     fills the 11.5x15.4px border box and merges with its own shadow into one
+     solid red slab. Give the bars real geometry, drop the triangle, and shift
+     left by half the shadow offset so the pair sits centred in the button. */
+  body.is-audio-playing:not(.immersive-player-open) #playButton::before {
+    width: 0.2rem;
+    height: 0.94rem;
+    border: 0;
+    border-radius: 1px;
+    transform: translateX(-0.19rem);
+  }
+}
+
+/* `.action-icon-play` carries `color: var(--red)` so the glyph reads on the
+   white action buttons it normally sits in. `.collection-quick-play` is the one
+   place with a red fill, so there the icon was red-on-red and the card looked
+   like a blank red dot. Set white explicitly rather than inheriting: the
+   `.action-icon-wrap` span in between is caught by the generic
+   `.album-card span` muted-text rule. */
+.collection-quick-play .action-icon-play,
+.collection-quick-play .action-icon-playNext {
+  color: #fff;
+}
+
+/* The quality pill is capped at 42px, but the longest labels the player emits
+   ("FLAC16bit", "FLAC24bit") measure 41.2px of text plus 10px padding and 2px
+   border — 53.2px. With `overflow: visible` the surplus painted straight through
+   the pill border and onto the favourite button. Widen to fit those labels, and
+   clip rather than overflow if a longer one ever shows up. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .quality-badge {
+    max-width: 3.4rem;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 374px) {
+  body:not(.immersive-player-open) .mini-player-mobile .quality-badge {
+    max-width: 3.25rem;
+  }
+}
+
+/* Both halves of a select trigger are `flex: 0 1 auto`, so at 360px the label
+   and the value shrink together: "音乐库：" broke onto a second line (making the
+   pill 32px tall) while "全部音乐" still truncated. The prefix is a short fixed
+   label, so pin it to one line and let the value keep absorbing the shortfall
+   through the ellipsis it already has. */
+.enhanced-select-trigger .select-prefix {
+  white-space: nowrap;
+}
