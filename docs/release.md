@@ -61,9 +61,13 @@ before releasing:
 
 ```bash
 npm run mock:emby &          # Emby stand-in on :8096
-python -m http.server 5173 & # or `npm run serve`
+npm run serve &              # static server on :5173
 npm run ui:capture           # PNGs land in ./.ui-capture (git-ignored)
 ```
+
+`npm run smoke:browser` also needs the static server on :5173 — it does
+not start one itself, and it only runs when `BROWSER_SMOKE_RUN=1` is set
+(which is why CI skips it).
 
 ## 4. Release
 
