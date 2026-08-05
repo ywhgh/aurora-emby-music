@@ -967,6 +967,7 @@ function checkPageState(check, page) {
   const downloadOptions = mobileImmersiveLayout.downloadOptions || {};
   const audioQualityOptions = mobileImmersiveLayout.audioQualityOptions || {};
   const moreActionSheet = mobileImmersiveLayout.moreActionSheet || {};
+  const trackSwitchResidue = lyricProgress.trackSwitchResidue || {};
   const immersiveVisualizer = page.immersiveVisualizer || {};
   const externalSourceReentry = page.externalSourceReentry || {};
   const searchAbort = page.searchAbort || {};
@@ -1102,6 +1103,12 @@ function checkPageState(check, page) {
   assert(!lyricProgress.error, `${label} lyric progress smoke failed: ${lyricProgress.error || "-"}`);
   assert(lyricProgress.activeView === "immersivePlayer", `${label} lyric progress smoke did not open immersive player`);
   assert(lyricProgress.loginHidden === true && lyricProgress.mainHidden === false, `${label} lyric progress smoke did not show the main app`);
+  assert(trackSwitchResidue.previousRendered === true, `${label} track-switch smoke did not render the first lyric: ${JSON.stringify(trackSwitchResidue)}`);
+  assert(trackSwitchResidue.currentTrackId === "browser-smoke-empty-lyric-track" && trackSwitchResidue.lyricsTrackId === "browser-smoke-empty-lyric-track", `${label} track-switch smoke did not retain current lyric ownership: ${JSON.stringify(trackSwitchResidue)}`);
+  assert(trackSwitchResidue.lyricLineCount === 0, `${label} track-switch smoke should clear lyric state for a no-lyric track: ${JSON.stringify(trackSwitchResidue)}`);
+  assert(trackSwitchResidue.desktopHasPreviousText === false && trackSwitchResidue.desktopIsEmpty === true, `${label} desktop immersive lyric retained the previous track text: ${JSON.stringify(trackSwitchResidue)}`);
+  assert(trackSwitchResidue.desktopText === "没有读取到歌词。", `${label} desktop immersive lyric should show the current empty state: ${JSON.stringify(trackSwitchResidue)}`);
+  assert(trackSwitchResidue.mobileCurrentLyricHidden === true && trackSwitchResidue.immersiveListHasPreviousText === false, `${label} lyric surfaces should clear the previous track text: ${JSON.stringify(trackSwitchResidue)}`);
   assert(lyricProgressBeforeOffset.isSynced, `${label} synthetic lyrics should be synced`);
   assert(lyricProgressBeforeOffset.lyricCount === 3, `${label} synthetic lyrics should render 3 lines, got ${lyricProgressBeforeOffset.lyricCount || 0}`);
   assert(lyricProgressBeforeOffset.activeIndex === 1, `${label} lyric progress before offset should focus line 1, got ${lyricProgressBeforeOffset.activeIndex}`);

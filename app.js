@@ -2657,6 +2657,7 @@ function runLyricProgressScenario() {
   const immersiveIconButtons = collectBrowserSmokeImmersiveIconButtonState();
   const desktopImmersiveLayout = collectBrowserSmokeDesktopImmersiveState();
   const mobileImmersiveLayout = collectBrowserSmokeMobileImmersiveState();
+  const trackSwitchResidue = runBrowserSmokeLyricTrackSwitchScenario();
   setLyricOffsetSeconds(originalOffsetSeconds);
 
   return {
@@ -2687,9 +2688,62 @@ function runLyricProgressScenario() {
     immersiveIconButtons,
     desktopImmersiveLayout,
     mobileImmersiveLayout,
+    trackSwitchResidue,
     activeView: getActiveView(),
     mainHidden: mainView.hidden,
     loginHidden: loginView.hidden,
+  };
+}
+
+function runBrowserSmokeLyricTrackSwitchScenario() {
+  const previousTrack = createBrowserSmokeTrack({
+    id: "browser-smoke-previous-lyric-track",
+    name: "Browser Smoke Previous Lyric Track",
+    lyricsText: "[00:00.00]Previous track lyric must not remain",
+  });
+  previousTrack.LyricsSource = "manual";
+
+  const nextTrack = {
+    ...createBrowserSmokeTrack({
+      id: "browser-smoke-empty-lyric-track",
+      name: "Browser Smoke Empty Lyric Track",
+    }),
+    Lyrics: "",
+    Lyric: "",
+    LyricsLines: [],
+    LyricsText: "",
+    LyricsSource: "manual",
+    UserData: {},
+  };
+
+  state.lyricsStatus = "";
+  state.currentTrack = previousTrack;
+  state.queue = [previousTrack];
+  state.tracks = [previousTrack];
+  state.filteredTracks = [previousTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(previousTrack);
+  updateLyricsHighlight(0.1, true);
+  const previousText = immersiveDesktopCurrentLyric?.textContent?.trim() || "";
+
+  state.currentTrack = nextTrack;
+  state.queue = [nextTrack];
+  state.tracks = [nextTrack];
+  state.filteredTracks = [nextTrack];
+  state.currentTrackIndex = 0;
+  updatePlayerMeta(nextTrack);
+
+  const desktopText = immersiveDesktopCurrentLyric?.textContent?.trim() || "";
+  return {
+    previousRendered: previousText.includes("Previous track lyric must not remain"),
+    currentTrackId: state.currentTrack?.Id || "",
+    lyricsTrackId: state.lyricsTrackId || "",
+    lyricLineCount: state.lyricLines.length,
+    desktopText,
+    desktopHasPreviousText: desktopText.includes("Previous track lyric must not remain"),
+    desktopIsEmpty: immersiveDesktopCurrentLyric?.classList.contains("is-empty") || false,
+    mobileCurrentLyricHidden: Boolean(immersiveMobileCurrentLyric?.hidden),
+    immersiveListHasPreviousText: (immersiveLyricList?.textContent || "").includes("Previous track lyric must not remain"),
   };
 }
 
@@ -12658,6 +12712,7 @@ function renderNowLyricFocus() {
     updateMiniPlayerLyric(null);
     renderTopLyricFocus(null);
     renderImmersiveMobileCurrentLyric(null);
+    renderImmersiveDesktopCurrentLyric(null);
     return;
   }
 
@@ -12670,6 +12725,7 @@ function renderNowLyricFocus() {
     updateMiniPlayerLyric(null);
     renderTopLyricFocus(null);
     renderImmersiveMobileCurrentLyric(null);
+    renderImmersiveDesktopCurrentLyric(null);
     return;
   }
 
