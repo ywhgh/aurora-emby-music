@@ -7,6 +7,7 @@ const TRACK_FIELDS = [
   "Id", "Name", "Album", "AlbumId", "Artists", "ArtistItems", "AlbumArtists",
   "RunTimeTicks", "ProductionYear", "Genres", "Type", "MediaType", "IndexNumber",
   "ParentIndexNumber", "ImageTags", "AlbumPrimaryImageTag", "UserData",
+  "LyricsText", "LyricsSource",
 ];
 
 export function containsSensitiveData(value, seen = new Set()) {

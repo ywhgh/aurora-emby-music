@@ -1,5 +1,5 @@
-const CACHE_NAME = "emby-music-web-v0.94.9";
-const ASSET_VERSION = "0.94.9";
+const CACHE_NAME = "emby-music-web-v0.94.33";
+const ASSET_VERSION = "0.94.33";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -57,6 +57,12 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (request.method !== "GET" || url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Emby HTTP requests are proxied through the same-origin project server
+  // when the app is opened through an HTTPS tunnel. Never cache proxy traffic.
+  if (url.pathname === "/__emby-proxy" || url.pathname.startsWith("/__emby-proxy/")) {
     return;
   }
 

@@ -1,6 +1,6 @@
 window.EmbyMusicConfig = {
   APP_NAME: "Aurora Music",
-  APP_VERSION: "0.94.9",
+  APP_VERSION: "0.94.33",
   DEFAULT_SERVER_URL: "",
   DEFAULT_EXTERNAL_SOURCE_API_URL: "",
   DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: "",
@@ -256,7 +256,7 @@ window.EmbyMusicConfig = {
   ],
   PAGE_SIZE: {
     albums: 84,
-    tracks: 220,
+    tracks: 120,
     artists: 72,
     favorites: 120,
     playlists: 72,
@@ -264,6 +264,8 @@ window.EmbyMusicConfig = {
   itemFields: [
     "Album",
     "AlbumId",
+    "AlbumPrimaryImageItemId",
+    "AlbumPrimaryImageTag",
     "AlbumArtist",
     "AlbumArtists",
     "ArtistItems",
@@ -275,7 +277,10 @@ window.EmbyMusicConfig = {
     "IndexNumber",
     "MediaSources",
     "MediaType",
+    "ParentId",
     "ParentIndexNumber",
+    "ParentPrimaryImageItemId",
+    "ParentPrimaryImageTag",
     "Path",
     "PlaylistItemId",
     "PrimaryImageAspectRatio",

@@ -234,6 +234,7 @@ function checkVersions() {
 
 function checkCss() {
   const css = read("styles.css");
+  const app = read("app.js");
   let balance = 0;
   let line = 1;
 
@@ -307,6 +308,12 @@ function checkCss() {
   assert(/\.login-view \.login-shell \{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/.test(css), "Mobile login shell should not crop saved accounts or the form");
   assert(/\.login-view \.login-card \{[\s\S]*?order:\s*1;/.test(css), "Mobile login form should appear before the icon showcase");
   assert(/\.login-view \.login-intro \{[\s\S]*?order:\s*2;/.test(css), "Mobile login icon showcase should appear below the form tools");
+  assert(/@media \(max-width: 620px\) \{[\s\S]*?#loginView \.login-device-options \{[\s\S]*?display:\s*none !important;/.test(css), "Mobile login should hide device options without changing desktop availability");
+  assert(css.includes("#savedAccountsSection[hidden]") && css.includes("#loginView .saved-accounts:not([hidden])"), "Mobile saved accounts should hide the whole empty section and lay out populated state");
+  assert(app.includes("function getRestorableSavedAccountProfiles()") && app.includes("const profiles = getRestorableSavedAccountProfiles();"), "Saved account rendering should use persisted restorable profiles only");
+  assert(app.includes("savedAccountList.replaceChildren();") && app.includes("savedAccountsSection.hidden = true;") && app.includes("activateSavedAccount(profile.session)"), "Saved account rendering should clear empty state and keep rows restorable");
+  const savedSubtitleBody = app.match(/function getSavedAccountSubtitle\(profile\) \{([\s\S]*?)\n\}/)?.[1] || "";
+  assert(!savedSubtitleBody.includes("session.serverUrl"), "Saved account rows must not display the complete server URL");
   assert(/\.status-grid \{[\s\S]*?display:\s*flex;[\s\S]*?overflow-x:\s*auto;[\s\S]*?scroll-snap-type:\s*x mandatory;/.test(css), "Mobile home stats should be a one-card horizontal snap scroller");
   assert(/\.status-grid::-webkit-scrollbar \{[\s\S]*?display:\s*none;/.test(css), "Mobile home stats should hide the horizontal scrollbar");
   assert(/\.status-grid \.info-card \{[\s\S]*?flex:\s*0 0 100%;[\s\S]*?scroll-snap-align:\s*start;/.test(css), "Mobile home stat cards should show one card per row while swiping");
@@ -426,6 +433,18 @@ function checkLyrics() {
   assert(app.includes("state.lyricSettings?.autoTranslateMissingLyrics ? { translate: 1 } : {}"), "Lyric bridge requests should opt in with translate=1 only when enabled");
   assert(app.includes('loadLyricsFromServer(state.currentTrack)'), "Opening missing-Chinese translation should reload the current track lyrics");
   assert(sourceBridge.includes('translate: url.searchParams.get("translate") === "1"'), "Source bridge should parse explicit translation opt-in");
+  assert(/async function fetchLyricsText\(track, options = \{\}\) \{[\s\S]*?const embyText = await fetchEmbyLyricsFromServer\(track, options\);[\s\S]*?const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge\(track, options\);[\s\S]*?const matchedText = await fetchMatchedLyricsFromSourceBridge\(track, options\);[\s\S]*?return embyHasText \? embyText/.test(app), "Emby lyrics should prefer bilingual Emby/sidecar/matched text before original-only fallback");
+  assert(/async function fetchEmbyLyricsFromServer\(track, options = \{\}\) \{[\s\S]*?`\/Items\/\$\{encodeURIComponent\(track\.Id\)\}\/Lyrics`/.test(app), "Emby lyrics should use the authenticated Items/{id}/Lyrics endpoint");
+  assert(app.includes("function getInitialLyricsText"), "Lyrics should recognize Emby-provided structured lyric payloads before cached fallback text");
+  assert(app.includes("function hasEmbyOwnedLyrics") && app.includes("function isManualLyricsTrack"), "Lyrics source ownership should protect Emby/manual text from external overwrite");
+  assert(app.includes("function hasBilingualLyricsText"), "Emby lyric ownership should have an explicit bilingual-text check");
+  assert(app.includes("if (source && !embySources.includes(source))"), "Bridge-owned lyric caches should not count as Emby-owned lyrics");
+  assert(app.includes("return hasBilingualLyricsText(getInitialLyricsText(track));"), "Only parsed bilingual Emby lyrics should skip the Emby Lyrics endpoint");
+  assert(/function mergeLyricsIntoTrack\(track, text, source = ""\)[\s\S]*?if \(item\.Id === track\.Id && !isManualLyricsTrack\(item\)\)[\s\S]*?item\.LyricsSource = source/.test(app), "Fetched lyrics should persist their source without overwriting manual lyrics");
+  assert(/function sanitizeQueueTrack\(track\) \{[\s\S]*?LyricsText: track\.LyricsText,[\s\S]*?LyricsSource: track\.LyricsSource,/.test(app), "Queue persistence should retain lyric text and source ownership across reloads");
+  assert(/if \(!text\.trim\(\)\) \{[\s\S]*?if \(hasUsableLyricsText\(cachedLyricsText\)\)[\s\S]*?已使用缓存歌词/.test(app), "An Emby miss should retain a previously cached lyric instead of blanking the player");
+  assert(app.includes("function getLyricResponseLineTimeSeconds") && app.includes("function parseLyricResponseTimeValue"), "Emby lyric line timestamps should support ticks, seconds, and TimeSpan strings");
+  assert(/function scheduleNextLyricsPrefetch\(currentTrack\)[\s\S]*?fetchEmbyLyricsFromServer\(nextTrack,/.test(app), "Lyric prefetch should stay Emby-first and avoid warming external lookup first");
   assert(app.includes("function appendLyricLineContent"), "Missing shared lyric line renderer");
   assert(app.includes("renderNowLyricFocusLine"), "Missing now lyric focus renderer");
   assert(app.includes("renderImmersiveLyricFocus"), "Missing immersive lyric renderer");
@@ -796,6 +815,10 @@ function checkLyrics() {
   assert(/#immersiveMobileTitle \{[\s\S]*?font-size:\s*clamp\(1rem,\s*4\.45vw,\s*1\.24rem\);/.test(css), "Mobile immersive lyric song title should use the larger top typography");
   assert(css.includes("is-page-entering") && css.includes("is-page-exiting"), "Immersive page should animate on enter and exit");
   assert(app.includes("label: \"歌词设置\""), "Immersive more actions should include lyric settings");
+  assert(index.includes('id="lyricTranslationRequestButton"') && index.includes('id="lyricTranslationActionState"') && !index.includes('id="immersiveTranslationButton"') && !index.includes('id="immersiveMobileTranslationButton"'), "Translation action should live only in lyric settings");
+  assert(app.includes("function requestLyricTranslation") && app.includes('updateLyricSetting("autoTranslateMissingLyrics", true)') && app.includes("lyricTranslationRequestButton?.addEventListener"), "Lyric settings translation action should enable the existing translation setting");
+  assert(app.includes("function renderLyricTranslationRequestAction") && app.includes("hasDisplayedBilingualLyrics") && app.includes("lyricTranslationRequestButton.disabled = disabled"), "Lyric settings translation action should expose loading and already-translated states");
+  assert(css.includes(".lyric-translation-action-row") && css.includes(".lyric-translation-action-button") && !css.includes("#immersiveMobileTranslationButton") && /@media \(max-width: 620px\) \{[\s\S]*?\.lyric-translation-action-button\s*\{[\s\S]*?width:\s*100%;/.test(css), "Translation action should remain in the settings panel and fill the mobile row");
   assert(app.includes("autoScroll: true"), "Lyric follow-scroll should default on");
   assert(app.includes("autoImmersiveLyrics: false"), "Auto immersive lyrics should default off");
   assert(app.includes("let lyricSettingsLayoutFrame = 0") && app.includes("function refreshLyricLayoutAfterSettingsChange()") && app.includes("cancelAnimationFrame(lyricSettingsLayoutFrame)") && app.includes("lyricSettingsLayoutFrame = requestAnimationFrame(() =>") && app.includes("updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);"), "Lyric font settings should coalesce layout refreshes and force a second lyric layout refresh after CSS recalculation");
@@ -824,6 +847,198 @@ function checkLyrics() {
   assert(browserSmoke.includes("shellBottomGapPx <= 1"), "Browser smoke should detect immersive bottom gaps");
   assert(browserSmoke.includes("documentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the document");
   assert(browserSmoke.includes("contentScrollTop === 0"), "Browser smoke should verify immersive lyric scroll does not move the app content");
+}
+
+async function checkAppLyricsResponse() {
+  const app = read("app.js");
+  const lyricsCode = read("src/lyrics.js");
+  const extractStart = app.indexOf("function extractLyricsTextFromResponse(response) {");
+  const extractEnd = app.indexOf("\nfunction mergeLyricsIntoTrack", extractStart);
+  const fetchStart = app.indexOf("async function fetchLyricsText(track, options = {}) {");
+  const fetchEnd = app.indexOf("\nasync function fetchEmbyLyricsFromServer", fetchStart);
+  const embyFetchStart = fetchEnd + 1;
+  const embyFetchEnd = app.indexOf("\nfunction getInitialLyricsText", embyFetchStart);
+  const ownershipStart = app.indexOf("function getLyricsSourceKey(track) {");
+  const ownershipEnd = app.indexOf("\nfunction getLyricsCacheSource", ownershipStart);
+  const mergeStart = app.indexOf('function mergeLyricsIntoTrack(track, text, source = "") {');
+  const mergeEnd = app.indexOf("\nfunction bindLyricOffsetControls", mergeStart);
+
+  assert(extractStart >= 0 && extractEnd > extractStart, "App VM should locate the lyrics response extractor");
+  assert(fetchStart >= 0 && fetchEnd > fetchStart, "App VM should locate fetchLyricsText");
+  assert(embyFetchStart >= 0 && embyFetchEnd > embyFetchStart, "App VM should locate fetchEmbyLyricsFromServer");
+  assert(ownershipStart >= 0 && ownershipEnd > ownershipStart, "App VM should locate Emby lyric ownership helpers");
+  assert(mergeStart >= 0 && mergeEnd > mergeStart, "App VM should locate lyric cache merge helper");
+  if (extractStart < 0 || extractEnd <= extractStart || fetchStart < 0 || fetchEnd <= fetchStart || embyFetchStart < 0 || embyFetchEnd <= embyFetchStart || ownershipStart < 0 || ownershipEnd <= ownershipStart || mergeStart < 0 || mergeEnd <= mergeStart) {
+    return;
+  }
+
+  const context = {
+    DOMException,
+    clearTimeout,
+    console,
+    setTimeout,
+    window: {},
+  };
+  const fixture = {
+    Lyrics: [
+      { Start: "00:00:01.0000000", Text: " Original one ", TranslatedText: " 翻译一 " },
+      { StartPositionTicks: 30000000, Text: " Original two ", Translation: " 翻译二 " },
+      { Text: " plain original ", Translation: " plain translation " },
+    ],
+  };
+  const harness = `
+const bridgeCalls = [];
+const embyRequests = [];
+const state = {
+  session: { serverUrl: "http://mock-emby", accessToken: "fixture-token" },
+  lyricsSourceDiagnostics: null,
+  tracks: [],
+  favoriteTracks: [],
+  recentTracks: [],
+  queue: [],
+  albumTracks: [],
+  artistTracks: [],
+  playlistTracks: [],
+  currentTrack: null,
+};
+let embyPayload = ${JSON.stringify(fixture)};
+const externalSourceApi = { fetchLyric: async () => { bridgeCalls.push("external"); return ""; } };
+function isExternalSourceTrack() { return false; }
+function getExternalTrackApiUrl() { return ""; }
+function parseLyrics(text) { return window.EmbyMusicLyrics.parseLyrics(text); }
+function getInitialLyricsText(track) { return String(track?.LyricsText || ""); }
+function saveQueueState() {}
+function setLyricsSourceDiagnostics(details) { state.lyricsSourceDiagnostics = { ...(details || {}) }; }
+function hasUsableLyricsText(text) { return Boolean(String(text || "").trim()); }
+function hasLikelyBilingualText(text) {
+  return parseLyrics(String(text || "")).lines.some((line) => Boolean(line?.originalText && line?.text));
+}
+function readableError(error) { return error?.message || String(error || ""); }
+async function embyFetch(session, endpoint, options) {
+  embyRequests.push({ session, endpoint, options });
+  return embyPayload;
+}
+let bridgeSidecarText = "bridge sidecar";
+async function fetchEmbySidecarLyricsFromSourceBridge() {
+  bridgeCalls.push("sidecar");
+  return bridgeSidecarText;
+}
+async function fetchMatchedLyricsFromSourceBridge() {
+  bridgeCalls.push("matched");
+  return "bridge matched";
+}
+${app.slice(extractStart, extractEnd)}
+${app.slice(fetchStart, fetchEnd)}
+${app.slice(embyFetchStart, embyFetchEnd)}
+${app.slice(ownershipStart, ownershipEnd)}
+${app.slice(mergeStart, mergeEnd)}
+window.EmbyMusicLyricsSmoke = {
+  extractLyricsTextFromResponse,
+  fetchLyricsText,
+  hasEmbyOwnedLyrics,
+  mergeLyricsIntoTrack,
+  getBridgeCalls: () => bridgeCalls,
+  getEmbyRequests: () => embyRequests,
+  setEmbyPayload: (payload) => { embyPayload = payload; },
+  setBridgeSidecarText: (text) => { bridgeSidecarText = text; },
+  getState: () => state,
+};
+`;
+
+  vm.runInNewContext(harness, context, { filename: "app.js lyrics smoke harness" });
+  vm.runInNewContext(lyricsCode, context, { filename: "src/lyrics.js" });
+  const hooks = context.window.EmbyMusicLyricsSmoke;
+  const parseLyrics = context.window.EmbyMusicLyrics?.parseLyrics;
+  assert(typeof hooks?.extractLyricsTextFromResponse === "function", "App VM should expose extractLyricsTextFromResponse to smoke");
+  assert(typeof hooks?.fetchLyricsText === "function", "App VM should expose fetchLyricsText to smoke");
+  assert(typeof parseLyrics === "function", "App VM should load parseLyrics for Emby response smoke");
+  if (typeof hooks?.extractLyricsTextFromResponse !== "function" || typeof hooks?.fetchLyricsText !== "function" || typeof parseLyrics !== "function") {
+    return;
+  }
+
+  const extracted = hooks.extractLyricsTextFromResponse(fixture);
+  const parsed = parseLyrics(extracted);
+  const firstTimedLine = parsed.lines.find((line) => line?.time === 1);
+  const secondTimedLine = parsed.lines.find((line) => line?.time === 3);
+  assert(
+    extracted === "[00:01.00]Original one\n[00:01.00]翻译一\n[00:03.00]Original two\n[00:03.00]翻译二\nplain original\nplain translation",
+    `Emby lyric extractor should preserve adjacent bilingual timestamp lines, got ${JSON.stringify(extracted)}`
+  );
+  assert(firstTimedLine?.originalText === "Original one" && firstTimedLine?.text === "翻译一", "TranslatedText should pair into parseLyrics.translation at the same timestamp");
+  assert(secondTimedLine?.originalText === "Original two" && secondTimedLine?.text === "翻译二", "Translation should pair into parseLyrics.translation at the same timestamp");
+
+  const splitPayload = {
+    Lrc: "[00:01.00]Split original one\n[00:03.00]Split original two",
+    TranslatedLyrics: [
+      { Start: "00:00:01.0000000", Text: "独立翻译一" },
+      { StartPositionTicks: 30000000, Text: "独立翻译二" },
+    ],
+  };
+  const splitParsed = parseLyrics(hooks.extractLyricsTextFromResponse(splitPayload));
+  assert(splitParsed.lines.find((line) => line?.time === 1)?.text === "独立翻译一", "Separate TranslatedLyrics arrays should merge by timestamp");
+  assert(splitParsed.lines.find((line) => line?.time === 3)?.originalText === "Split original two", "Separate translations should preserve their original lyric line");
+
+  const nestedMultilinePayload = {
+    Data: {
+      Lyrics: [
+        { Start: "00:00:05.0000000", Text: "Multiline original one\n多行翻译一" },
+        { Start: "00:00:07.0000000", Text: "Multiline original two\n多行翻译二" },
+      ],
+    },
+  };
+  const nestedMultilineParsed = parseLyrics(hooks.extractLyricsTextFromResponse(nestedMultilinePayload));
+  assert(nestedMultilineParsed.lines.find((line) => line?.time === 5)?.originalText === "Multiline original one", "Nested multiline lyrics should retain the original text");
+  assert(nestedMultilineParsed.lines.find((line) => line?.time === 5)?.text === "多行翻译一", "Nested multiline lyrics should repeat the timestamp for the translation");
+
+  const mediaSourcePayload = {
+    MediaSources: [{
+      Lyrics: { Items: [{ Start: "00:00:09.0000000", Text: "Media source original" }] },
+      TranslationLines: [{ Start: "00:00:09.0000000", Text: "媒体源翻译" }],
+    }],
+  };
+  const mediaSourceParsed = parseLyrics(hooks.extractLyricsTextFromResponse(mediaSourcePayload));
+  assert(mediaSourceParsed.lines.find((line) => line?.time === 9)?.text === "媒体源翻译", "MediaSources lyric containers should expose separate translation rows");
+
+  const cachedTrack = {
+    Id: "mock-track",
+    Name: "Mock track",
+    LyricsText: "[00:01.00]Existing English",
+    LyricsSource: "emby",
+  };
+  const smokeState = hooks.getState();
+  smokeState.tracks = [cachedTrack];
+  smokeState.currentTrack = cachedTrack;
+  const cachedParsed = parseLyrics(cachedTrack.LyricsText);
+  const shouldLoadRemoteLyrics = !cachedParsed.lines.length
+    || !hooks.hasEmbyOwnedLyrics(cachedTrack);
+  assert(!hooks.hasEmbyOwnedLyrics(cachedTrack), "Single-language LyricsText should not count as confirmed Emby bilingual lyrics");
+  assert(shouldLoadRemoteLyrics, "Single-language Emby LyricsText should still request the Emby Lyrics endpoint");
+  assert(hooks.hasEmbyOwnedLyrics({ ...cachedTrack, LyricsText: extracted }), "Confirmed bilingual Emby LyricsText should count as Emby-owned lyrics");
+
+  const fetched = await hooks.fetchLyricsText(cachedTrack, { updateDiagnostics: false });
+  const embyRequests = hooks.getEmbyRequests();
+  const bridgeCalls = hooks.getBridgeCalls();
+  assert(fetched === extracted, "fetchLyricsText should return usable Emby lyric text");
+  assert(embyRequests.length === 1 && embyRequests[0]?.endpoint === "/Items/mock-track/Lyrics", "fetchLyricsText should query Emby Lyrics before bridge fallback");
+  assert(bridgeCalls.length === 0, `fetchLyricsText should not call a bridge when Emby returned text, got ${JSON.stringify(bridgeCalls)}`);
+  const translatedText = parseLyrics(fetched).lines.find((line) => line?.originalText)?.text || "";
+  assert(translatedText === "翻译一", `Emby bilingual response should expose translatedText, got ${translatedText || "-"}`);
+  hooks.mergeLyricsIntoTrack(cachedTrack, fetched, "emby");
+  assert(cachedTrack.LyricsText === fetched, "Bilingual Emby response should replace the previous single-language lyric cache");
+
+  const bridgeCallsBeforeSingleLanguageResponse = hooks.getBridgeCalls().length;
+  hooks.setEmbyPayload({
+    Lyrics: [{ Start: "00:00:02.0000000", Text: "Emby single-language lyric" }],
+  });
+  const bilingualSidecarText = [
+    "[00:02.00]Bridge original one", "[00:02.00]桥接翻译一",
+    "[00:03.00]Bridge original two", "[00:03.00]桥接翻译二",
+    "[00:04.00]Bridge original three", "[00:04.00]桥接翻译三",
+  ].join("\n");
+  hooks.setBridgeSidecarText(bilingualSidecarText);
+  const singleLanguageFetched = await hooks.fetchLyricsText({ Id: "mock-track-single", Name: "Mock track" }, { updateDiagnostics: false });
+  assert(singleLanguageFetched === bilingualSidecarText, "A bilingual sidecar should take priority over a single-language Emby lyric response");
+  assert(hooks.getBridgeCalls().length === bridgeCallsBeforeSingleLanguageResponse + 1 && hooks.getBridgeCalls().at(-1) === "sidecar", "A single-language Emby response should check the bilingual sidecar before falling back");
 }
 
 async function checkExternalSourceLyrics() {
@@ -1443,6 +1658,98 @@ async function checkStoreModule() {
   assert(source.split("\n").length <= 100, "src/store.js should stay within the 100-line audit limit");
 }
 
+async function checkEmbyApi() {
+  const source = read("src/emby-api.js");
+  const requests = [];
+  const context = {
+    window: {},
+    URL,
+    URLSearchParams,
+    AbortController,
+    Headers,
+    Response,
+    fetch: async (url, options = {}) => {
+      requests.push({ url: String(url), options });
+      return new Response(JSON.stringify({ MediaSources: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    setTimeout,
+    clearTimeout,
+  };
+  vm.runInNewContext(source, context, { filename: "src/emby-api.js" });
+
+  const createEmbyApi = context.window.EmbyMusicApi?.createEmbyApi;
+  assert(typeof createEmbyApi === "function", "Emby API should expose its factory on window.EmbyMusicApi");
+
+  if (typeof createEmbyApi !== "function") {
+    return;
+  }
+
+  const api = createEmbyApi({
+    authorizationHeader: () => ({}),
+    getDeviceId: () => "fixture-device-id",
+  });
+  const session = { serverUrl: "https://example.invalid", accessToken: "fixture-token" };
+  const imageUrls = api.getTrackImageUrls(session, {
+    Id: "track-primary",
+    ImageTags: { Primary: "fixture" },
+    AlbumPrimaryImageItemId: "album-primary",
+    ParentPrimaryImageItemId: "parent-primary",
+  }, 640);
+  const imageItemIds = imageUrls.map((url) => new URL(url).pathname.split("/")[3]);
+
+  assert(JSON.stringify(imageItemIds) === JSON.stringify(["track-primary", "album-primary", "parent-primary"]), "Track image candidates should prefer track, album, then parent artwork");
+  assert(imageUrls.every((url) => new URL(url).searchParams.get("quality") === "90"), "Emby image URLs should keep quality=90");
+  assert(imageUrls.every((url) => !new URL(url).searchParams.has("format")), "Emby image URLs must not force a format such as WebP");
+  assert(api.getTrackImageUrl(session, {
+    Id: "track-primary",
+    ImageTags: { Primary: "fixture" },
+    AlbumPrimaryImageItemId: "album-primary",
+  }, 640) === imageUrls[0], "Legacy single-image helper should keep returning the first candidate");
+
+  const inheritedItemIds = api.getTrackImageUrls(session, {
+    Id: "track-without-primary",
+    AlbumId: "album-fallback",
+    AlbumPrimaryImageTag: "album-tag",
+    ParentId: "parent-fallback",
+    ParentPrimaryImageTag: "parent-tag",
+  }, 480).map((url) => new URL(url).pathname.split("/")[3]);
+  assert(JSON.stringify(inheritedItemIds) === JSON.stringify(["album-fallback", "parent-fallback"]), "Tracks without their own image should inherit album and parent artwork");
+
+  const blindCandidates = api.getTrackImageUrls(session, {
+    Id: "track-without-artwork-evidence",
+    AlbumId: "album-without-tag",
+    ParentId: "parent-without-tag",
+  }, 480);
+  assert(blindCandidates.length === 0, "AlbumId/ParentId without image tags should not create slow blind cover probes");
+
+  const duplicateCandidates = api.getTrackImageUrls(session, {
+    Id: "shared-primary",
+    ImageTags: { Primary: "fixture" },
+    AlbumPrimaryImageItemId: "shared-primary",
+    ParentPrimaryImageItemId: "shared-primary",
+  }, 480);
+  assert(duplicateCandidates.length === 1, "Track image candidates should de-duplicate repeated artwork item IDs");
+
+  const config = read("src/config.js");
+  ["AlbumPrimaryImageItemId", "AlbumPrimaryImageTag", "ParentId", "ParentPrimaryImageItemId", "ParentPrimaryImageTag"].forEach((field) => {
+    assert(config.includes("\"" + field + "\""), "itemFields should request " + field + " for inherited Emby artwork");
+  });
+
+  const controller = new AbortController();
+  await api.fetchPlaybackInfo(session, { Id: "playback-track", MediaSources: [{ Id: "playback-source" }] }, {
+    autoOpenLiveStream: false,
+    mediaSourceId: "playback-source",
+    signal: controller.signal,
+  });
+  assert(requests.length === 1 && requests[0].options.method === "POST", "PlaybackInfo should use one POST on success");
+  assert(new URL(requests[0].url).searchParams.get("AutoOpenLiveStream") === "false", "Preload PlaybackInfo should disable AutoOpenLiveStream");
+  assert(JSON.parse(requests[0].options.body).AutoOpenLiveStream === false, "PlaybackInfo POST body should preserve AutoOpenLiveStream=false");
+  assert(Boolean(requests[0].options.signal) && requests[0].options.signal.aborted === false, "PlaybackInfo should forward the caller abort signal");
+}
+
 function checkAppFunctionReferences() {
   const app = read("app.js");
   const main = read("main.js");
@@ -1456,6 +1763,14 @@ function checkAppFunctionReferences() {
   const searchModule = read("src/search.js");
   const settingsModule = read("src/settings.js");
   const storeModule = read("src/store.js");
+  const config = read("src/config.js");
+  const mockEmby = read("scripts/mock-emby.js");
+  const playlistSmoke = read("scripts/playlist-smoke.js");
+  const browserSmoke = read("scripts/browser-smoke.js");
+  const staticServer = read("scripts/static-server.js");
+  const serviceWorker = read("sw.js");
+  const embyApi = read("src/emby-api.js");
+  const packageJson = JSON.parse(read("package.json"));
   assert(main.includes('import * as bridge from "./src/bridge.js"'), "main.js should wire the bridge ESM module");
   assert(main.includes('import * as coverColor from "./src/cover-color.js"'), "main.js should wire the cover color ESM module");
   assert(main.includes('import * as settings from "./src/settings.js"'), "main.js should wire the settings ESM module");
@@ -1474,6 +1789,53 @@ function checkAppFunctionReferences() {
   assert(bridgeModule.includes("export function normalizeHttpUrl"), "bridge module should own HTTP bridge URL normalization");
   assert(settingsModule.includes("export function normalizeLyricSettings"), "settings module should own lyric preference normalization");
   assert(storeModule.includes("export function createStore"), "store module should expose the small pub/sub state layer");
+  assert(app.includes("function createInitialCoverSvgUrl"), "Track covers should have a local initial-letter SVG fallback");
+  assert(embyApi.includes("getBrowserProxyServerUrl"), "HTTPS pages should route HTTP Emby requests through the project proxy");
+  assert(staticServer.includes('const EMBY_PROXY_PREFIX = "/__emby-proxy"'), "Static server should expose the fixed Emby proxy prefix");
+  assert(staticServer.includes("process.env.EMBY_PROXY_TARGET"), "Emby proxy target should come only from runtime configuration");
+  assert(staticServer.includes("function proxyEmbyRequest"), "Static server should proxy Emby requests without opening arbitrary targets");
+  assert(serviceWorker.includes('url.pathname === "/__emby-proxy"'), "Service Worker should bypass same-origin Emby proxy traffic");
+  assert(app.includes('id="initial-cover-vinyl"'), "Initial-cover SVG should include the vinyl artwork layer");
+  assert(app.includes('id="initial-cover-grooves"'), "Initial-cover SVG should include record groove details");
+  assert(app.includes('id="initial-cover-letter-card"'), "Initial-cover SVG should include the layered initial-letter card");
+  assert(app.includes('image.dataset.coverFallback = "initial"'), "The local initial-cover fallback should be identifiable after image retries");
+  assert(browserSmoke.includes("function createCoverFallbackSmokeScript"), "Browser smoke should exercise the local cover fallback");
+  assert(browserSmoke.includes("coverFallback: await ${createCoverFallbackSmokeScript()}"), "Browser smoke should collect fallback cover rendering evidence");
+  assert(browserSmoke.includes("cover fallback SVG did not render"), "Browser smoke should assert fallback SVG rendering");
+  assert(app.includes("function setImageElementSources"), "Track cover rendering should retry ordered image sources");
+  assert(app.includes("function getTrackImageUrls(track, maxWidth)"), "App should request ordered track image candidates from Emby API");
+  assert(config.includes("\"AlbumPrimaryImageItemId\""), "App config should request inherited Emby album image metadata");
+  assert(/tracks:\s*120/.test(config), "Initial track page should stay bounded at 120 items");
+  assert(app.includes("const COLLECTION_ITEM_FIELDS = itemFields"), "Non-track collections should use a lightweight field list");
+  assert(/IncludeItemTypes: "MusicAlbum"[\s\S]*?Fields: COLLECTION_ITEM_FIELDS/.test(app), "Initial album loading should omit track-only heavy fields");
+  assert(/IncludeItemTypes: "MusicArtist"[\s\S]*?Fields: COLLECTION_ITEM_FIELDS/.test(app), "Artist loading should omit track-only heavy fields");
+  assert(/IncludeItemTypes: "Playlist"[\s\S]*?Fields: COLLECTION_ITEM_FIELDS/.test(app), "Playlist loading should omit track-only heavy fields");
+  assert(app.includes("const IMAGE_SOURCE_CHAIN_TIMEOUT_MS = 6000"), "Cover retries should have a total timeout budget");
+  assert(/const loadNext = \(\) => \{\s*clearSourceTimeout\(\);/.test(app), "Each cover candidate should clear the previous timeout before loading");
+  assert(app.includes("Math.min(IMAGE_SOURCE_TIMEOUT_MS, remainingMs)"), "Cover candidate timeout should respect the total chain deadline");
+  assert(/const\s+playerCoverResolutionCache\s*=\s*new Map\(\)/.test(app), "Player cover resolution should share a cache map");
+  assert(/const\s+playerCoverResolutionPending\s*=\s*new Map\(\)/.test(app), "Player cover resolution should share pending promises");
+  const coverResolutionStart = app.indexOf("function getTrackCoverResolution(track) {");
+  const coverResolutionEnd = app.indexOf("\nfunction getArtworkMimeType", coverResolutionStart);
+  const coverResolutionCode = coverResolutionStart >= 0 && coverResolutionEnd > coverResolutionStart
+    ? app.slice(coverResolutionStart, coverResolutionEnd)
+    : "";
+  assert(
+    /if\s*\(\s*source\s*&&\s*source\s*!==\s*fallbackSource\s*&&\s*sources\.includes\(source\)\s*\)\s*\{[\s\S]*?rememberPlayerCoverResolution\(key,\s*source\)/.test(coverResolutionCode),
+    "Player cover cache writes should require a real source candidate, never the fallback"
+  );
+  assert(app.includes("playbackStreamPolicy: loadPlaybackStreamPolicy()"), "Saved auto/direct/transcode playback policy should survive quality-profile selection");
+  assert(app.includes("state.hlsNetworkRecoveryAttempts < 1") && app.includes("state.hlsMediaRecoveryAttempts < 1"), "Fatal HLS retries should be bounded before compatible fallback");
+  assert(app.includes("function assertPlayableAudioStreamResponse"), "Playback chain tests should reject non-media HTTP responses");
+  assert(app.includes("function diagnoseUnsupportedAudioSource") && app.includes("audioPlayer.error?.code === 4"), "Unsupported media sources should collect a non-blocking response diagnostic");
+  assert(app.includes("function fetchPlaylistTrackPageFromPlaylistEndpoint"), "Playlist reads should prefer the dedicated Playlist Items endpoint");
+  assert(app.includes("function fetchPlaylistTrackPageFromParent"), "Playlist reads should keep the ParentId compatibility fallback");
+  assert(app.includes("playlistTrackSource") && app.includes("playlistTrackNextStartIndex"), "Playlist pagination should retain a compatible source and raw page offset");
+  assert(app.includes("if (startIndex === 0 && !playlistPage.itemCount)"), "An empty primary playlist page should probe the ParentId fallback once");
+  assert(app.includes("return { tracks, total, hasMore, itemCount, nextStartIndex, source }"), "Playlist page results should preserve raw page counts and source selection");
+  assert(mockEmby.includes("MOCK_EMBY_PLAYLIST_READ_MODE") && mockEmby.includes("playlist-only") && mockEmby.includes("parent-only"), "Mock Emby should model incompatible playlist read endpoints");
+  assert(playlistSmoke.includes("playlist endpoint primary + ParentId fallback"), "Playlist smoke should exercise both endpoint compatibility paths");
+  assert(packageJson.scripts?.["smoke:playlist"] === "node ./scripts/playlist-smoke.js", "package.json should expose the playlist compatibility smoke command");
   assert(app.includes("queueOps.move") && app.includes("playerOps.seekPlayer"), "app wiring should consume the extracted player and queue modules");
   assert(app.includes("libraryOps.sortTracks") && app.includes("searchOps.addHistory"), "app wiring should consume the extracted library and search modules");
   assert(app.includes("bridgeOps.normalizeHttpUrl") && app.includes("settingsOps.normalizeLyricSettings"), "app wiring should consume the extracted bridge and settings modules");
@@ -1500,7 +1862,6 @@ function checkAppFunctionReferences() {
   assert(app.includes("KEYBOARD_SHORTCUTS.forEach((shortcut)"), "Shortcut UI should render from descriptors");
   assert(index.includes('id="shortcutCheatSheet"') && index.includes('id="shortcutCheatSheetGrid"'), "Question mark shortcut should open a modal cheat sheet");
   assert(index.includes('id="settingsExportDataButton"') && index.includes('id="settingsImportDataInput"'), "Settings maintenance should expose local import/export controls");
-  const embyApi = read("src/emby-api.js");
   const externalSourceCode = read("src/external-source-api.js");
   const sourceBridge = read("scripts/source-bridge.js");
   const storageCode = read("src/storage.js");
@@ -1637,7 +1998,12 @@ function checkAppFunctionReferences() {
   assert(/function getPluginForSnapshot\(snapshot\) \{[\s\S]*?getPluginByUrlSafe\(snapshotUrl\)[\s\S]*?return null;/.test(sourceBridge), "Source bridge should only resolve snapshots through the current verified plugin set");
   assert(/const keyedPlugin = snapshot\?\.pluginKey \? getPluginByKeySafe\(snapshot\.pluginKey\) : null;\s*return keyedPlugin && keyedPlugin !== plugin \? null : plugin;/.test(sourceBridge), "Source bridge should reject snapshots whose plugin key conflicts with the verified URL");
   assert(app.includes("External fresh resolve retry:"), "Diagnostics should include external fresh resolve retry state");
-  assert(app.includes("precachePlaybackSource(source, nextTrack)"), "Next-track source should be eligible for precache");
+  assert(/if \(mode === "universal"\) \{[\s\S]*?state\.preloadCacheStatus = "转码模式不预加载"/.test(app), "Server-transcoded tracks should not start a competing next-track preload");
+  assert(app.includes("function commitBrowserPlaybackPreload"), "Direct playback should commit only the final resolved preload URL");
+  assert(app.includes("autoOpenLiveStream: false"), "Preload PlaybackInfo should avoid opening a server stream before playback");
+  assert(app.includes("preloadPlaybackInfoController"), "Stale preload PlaybackInfo requests should be abortable");
+  assert(!app.includes("function precachePlaybackSource"), "Unused Cache API full-download precache should be removed");
+  assert(/preferredSource && isCompatible\(preferredSource\)/.test(app), "PlaybackInfo media-source selection should prefer a mode-compatible source");
   assert(app.includes("SHUFFLE_HISTORY_LIMIT"), "Shuffle playback should cap in-memory history");
   assert(app.includes("shuffleHistory: []"), "Shuffle playback should keep an in-memory previous-track history");
   assert(app.includes("shuffleUpcomingIds: []"), "Shuffle playback should keep a stable upcoming random pool");
@@ -1708,7 +2074,6 @@ function checkAppFunctionReferences() {
   assert(!index.includes("home-start-spindle"), "Smart playback hub should not render the old turntable base spindle");
 
   const css = read("styles.css");
-  const config = read("src/config.js");
   const storage = read("src/storage.js");
   assert(config.includes("PLAYBACK_PRELOAD_KEY"), "Config should include playback preload preference key");
   assert(config.includes("PLAYBACK_LOSSLESS_PRECACHE_KEY"), "Config should include lossless precache preference key");
@@ -1863,6 +2228,7 @@ async function main() {
   checkVersions();
   checkCss();
   checkLyrics();
+  await checkAppLyricsResponse();
   await checkExternalSourceLyrics();
   checkStorageQueuePersistence();
   await checkCoverColorModule();
@@ -1870,6 +2236,7 @@ async function main() {
   await checkPlayerModule();
   await checkSettingsModule();
   await checkStoreModule();
+  await checkEmbyApi();
   checkAppFunctionReferences();
   checkDomReferences();
 

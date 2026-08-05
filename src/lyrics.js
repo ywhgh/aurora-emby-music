@@ -45,6 +45,109 @@ function extractLyricsText(track) {
   ].find((value) => typeof value === "string" && value.trim()) || "";
 }
 
+function extractLyricsTextFromResponse(response) {
+  const candidates = [];
+  collectLyricsTextCandidates(response, candidates, new Set(), 0);
+
+  return candidates
+    .map((text, index) => ({ text, index, score: scoreLyricsTextCandidate(text) }))
+    .filter((candidate) => Number.isFinite(candidate.score))
+    .sort((left, right) => right.score - left.score || left.index - right.index)[0]?.text || "";
+}
+
+function collectLyricsTextCandidates(value, candidates, seen, depth) {
+  if (depth > 5 || value === null || value === undefined) {
+    return;
+  }
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return;
+    if (/^[{[]/.test(text)) {
+      try {
+        collectLyricsTextCandidates(JSON.parse(text), candidates, seen, depth + 1);
+        return;
+      } catch {
+        // Keep non-JSON lyric text unchanged.
+      }
+    }
+    candidates.push(value);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    const lineText = formatLyricsLineArray(value);
+    if (lineText) candidates.push(lineText);
+    value.forEach((item) => collectLyricsTextCandidates(item, candidates, seen, depth + 1));
+    return;
+  }
+
+  if (typeof value !== "object" || seen.has(value)) {
+    return;
+  }
+  seen.add(value);
+
+  [
+    "EnhancedLyrics", "enhancedLyrics", "Yrc", "yrc", "Ttml", "ttml",
+    "SyncedLyrics", "syncedLyrics", "Lrc", "lrc", "RawLrc", "rawLrc",
+    "LyricsText", "lyricsText", "Lyric", "lyric", "Lyrics", "lyrics",
+    "Text", "text", "Value", "value", "Data", "data",
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      collectLyricsTextCandidates(value[key], candidates, seen, depth + 1);
+    }
+  });
+
+  ["Items", "items", "Candidates", "candidates", "Results", "results", "Lines", "lines", "LyricsLines", "lyricsLines", "Result", "result"]
+    .forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        collectLyricsTextCandidates(value[key], candidates, seen, depth + 1);
+      }
+    });
+}
+
+function formatLyricsLineArray(items) {
+  if (!items.length || !items.every((item) => typeof item === "string" || (item && typeof item === "object"))) {
+    return "";
+  }
+
+  const lines = items.map((item) => {
+    if (typeof item === "string") return item;
+    const text = item.Text || item.Line || item.Value || item.text || item.line || item.value || "";
+    if (!String(text).trim()) return "";
+    const ticks = Number(item.StartPositionTicks ?? item.StartTicks ?? item.Start);
+    const seconds = Number(item.StartSeconds ?? item.Time ?? item.time);
+    if (Number.isFinite(ticks) && ticks >= 0) {
+      return "[" + formatLrcTimestamp(ticks / 10000000) + "]" + text;
+    }
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return "[" + formatLrcTimestamp(seconds) + "]" + text;
+    }
+    return String(text);
+  }).filter(Boolean);
+
+  return lines.length === items.length ? lines.join("\n") : "";
+}
+
+function scoreLyricsTextCandidate(text) {
+  const parsed = parseLyrics(text);
+  const lines = parsed.lines.filter((line) => String(line?.text || line?.originalText || "").trim());
+  if (!lines.length) return Number.NEGATIVE_INFINITY;
+  const bilingualLines = lines.filter((line) => line.originalText).length;
+  const timedWords = lines.reduce((count, line) => count
+    + (Array.isArray(line.wordTimeline) ? line.wordTimeline.length : 0)
+    + (Array.isArray(line.translatedWordTimeline) ? line.translatedWordTimeline.length : 0), 0);
+  return (bilingualLines * 10000) + (timedWords * 100) + (parsed.isSynced ? 1000 : 0) + Math.min(lines.length, 500);
+}
+
+function formatLrcTimestamp(totalSeconds) {
+  const seconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(seconds / 60);
+  const wholeSeconds = Math.floor(seconds % 60);
+  const centiseconds = Math.floor((seconds % 1) * 100);
+  return String(minutes).padStart(2, "0") + ":" + String(wholeSeconds).padStart(2, "0") + "." + String(centiseconds).padStart(2, "0");
+}
+
 function parseLyrics(text) {
   const rawText = String(text || "");
   const ttmlLyrics = parseTtmlLyrics(rawText);
@@ -969,6 +1072,7 @@ function hasHangul(value) {
 
 window.EmbyMusicLyrics = {
   extractLyricsText,
+  extractLyricsTextFromResponse,
   parseLyrics,
 };
 })();

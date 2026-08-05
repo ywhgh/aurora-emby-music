@@ -10,6 +10,9 @@
  *
  *   node ./scripts/mock-emby.js [port]
  *
+ * Optional compatibility mode for playlist-read smoke tests:
+ *   MOCK_EMBY_PLAYLIST_READ_MODE=both|playlist-only|parent-only
+ *
  * Then log in from the app with any username/password against
  * http://127.0.0.1:<port>.
  */
@@ -18,6 +21,10 @@ const http = require("node:http");
 const zlib = require("node:zlib");
 
 const PORT = Number(process.argv[2] || process.env.MOCK_EMBY_PORT || 8096);
+const requestedPlaylistReadMode = String(process.env.MOCK_EMBY_PLAYLIST_READ_MODE || "both").trim().toLowerCase();
+const PLAYLIST_READ_MODE = ["both", "playlist-only", "parent-only"].includes(requestedPlaylistReadMode)
+  ? requestedPlaylistReadMode
+  : "both";
 const SERVER_ID = "mock-emby-server-0001";
 const USER_ID = "mock-user-0001";
 const ACCESS_TOKEN = "mock-access-token";
@@ -408,6 +415,7 @@ function queryItems(params) {
   let pool = ids.length
     ? ids.map((id) => itemsById.get(id)).filter(Boolean)
     : poolFor(types);
+  let playlistEntryPrefix = "";
 
   if (!ids.length) {
     const parent = parentId ? itemsById.get(parentId) : null;
@@ -416,7 +424,10 @@ function queryItems(params) {
     } else if (parent && parent.Type === "MusicArtist") {
       pool = pool.filter((item) => (item.ArtistItems || []).some((artist) => artist.Id === parentId));
     } else if (parent && parent.Type === "Playlist") {
-      pool = (parent.MemberIds || []).map((id) => itemsById.get(id)).filter(Boolean);
+      playlistEntryPrefix = parent.Id;
+      pool = PLAYLIST_READ_MODE === "playlist-only"
+        ? []
+        : (parent.MemberIds || []).map((id) => itemsById.get(id)).filter(Boolean);
     }
 
     if (params.get("IsFavorite") === "true") {
@@ -445,7 +456,9 @@ function queryItems(params) {
   const page = limit > 0 ? sorted.slice(startIndex, startIndex + limit) : sorted.slice(startIndex);
 
   return {
-    Items: page.map(({ MemberIds, ...item }) => item),
+    Items: page.map(({ MemberIds, ...item }, index) => playlistEntryPrefix
+      ? { ...item, PlaylistItemId: `${playlistEntryPrefix}-entry-${startIndex + index}` }
+      : item),
     TotalRecordCount: sorted.length,
     StartIndex: startIndex,
   };
@@ -611,6 +624,22 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  const lyricsMatch = /^\/Items\/([^/]+)\/Lyrics$/.exec(path);
+  if (lyricsMatch) {
+    const track = itemsById.get(decodeURIComponent(lyricsMatch[1]));
+    if (!track || track.Type !== "Audio") {
+      sendJson(response, { error: "lyrics not found" }, 404);
+      return;
+    }
+    sendJson(response, {
+      Lyrics: [
+        { Start: "00:00:01.0000000", Text: `Emby lyric: ${track.Name}`, TranslatedText: `Emby translation: ${track.Name}` },
+        { StartPositionTicks: 30000000, Text: "Emby second lyric line", Translation: "Emby second translated line" },
+      ],
+    });
+    return;
+  }
+
   const playbackMatch = /^\/Items\/([^/]+)\/PlaybackInfo$/.exec(path);
   if (playbackMatch) {
     const track = itemsById.get(decodeURIComponent(playbackMatch[1]));
@@ -647,6 +676,10 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, { Id: playlist?.Id || "" });
       return;
     }
+    if (PLAYLIST_READ_MODE === "parent-only") {
+      sendJson(response, { error: "playlist endpoint disabled for compatibility smoke" }, 404);
+      return;
+    }
     const members = (playlist?.MemberIds || []).map((id) => itemsById.get(id)).filter(Boolean);
     const startIndex = Number(params.get("StartIndex") || 0) || 0;
     const limit = Number(params.get("Limit") || 0) || 0;
@@ -676,5 +709,6 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`mock-emby listening on http://127.0.0.1:${PORT}`);
   console.log(`  ${catalog.albums.length} albums · ${catalog.tracks.length} tracks · ${catalog.artists.length} artists · ${catalog.playlists.length} playlists`);
+  console.log(`  playlist read mode: ${PLAYLIST_READ_MODE}`);
   console.log("  log in with any username/password");
 });

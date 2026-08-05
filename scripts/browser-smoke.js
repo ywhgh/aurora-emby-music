@@ -17,6 +17,11 @@ const RUN_BROWSER_SMOKE = process.env.BROWSER_SMOKE_RUN === "1";
 const SKIP_BROWSER_SMOKE = process.env.SKIP_BROWSER_SMOKE === "1" || !RUN_BROWSER_SMOKE;
 const CHECK_MOBILE_VIEWPORT = process.env.BROWSER_SMOKE_DESKTOP_ONLY !== "1";
 const SCREENSHOT_DIR = process.env.BROWSER_SMOKE_SCREENSHOT_DIR || "";
+const RUN_PLAYLIST_SMOKE = process.env.BROWSER_SMOKE_PLAYLIST === "1";
+const PLAYLIST_SMOKE_SERVER_URL = String(process.env.BROWSER_SMOKE_SERVER_URL || "").trim();
+const PLAYLIST_SMOKE_USERNAME = String(process.env.BROWSER_SMOKE_USERNAME || "demo");
+const PLAYLIST_SMOKE_PASSWORD = String(process.env.BROWSER_SMOKE_PASSWORD || "demo");
+const EXPECTED_PLAYLIST_SOURCE = String(process.env.BROWSER_SMOKE_EXPECTED_PLAYLIST_SOURCE || "").trim();
 const CHROME_PATHS = [
   process.env.CHROME_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -81,6 +86,19 @@ function requestStatus(url, timeoutMs = 8000) {
     request.on("error", reject);
     request.setTimeout(timeoutMs, () => request.destroy(new Error(`Request timed out: ${url}`)));
   });
+}
+
+function buildSmokePageUrl(check) {
+  const url = new URL(APP_URL);
+  url.searchParams.set("browser-smoke", `${check.name}-${Date.now()}`);
+
+  if (PLAYLIST_SMOKE_SERVER_URL) {
+    url.searchParams.set("serverUrl", PLAYLIST_SMOKE_SERVER_URL);
+    url.searchParams.set("username", PLAYLIST_SMOKE_USERNAME);
+    url.searchParams.set("password", PLAYLIST_SMOKE_PASSWORD);
+  }
+
+  return url.toString();
 }
 
 async function withTimeout(promise, timeoutMs, label) {
@@ -353,6 +371,47 @@ function createSearchAbortSmokeScript() {
   })()`;
 }
 
+function createPlaylistReadSmokeScript() {
+  return `(async () => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runPlaylistReadScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...(await hooks.runPlaylistReadScenario()),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
+
+function createCoverFallbackSmokeScript() {
+  return `(async () => {
+    const hooks = window.EmbyMusicBrowserSmoke;
+    if (!hooks || typeof hooks.runCoverFallbackScenario !== "function") {
+      return { hasHook: false };
+    }
+
+    try {
+      return {
+        hasHook: true,
+        ...(await hooks.runCoverFallbackScenario()),
+      };
+    } catch (error) {
+      return {
+        hasHook: true,
+        error: String(error?.stack || error?.message || error),
+      };
+    }
+  })()`;
+}
 function createImmersiveVisualizerSmokeScript() {
   return `(() => {
     const hooks = window.EmbyMusicBrowserSmoke;
@@ -392,6 +451,158 @@ function createExternalSourceReentrySmokeScript() {
         error: String(error?.stack || error?.message || error),
       };
     }
+  })()`;
+}
+
+function createMobileScrollLayoutSmokeScript() {
+  return `(async () => {
+    if (window.innerWidth > 768) {
+      return { applicable: false };
+    }
+
+    const content = document.querySelector('.content');
+    const topbar = document.querySelector('.topbar');
+    const miniPlayer = document.querySelector('.mini-player-mobile');
+    const bottomNav = document.querySelector('.mobile-bottom-nav');
+    const recentSection = document.querySelector('#homeRecentAddSection');
+    const lastTrack = document.querySelector('#recentTrackList [data-track-id]:last-child');
+    const rect = (element) => {
+      const bounds = element?.getBoundingClientRect();
+      return bounds
+        ? { top: Math.round(bounds.top), bottom: Math.round(bounds.bottom), height: Math.round(bounds.height) }
+        : null;
+    };
+    const wait = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const maxScrollTop = Math.max(0, (content?.scrollHeight || 0) - (content?.clientHeight || 0));
+    const initial = {
+      contentClientHeight: content?.clientHeight || 0,
+      contentScrollHeight: content?.scrollHeight || 0,
+      bodyScrollHeight: document.scrollingElement?.scrollHeight || 0,
+      bodyOverflowY: getComputedStyle(document.body).overflowY,
+      topbar: rect(topbar),
+      miniPlayer: rect(miniPlayer),
+      bottomNav: rect(bottomNav),
+    };
+
+    content?.scrollTo({ top: maxScrollTop, behavior: 'instant' });
+    await wait();
+    const maxScroll = {
+      contentScrollTop: Math.round(content?.scrollTop || 0),
+      bodyScrollTop: Math.round(document.scrollingElement?.scrollTop || 0),
+      lastTrack: rect(lastTrack),
+    };
+
+    recentSection?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
+    await wait();
+    const sectionAligned = {
+      contentScrollTop: Math.round(content?.scrollTop || 0),
+      section: rect(recentSection),
+      topbar: rect(topbar),
+    };
+
+    lastTrack?.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'instant' });
+    await wait();
+    const lastAligned = {
+      contentScrollTop: Math.round(content?.scrollTop || 0),
+      lastTrack: rect(lastTrack),
+      miniPlayer: rect(miniPlayer),
+      bottomNav: rect(bottomNav),
+    };
+
+    content?.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo(0, 0);
+    await wait();
+
+    return {
+      applicable: true,
+      initial,
+      maxScrollTop,
+      maxScroll,
+      sectionAligned,
+      lastAligned,
+      resetContentScrollTop: Math.round(content?.scrollTop || 0),
+      resetBodyScrollTop: Math.round(document.scrollingElement?.scrollTop || 0),
+    };
+  })()`;
+}
+
+function createMobileMiniPlayerSmokeScript() {
+  return `(async () => {
+    if (window.innerWidth > 768) {
+      return { applicable: false };
+    }
+
+    const waitFor = async (predicate, timeoutMs = 8000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return false;
+    };
+    const rect = (element) => {
+      const bounds = element?.getBoundingClientRect();
+      return bounds
+        ? { top: Math.round(bounds.top), bottom: Math.round(bounds.bottom), width: Math.round(bounds.width), height: Math.round(bounds.height) }
+        : null;
+    };
+    const visibleRow = [...document.querySelectorAll('[data-track-id]')]
+      .find((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0);
+    const beforeTitle = document.getElementById('playerTitle')?.textContent.trim() || '';
+    if (visibleRow) {
+      (visibleRow.querySelector('.track-play-area') || visibleRow).click();
+    }
+    const started = await waitFor(() => {
+      const title = document.getElementById('playerTitle')?.textContent.trim() || '';
+      return Boolean(title && title !== '等待选择音乐' && title !== beforeTitle);
+    });
+
+    const player = document.querySelector('.mini-player-mobile');
+    const coverWrapper = document.querySelector('.mini-player-cover-wrapper');
+    const cover = document.querySelector('.mini-player-cover');
+    const play = document.getElementById('playButton');
+    const next = document.getElementById('nextButton');
+    const nextBeforeTitle = document.getElementById('playerTitle')?.textContent.trim() || '';
+    const nextStyle = next ? getComputedStyle(next) : null;
+    const nextRect = rect(next);
+    const nextVisible = Boolean(next && nextStyle?.display !== 'none' && nextStyle?.visibility !== 'hidden' && nextRect?.width > 0 && nextRect?.height > 0);
+    const nextEnabledBeforeClick = Boolean(next && !next.disabled);
+    let nextClicked = false;
+    if (nextEnabledBeforeClick) {
+      next.click();
+      nextClicked = true;
+    }
+    const nextChangedTitle = nextClicked && await waitFor(() => {
+      const title = document.getElementById('playerTitle')?.textContent.trim() || '';
+      return Boolean(title && title !== nextBeforeTitle);
+    }, 5000);
+
+    const coverStyle = cover ? getComputedStyle(cover) : null;
+    const wrapperStyle = coverWrapper ? getComputedStyle(coverWrapper) : null;
+    const playBefore = play ? getComputedStyle(play, '::before') : null;
+    return {
+      applicable: true,
+      started,
+      nextVisible,
+      nextEnabledBeforeClick,
+      nextClicked,
+      nextChangedTitle,
+      nextRect,
+      playerRect: rect(player),
+      coverRect: rect(cover),
+      coverWrapperRect: rect(coverWrapper),
+      coverBorderRadius: coverStyle?.borderRadius || '',
+      coverObjectFit: coverStyle?.objectFit || '',
+      coverDisplay: coverStyle?.display || '',
+      wrapperBorderRadius: wrapperStyle?.borderRadius || '',
+      playState: play?.classList.contains('playing') ? 'playing' : 'paused',
+      playPseudoDisplay: playBefore?.display || '',
+      playPseudoWidth: playBefore?.width || '',
+      playPseudoHeight: playBefore?.height || '',
+      playPseudoBorderRadius: playBefore?.borderRadius || '',
+      playPseudoMaskImage: playBefore?.maskImage || playBefore?.webkitMaskImage || '',
+      playPseudoBackgroundImage: playBefore?.backgroundImage || '',
+    };
   })()`;
 }
 
@@ -551,6 +762,7 @@ async function createBrowser(chromePath) {
 
 async function waitForAppReady(cdp, check) {
   const deadline = Date.now() + CHROME_TIMEOUT_MS;
+  const expectedMarkerPrefix = `${check.name}-`;
   let latest = null;
 
   while (Date.now() < deadline) {
@@ -560,15 +772,20 @@ async function waitForAppReady(cdp, check) {
         readyState: document.readyState,
         appReady: Boolean(window.EmbyMusicAppReady),
         appError: String(window.EmbyMusicAppError || ""),
+        smokeMarker: new URLSearchParams(location.search).get("browser-smoke") || "",
+        expectsLogin: new URLSearchParams(location.search).has("serverUrl"),
+        mainReady: document.querySelector("#mainView")?.hidden === false
+          && Boolean(document.querySelector("[data-track-id]")),
       }))()`,
     });
     latest = evaluation.result.value || {};
 
-    if (latest.appReady) {
+    const isExpectedDocument = String(latest.smokeMarker || "").startsWith(expectedMarkerPrefix);
+    if (isExpectedDocument && latest.appReady && (!latest.expectsLogin || latest.mainReady)) {
       return latest;
     }
 
-    if (latest.appError) {
+    if (isExpectedDocument && latest.appError) {
       throw new Error(`[${check.name}] app initialization failed: ${latest.appError}`);
     }
 
@@ -610,7 +827,7 @@ async function runBrowserCheck(cdp, check) {
       mobile: check.name === "mobile",
     });
     await cdp.send("Page.navigate", {
-      url: `${APP_URL}?browser-smoke=${encodeURIComponent(check.name)}-${Date.now()}`,
+      url: buildSmokePageUrl(check),
     });
     await waitForAppReady(cdp, check);
     await delay(250);
@@ -684,6 +901,10 @@ async function runBrowserCheck(cdp, check) {
 
         return {
           ...pageState,
+          mobileScrollLayout: await ${createMobileScrollLayoutSmokeScript()},
+          mobileMiniPlayer: await ${createMobileMiniPlayerSmokeScript()},
+          coverFallback: await ${createCoverFallbackSmokeScript()},
+          playlistRead: ${RUN_PLAYLIST_SMOKE ? `await ${createPlaylistReadSmokeScript()}` : "null"},
           lyricProgress: ${createLyricProgressSmokeScript()},
           immersiveVisualizer: ${createImmersiveVisualizerSmokeScript()},
           externalSourceReentry: await ${createExternalSourceReentrySmokeScript()},
@@ -711,8 +932,11 @@ async function runBrowserCheck(cdp, check) {
 function checkPageState(check, page) {
   const label = `[${check.name}]`;
   const isPhoneCheck = check.name.startsWith("mobile");
+  const hasMobileMainLayout = check.width <= 768;
   const isMobileImmersiveLayoutCheck = isPhoneCheck;
   const lyricOffset = page.lyricOffset || {};
+  const coverFallback = page.coverFallback || {};
+  const playlistRead = page.playlistRead || {};
   const lyricProgress = page.lyricProgress || {};
   const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
   const lyricProgressAfterOffset = lyricProgress.afterOffset || {};
@@ -747,6 +971,8 @@ function checkPageState(check, page) {
   const externalSourceReentry = page.externalSourceReentry || {};
   const searchAbort = page.searchAbort || {};
   const indexedDbQueue = page.indexedDbQueue || {};
+  const mobileScrollLayout = page.mobileScrollLayout || {};
+  const mobileMiniPlayer = page.mobileMiniPlayer || {};
   const labelsEqual = (labels, expected) => Array.isArray(labels) && labels.length >= 2 && labels.every((item) => item === expected);
   const resetStatesEqual = (states, expected) => Array.isArray(states) && states.length >= 2 && states.every((item) => item === expected);
   const isNonDecreasing = (values) => Array.isArray(values)
@@ -780,12 +1006,43 @@ function checkPageState(check, page) {
     assert(page.hasPlayerBar, `${label} missing player bar`);
     assert(page.playerbarVisible, `${label} player bar is not visible`);
     assert((page.playerbarRect?.height || 0) >= 48, `${label} player bar height is too small: ${page.playerbarRect?.height || 0}`);
-    if (isPhoneCheck) {
+    if (hasMobileMainLayout) {
       assert(page.mobileBottomNavVisible, `${label} mobile bottom navigation is not visible`);
       assert((page.mobileBottomNavRect?.height || 0) >= 44, `${label} mobile bottom navigation height is too small: ${page.mobileBottomNavRect?.height || 0}`);
     } else {
       assert(!page.mobileBottomNavVisible, `${label} mobile bottom navigation should not be visible on desktop`);
     }
+  }
+  if (mobileScrollLayout.applicable) {
+    const initial = mobileScrollLayout.initial || {};
+    const maxScroll = mobileScrollLayout.maxScroll || {};
+    const sectionAligned = mobileScrollLayout.sectionAligned || {};
+    const lastAligned = mobileScrollLayout.lastAligned || {};
+    const topbarBottom = sectionAligned.topbar?.bottom || 0;
+    const viewportHeight = initial.contentClientHeight || check.height;
+    const miniTop = lastAligned.miniPlayer?.top || viewportHeight;
+    const navTop = lastAligned.bottomNav?.top || viewportHeight;
+    const lastBottom = lastAligned.lastTrack?.bottom || 0;
+    assert(initial.contentScrollHeight > initial.contentClientHeight + 200, `${label} mobile content should be an independent scroll container: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(mobileScrollLayout.maxScrollTop > 200, `${label} mobile content max scroll distance is too small: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(maxScroll.contentScrollTop >= mobileScrollLayout.maxScrollTop - 2, `${label} mobile content did not reach its scroll end: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(maxScroll.bodyScrollTop === 0, `${label} mobile body should not absorb the content swipe: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(initial.bodyScrollHeight <= viewportHeight + 1, `${label} mobile body should not grow beyond the viewport: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(sectionAligned.section?.top >= topbarBottom + 8, `${label} mobile section heading should clear the fixed top bar: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(lastBottom <= miniTop - 12, `${label} final mobile track should clear the mini player: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(lastBottom <= navTop - 12, `${label} final mobile track should clear the bottom navigation: ${JSON.stringify(mobileScrollLayout)}`);
+    assert(mobileScrollLayout.resetContentScrollTop === 0 && mobileScrollLayout.resetBodyScrollTop === 0, `${label} mobile scroll smoke should restore the initial position: ${JSON.stringify(mobileScrollLayout)}`);
+  }
+  if (mobileMiniPlayer.applicable) {
+    assert(mobileMiniPlayer.started === true, `${label} mobile mini-player smoke could not start a track: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.nextVisible === true, `${label} mobile mini-player next button should be visible: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.nextEnabledBeforeClick === true, `${label} mobile mini-player next button should be enabled with a queued track: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.nextClicked === true && mobileMiniPlayer.nextChangedTitle === true, `${label} mobile mini-player next button did not advance playback: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.coverBorderRadius === "50%", `${label} mobile mini-player cover should be circular: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.coverObjectFit === "cover", `${label} mobile mini-player cover should fill its circular frame: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.coverRect?.width === mobileMiniPlayer.coverRect?.height, `${label} mobile mini-player cover should be a square circle box: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(mobileMiniPlayer.wrapperBorderRadius === "50%", `${label} mobile mini-player cover wrapper should be circular: ${JSON.stringify(mobileMiniPlayer)}`);
+    assert(Number.parseFloat(mobileMiniPlayer.playPseudoBorderRadius || 0) > 0, `${label} mobile play/pause glyph should have rounded geometry: ${JSON.stringify(mobileMiniPlayer)}`);
   }
   assert(page.version === EXPECTED_VERSION_LABEL, `${label} version label mismatch: ${page.version || "-"}, expected ${EXPECTED_VERSION_LABEL}`);
   assert(lyricOffset.hasEarlierButton, `${label} missing lyric offset earlier button`);
@@ -1121,6 +1378,26 @@ function checkPageState(check, page) {
     assert(mobileImmersiveLayout.afterReveal?.topActionsCollapsed === false, `${label} mobile immersive reveal dot should restore top actions: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
     assert(mobileImmersiveLayout.afterReveal?.backgroundVisible === false && mobileImmersiveLayout.afterReveal?.fullscreenVisible === true && mobileImmersiveLayout.afterReveal?.closeVisible === true, `${label} mobile immersive top actions should keep fullscreen at top-left, skin out of the topbar, and exit visible: ${JSON.stringify(mobileImmersiveLayout.afterReveal)}`);
   }
+  assert(coverFallback.hasHook === true, `${label} cover fallback smoke hook is unavailable`);
+  assert(!coverFallback.error, `${label} cover fallback smoke failed: ${coverFallback.error || "-"}`);
+  assert(coverFallback.ready === true, `${label} cover fallback smoke did not initialize: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.rendered === true, `${label} cover fallback SVG did not render: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.isSvg === true, `${label} cover fallback should use a local SVG: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.hasVinyl === true, `${label} cover fallback is missing its vinyl layer: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.hasGrooves === true, `${label} cover fallback is missing vinyl grooves: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.hasLetterCard === true, `${label} cover fallback is missing the letter card: ${JSON.stringify(coverFallback)}`);
+  assert(coverFallback.usesFallback === true, `${label} cover fallback should be tagged as the initial artwork: ${JSON.stringify(coverFallback)}`);
+
+  if (RUN_PLAYLIST_SMOKE) {
+    assert(playlistRead.hasHook, `${label} playlist compatibility smoke hook is unavailable`);
+    assert(!playlistRead.error, `${label} playlist compatibility smoke failed: ${playlistRead.error || "-"}`);
+    assert(playlistRead.ready === true, `${label} playlist compatibility smoke did not select a playlist: ${JSON.stringify(playlistRead)}`);
+    assert(Number(playlistRead.loadedCount || 0) > 0, `${label} playlist compatibility smoke loaded no tracks: ${JSON.stringify(playlistRead)}`);
+    assert(playlistRead.hasPlaylistItemIds === true, `${label} playlist entries lost PlaylistItemId: ${JSON.stringify(playlistRead)}`);
+    if (EXPECTED_PLAYLIST_SOURCE) {
+      assert(playlistRead.source === EXPECTED_PLAYLIST_SOURCE, `${label} playlist source was ${playlistRead.source || "-"}, expected ${EXPECTED_PLAYLIST_SOURCE}`);
+    }
+  }
   assert(!page.jsErrors.length, `${label} JavaScript errors: ${page.jsErrors.join("; ")}`);
 }
 
@@ -1147,7 +1424,17 @@ async function main() {
       await cdp.send("Page.enable");
       await cdp.send("Log.enable");
 
-      for (const check of CHECKS) {
+      for (let index = 0; index < CHECKS.length; index += 1) {
+        const check = CHECKS[index];
+        if (index > 0) {
+          await cdp.send("Page.navigate", { url: "about:blank" });
+          await delay(100);
+          await cdp.send("Storage.clearDataForOrigin", {
+            origin: new URL(APP_URL).origin,
+            storageTypes: "all",
+          });
+        }
+
         const page = await withTimeout(runBrowserCheck(cdp, check), CHROME_TIMEOUT_MS, `browser smoke ${check.name}`);
         checkPageState(check, page);
       }

@@ -124,6 +124,10 @@ const initialFilterState = loadFilterState(initialSession);
 const initialQueueState = loadQueueState(initialSession);
 const DEFAULT_AUDIO_QUALITY_PROFILE = AUDIO_QUALITY_PROFILES.find((profile) => profile.recommended)
   || AUDIO_QUALITY_PROFILES[0];
+const COLLECTION_ITEM_FIELDS = itemFields
+  .split(",")
+  .filter((field) => !["MediaSources", "Path", "PlaylistItemId"].includes(field))
+  .join(",");
 const initialAudioQualityProfileId = loadAudioQualityProfile();
 const initialAudioQualityProfile = AUDIO_QUALITY_PROFILES.find((profile) => profile.id === initialAudioQualityProfileId)
   || DEFAULT_AUDIO_QUALITY_PROFILE;
@@ -434,7 +438,6 @@ const PLAYBACK_DISPLAY_RATE_OPTIONS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 2];
 const AUTO_DISMISS_STATUS_MS = 1800;
 const AUTO_DISMISS_NOTICE_MS = 1800;
 const PLAYBACK_PRELOAD_CACHE_NAME = "emby-music-web-playback-preload";
-const MAX_PLAYBACK_PRECACHE_BYTES = 32 * 1024 * 1024;
 const PLAYBACK_POSITION_SAVE_INTERVAL_MS = 5000;
 const PLAYBACK_POSITION_SAVE_EPSILON_SECONDS = 2;
 const LISTEN_TIME_TOTAL_KEY = "emby-music-web/listen-time-total-seconds";
@@ -876,6 +879,8 @@ const downloadOptionsSubtitle = document.querySelector("#downloadOptionsSubtitle
 const downloadOptionsList = document.querySelector("#downloadOptionsList");
 const lyricSettingsModal = document.querySelector("#lyricSettingsModal");
 const lyricSettingsClose = document.querySelector("#lyricSettingsClose");
+const lyricTranslationRequestButton = document.querySelector("#lyricTranslationRequestButton");
+const lyricTranslationActionState = document.querySelector("#lyricTranslationActionState");
 const lyricFontSizeRange = document.querySelector("#lyricFontSizeRange");
 const lyricFontSizeValue = document.querySelector("#lyricFontSizeValue");
 const lyricFontFamilyButton = document.querySelector("#lyricFontFamilyButton");
@@ -981,6 +986,7 @@ const unlockAudioPlayer = new Audio();
 unlockAudioPlayer.preload = "auto";
 let hlsPlayer = null;
 let activePlaybackLoadProfile = null;
+let activePlaybackQuality = null;
 let mediaVideoHost = null;
 let mediaVideoPlaceholder = null;
 let floatingVideoShell = null;
@@ -1127,6 +1133,9 @@ const store = storeOps.createStore({
   playlistTracks: [],
   totalPlaylistTracks: 0,
   hasMorePlaylistTracks: false,
+  // Lock the selected compatible endpoint for every later page of the same playlist.
+  playlistTrackSource: "",
+  playlistTrackNextStartIndex: 0,
   detailReturnViews: {
     albumDetail: "albums",
     artistDetail: "artists",
@@ -1134,7 +1143,9 @@ const store = storeOps.createStore({
   },
   viewScrollPositions: {},
   playMode: loadPlayMode(),
-  playbackStreamPolicy: initialAudioQualityProfile.mode === "direct" ? "direct" : "transcode",
+  // Preserve an existing user's explicit auto/direct/transcode preference.
+  // Deriving this from the quality profile silently changed old auto users to direct.
+  playbackStreamPolicy: loadPlaybackStreamPolicy(),
   transcodeBitrate: initialAudioQualityProfile.bitrate || loadTranscodeBitrate(),
   audioQualityProfileId: initialAudioQualityProfile.id,
   playbackPreloadEnabled: loadPlaybackPreloadEnabled(),
@@ -1197,9 +1208,12 @@ const store = storeOps.createStore({
   shuffleHistory: [],
   shuffleUpcomingIds: [],
   lastPlaybackProbe: "",
+  lastUnsupportedSourceProbeRequestId: -1,
   audioUnlocked: false,
   pendingAutoplayResume: false,
   isHlsJsActive: false,
+  hlsNetworkRecoveryAttempts: 0,
+  hlsMediaRecoveryAttempts: 0,
   isApplyingServiceWorkerUpdate: false,
   pendingServiceWorkerUpdate: false,
   preloadTrackId: null,
@@ -1210,8 +1224,7 @@ const store = storeOps.createStore({
   preloadQualityProfileId: "",
   preloadSession: null,
   preloadRequestId: 0,
-  preloadCacheController: null,
-  preloadCacheRequestKey: "",
+  preloadPlaybackInfoController: null,
   preloadCacheStatus: "",
   lyricsTrackId: null,
   lyricsLoadRequestId: 0,
@@ -1265,6 +1278,10 @@ const themeMediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)") || n
 
 const MINI_PLAYER_LYRIC_REVEAL_DELAY_MS = 30000;
 const MINI_PLAYER_PROGRESS_LYRIC_TAIL_GUARD_SECONDS = 0.85;
+const IMAGE_SOURCE_TIMEOUT_MS = 3500;
+const IMAGE_SOURCE_CHAIN_TIMEOUT_MS = 6000;
+const PLAYER_COVER_IMAGE_MAX_WIDTH = 1100;
+const PLAYER_COVER_RESOLUTION_CACHE_LIMIT = 32;
 let miniPlayerLyricRevealTimer = 0;
 let lyricsPrefetchHandle = 0;
 let lyricsPrefetchAbortController = null;
@@ -1272,6 +1289,10 @@ let miniPlayerLyricText = "";
 let miniPlayerLyricRefreshTimer = 0;
 let miniPlayerLyricIdleListenersBound = false;
 let miniPlayerLyricLastIdleResetAt = 0;
+let miniPlayerCoverRequestId = 0;
+let libraryLoadRequestId = 0;
+const playerCoverResolutionCache = new Map();
+const playerCoverResolutionPending = new Map();
 
 safeInit();
 
@@ -1600,6 +1621,7 @@ function init() {
   downloadOptionsClose?.addEventListener("click", closeDownloadOptionsModal);
   document.addEventListener("click", handleDownloadOptionsDocumentClick);
   lyricSettingsClose?.addEventListener("click", closeLyricSettingsModal);
+  lyricTranslationRequestButton?.addEventListener("click", requestLyricTranslation);
   playerStyleClose?.addEventListener("click", closePlayerStyleModal);
   playerThemeButtons.forEach((button) => {
     button.addEventListener("click", () => updateImmersivePlayerStyle("theme", button.dataset.playerTheme));
@@ -1812,9 +1834,89 @@ function installBrowserSmokeHooks() {
     runImmersiveVisualizerScenario,
     runExternalSourceReentryScenario,
     runSearchAbortScenario,
+    runPlaylistReadScenario,
+    runCoverFallbackScenario,
   };
 }
 
+async function runPlaylistReadScenario() {
+  const deadline = Date.now() + 12_000;
+  let playlist = null;
+
+  while (Date.now() < deadline) {
+    playlist = state.playlists.find((item) => item?.Id && getPlaylistKnownTrackCount(item) > 0) || null;
+    if (state.isLibraryLoaded && playlist) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  if (!playlist) {
+    return {
+      ready: false,
+      reason: state.session ? "no-playlist" : "not-connected",
+      loadedCount: 0,
+      source: "",
+      hasPlaylistItemIds: false,
+    };
+  }
+
+  await openPlaylistDetail(playlist);
+  const tracks = state.playlistTracks;
+
+  return {
+    ready: state.selectedPlaylist?.Id === playlist.Id,
+    loadedCount: tracks.length,
+    source: state.playlistTrackSource,
+    hasPlaylistItemIds: tracks.length > 0 && tracks.every((track) => Boolean(track.PlaylistItemId)),
+    hasMore: state.hasMorePlaylistTracks,
+  };
+}
+
+async function runCoverFallbackScenario() {
+  if (!document.body) {
+    return { ready: false, rendered: false, isSvg: false, hasVinyl: false, hasGrooves: false, hasLetterCard: false, usesFallback: false };
+  }
+
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = "position:fixed;left:1px;top:1px;width:10px;height:10px;opacity:.001;overflow:hidden;pointer-events:none;";
+  document.body.append(host);
+
+  try {
+    appendImage(host, [], "封面测试");
+    const image = host.querySelector("img");
+    if (image) {
+      image.loading = "eager";
+    }
+
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline && !(image?.complete && image.naturalWidth > 0)) {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+
+    const source = String(image?.currentSrc || image?.src || "");
+    const isSvg = source.startsWith("data:image/svg+xml");
+    let svg = "";
+    try {
+      svg = isSvg ? decodeURIComponent(source.slice(source.indexOf(",") + 1)) : "";
+    } catch {
+      svg = "";
+    }
+
+    return {
+      ready: true,
+      rendered: Boolean(image?.isConnected && image.complete && image.naturalWidth > 0),
+      isSvg,
+      hasVinyl: svg.includes('id="initial-cover-vinyl"'),
+      hasGrooves: svg.includes('id="initial-cover-grooves"'),
+      hasLetterCard: svg.includes('id="initial-cover-letter-card"'),
+      usesFallback: image?.dataset.coverFallback === "initial",
+    };
+  } finally {
+    host.remove();
+  }
+}
 function isBrowserSmokeRun() {
   const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
   return isLocalHost && new URLSearchParams(window.location.search).has("browser-smoke");
@@ -1881,6 +1983,7 @@ function createBrowserSmokeTrack(options = {}) {
     RunTimeTicks: secondsToTicks(options.durationSeconds || 12),
     UserData: {},
     LyricsText: lyricsText,
+    LyricsSource: "emby",
     MediaSources: [
       {
         Id: "browser-smoke-source",
@@ -4460,7 +4563,9 @@ async function testCurrentPlaybackChain(trackOverride) {
     const mediaSourceId = mediaSource?.Id || fallbackMediaSourceId;
     const playSessionId = ensurePlaybackSessionId(track, playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId);
 
-    const response = await probeAudioStream(getAudioStreamUrl(track, mode, playSessionId, mediaSourceId));
+    const response = assertPlayableAudioStreamResponse(
+      await probeAudioStream(getAudioStreamUrl(track, mode, playSessionId, mediaSourceId))
+    );
 
     const contentType = response.headers.get("Content-Type") || "未知格式";
     const contentLength = formatByteSize(response.headers.get("Content-Length"));
@@ -4506,7 +4611,7 @@ async function testExternalPlaybackChain(track) {
       quality: getExternalPlaybackQuality(track),
       videoQuality: isVideoTrack(track) ? getExternalSourceVideoQuality() : "",
     });
-    const response = await probeAudioStream(media.streamUrl);
+    const response = assertPlayableAudioStreamResponse(await probeAudioStream(media.streamUrl));
     const contentType = response.headers.get("Content-Type") || "未知格式";
     const contentLength = formatByteSize(response.headers.get("Content-Length"));
     const probeMethod = response.probeMethod === "range" ? "Range" : "HEAD";
@@ -4537,33 +4642,97 @@ async function testExternalPlaybackChain(track) {
   }
 }
 
+const PLAYABLE_STREAM_CONTENT_TYPES = new Set([
+  "application/octet-stream",
+  "application/ogg",
+  "application/vnd.apple.mpegurl",
+  "application/x-mpegurl",
+]);
+
+function normalizeAudioStreamContentType(value) {
+  return String(value || "").split(";", 1)[0].trim().toLowerCase();
+}
+
+function isPlayableAudioStreamContentType(contentType) {
+  const normalized = normalizeAudioStreamContentType(contentType);
+
+  // Some servers omit Content-Type for otherwise playable direct streams. Only
+  // reject an explicit type that is not a browser-playable media response.
+  if (!normalized) {
+    return true;
+  }
+
+  return normalized.startsWith("audio/")
+    || normalized.startsWith("video/")
+    || PLAYABLE_STREAM_CONTENT_TYPES.has(normalized);
+}
+
+function formatAudioStreamProbe(response) {
+  const status = Number(response?.status) || 0;
+  const contentType = normalizeAudioStreamContentType(response?.headers?.get("Content-Type")) || "未知格式";
+  const probeMethod = response?.probeMethod === "range" ? "Range" : "HEAD";
+  return ["HTTP " + (status || "-"), contentType, probeMethod].join(" / ");
+}
+
+function createAudioStreamProbeError(message, response) {
+  const error = new Error(message);
+  error.probeResponse = response || null;
+  return error;
+}
+
+function assertPlayableAudioStreamResponse(response) {
+  if (!response) {
+    throw new Error("音频流未返回响应。");
+  }
+
+  const summary = formatAudioStreamProbe(response);
+
+  if (!response.ok && response.status !== 206) {
+    throw createAudioStreamProbeError("音频流返回 " + summary, response);
+  }
+
+  if (!isPlayableAudioStreamContentType(response.headers?.get("Content-Type"))) {
+    throw createAudioStreamProbeError("音频流返回非媒体内容（" + summary + "）", response);
+  }
+
+  return response;
+}
+
+function setAudioStreamProbeMethod(response, probeMethod) {
+  if (response) {
+    response.probeMethod = probeMethod;
+  }
+
+  return response;
+}
+
 async function probeAudioStream(streamUrl) {
-  let headResponse;
+  let headResponse = null;
 
   try {
-    headResponse = await fetch(streamUrl, { method: "HEAD" });
+    const response = await fetch(streamUrl, { method: "HEAD" });
+    headResponse = setAudioStreamProbeMethod(response, "head");
 
-    if (headResponse.ok) {
-      headResponse.probeMethod = "head";
+    if (response.ok) {
       return headResponse;
     }
   } catch {
     headResponse = null;
   }
 
-  const rangeResponse = await fetch(streamUrl, {
-    method: "GET",
-    headers: { Range: "bytes=0-0" },
-  });
+  try {
+    const rangeResponse = await fetch(streamUrl, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+    });
+    return setAudioStreamProbeMethod(rangeResponse, "range");
+  } catch (error) {
+    if (headResponse) {
+      return headResponse;
+    }
 
-  if (rangeResponse.ok || rangeResponse.status === 206) {
-    rangeResponse.probeMethod = "range";
-    return rangeResponse;
+    throw error;
   }
-
-  const statusText = rangeResponse.statusText || headResponse?.statusText || "";
-  const status = rangeResponse.status || headResponse?.status || "";
-  throw new Error(`音频流返回 ${status} ${statusText}`.trim());
 }
 
 async function copyLoginDiagnostics() {
@@ -4673,6 +4842,8 @@ async function verifyExternalSourceSession(session) {
 }
 
 async function loadMusicLibrary(session) {
+  const loadRequestId = ++libraryLoadRequestId;
+  const isCurrentLoad = () => loadRequestId === libraryLoadRequestId && state.session === session;
   const savedFilterState = loadFilterState(session);
   const savedQueueState = loadQueueState(session);
 
@@ -4719,6 +4890,8 @@ async function loadMusicLibrary(session) {
   state.playlistTracks = [];
   state.totalPlaylistTracks = 0;
   state.hasMorePlaylistTracks = false;
+  state.playlistTrackSource = "";
+  state.playlistTrackNextStartIndex = 0;
   state.isLoadingMorePlaylistTracks = false;
   state.detailReturnViews = {
     albumDetail: "albums",
@@ -4742,7 +4915,10 @@ async function loadMusicLibrary(session) {
     renderLibraryViewOptions();
 
     const scopedParams = getLibraryScopeParams();
-    const [albumResponse, trackResponse, artistResponse, favoriteResponse, playlistResponse] = await Promise.all([
+    // Load the two views needed to render the first music screen first. The
+    // optional artist/favorite/playlist queries are intentionally deferred so
+    // a slow Emby endpoint cannot hold the whole library behind a blank shell.
+    const [albumResponse, trackResponse] = await Promise.all([
       embyFetch(session, userItemsPath(session, {
         Recursive: true,
         IncludeItemTypes: "MusicAlbum",
@@ -4750,7 +4926,7 @@ async function loadMusicLibrary(session) {
         SortOrder: "Descending",
         StartIndex: 0,
         Limit: PAGE_SIZE.albums,
-        Fields: itemFields,
+        Fields: COLLECTION_ITEM_FIELDS,
         EnableUserData: true,
         ...scopedParams,
       })),
@@ -4765,47 +4941,17 @@ async function loadMusicLibrary(session) {
         EnableUserData: true,
         ...scopedParams,
       })),
-      safeEmbyFetch(session, userItemsPath(session, {
-        Recursive: true,
-        IncludeItemTypes: "MusicArtist",
-        SortBy: "SortName",
-        SortOrder: "Ascending",
-        StartIndex: 0,
-        Limit: PAGE_SIZE.artists,
-        Fields: itemFields,
-        EnableUserData: true,
-        ...scopedParams,
-      }), { Items: [], TotalRecordCount: 0 }),
-      safeEmbyFetch(session, userItemsPath(session, {
-        Recursive: true,
-        IncludeItemTypes: "Audio",
-        IsFavorite: true,
-        SortBy: "SortName",
-        SortOrder: "Ascending",
-        StartIndex: 0,
-        Limit: PAGE_SIZE.favorites,
-        Fields: itemFields,
-        EnableUserData: true,
-        ...scopedParams,
-      }), { Items: [], TotalRecordCount: 0 }),
-      safeEmbyFetch(session, userItemsPath(session, {
-        Recursive: true,
-        IncludeItemTypes: "Playlist",
-        SortBy: "SortName",
-        SortOrder: "Ascending",
-        StartIndex: 0,
-        Limit: PAGE_SIZE.playlists,
-        Fields: itemFields,
-        EnableUserData: true,
-        ...scopedParams,
-      }), { Items: [], TotalRecordCount: 0 }),
     ]);
+
+    if (!isCurrentLoad()) {
+      return;
+    }
 
     state.albums = normalizeItems(albumResponse.Items);
     state.tracks = mergeUniqueItems(normalizeItems(trackResponse.Items), state.queue);
-    state.artists = normalizeItems(artistResponse.Items);
-    state.playlists = normalizePlaylists(playlistResponse.Items);
-    state.favoriteTracks = mergeUniqueItems(normalizeItems(favoriteResponse.Items), state.tracks.filter(isFavorite));
+    state.artists = [];
+    state.playlists = [];
+    state.favoriteTracks = state.tracks.filter(isFavorite);
     state.lastServerSearchQuery = "";
     state.serverSearchRequestId += 1;
     clearTimeout(state.serverSearchTimer);
@@ -4813,9 +4959,9 @@ async function loadMusicLibrary(session) {
     state.isServerSearching = false;
     state.totalTracks = trackResponse.TotalRecordCount ?? state.tracks.length;
     state.totalAlbums = albumResponse.TotalRecordCount ?? state.albums.length;
-    state.totalArtists = artistResponse.TotalRecordCount ?? state.artists.length;
-    state.totalPlaylists = playlistResponse.TotalRecordCount ?? state.playlists.length;
-    state.totalFavorites = favoriteResponse.TotalRecordCount ?? state.favoriteTracks.length;
+    state.totalArtists = 0;
+    state.totalPlaylists = 0;
+    state.totalFavorites = state.favoriteTracks.length;
     state.isLibraryLoaded = true;
 
     applyFilters();
@@ -4827,8 +4973,20 @@ async function loadMusicLibrary(session) {
     qualitySelect.disabled = !state.availableQualities.length;
     refreshButton.disabled = false;
     shuffleButton.disabled = !state.filteredTracks.length;
-    setLibraryStatus("");
+    setLibraryStatus("正在补充艺人、收藏和歌单...");
+    void loadOptionalLibraryCollections(session, loadRequestId, scopedParams).catch(() => {
+      // Optional panels already have safe empty fallbacks; a slow/failed
+      // secondary query must not turn the successfully rendered library into
+      // an unhandled rejection or block playback.
+      if (isCurrentLoad()) {
+        setLibraryStatus("");
+      }
+    });
   } catch (error) {
+    if (!isCurrentLoad()) {
+      return;
+    }
+
     state.isLibraryLoaded = false;
     searchInput.disabled = true;
     clearSearchButton.disabled = true;
@@ -4847,6 +5005,61 @@ async function loadMusicLibrary(session) {
       ],
     });
   }
+}
+
+async function loadOptionalLibraryCollections(session, loadRequestId, scopedParams) {
+  const isCurrentLoad = () => loadRequestId === libraryLoadRequestId && state.session === session;
+
+  const [artistResponse, favoriteResponse, playlistResponse] = await Promise.all([
+    safeEmbyFetch(session, userItemsPath(session, {
+      Recursive: true,
+      IncludeItemTypes: "MusicArtist",
+      SortBy: "SortName",
+      SortOrder: "Ascending",
+      StartIndex: 0,
+      Limit: PAGE_SIZE.artists,
+      Fields: COLLECTION_ITEM_FIELDS,
+      EnableUserData: true,
+      ...scopedParams,
+    }), { Items: [], TotalRecordCount: 0 }),
+    safeEmbyFetch(session, userItemsPath(session, {
+      Recursive: true,
+      IncludeItemTypes: "Audio",
+      IsFavorite: true,
+      SortBy: "SortName",
+      SortOrder: "Ascending",
+      StartIndex: 0,
+      Limit: PAGE_SIZE.favorites,
+      Fields: itemFields,
+      EnableUserData: true,
+      ...scopedParams,
+    }), { Items: [], TotalRecordCount: 0 }),
+    safeEmbyFetch(session, userItemsPath(session, {
+      Recursive: true,
+      IncludeItemTypes: "Playlist",
+      SortBy: "SortName",
+      SortOrder: "Ascending",
+      StartIndex: 0,
+      Limit: PAGE_SIZE.playlists,
+      Fields: COLLECTION_ITEM_FIELDS,
+      EnableUserData: true,
+      ...scopedParams,
+    }), { Items: [], TotalRecordCount: 0 }),
+  ]);
+
+  if (!isCurrentLoad()) {
+    return;
+  }
+
+  state.artists = normalizeItems(artistResponse.Items);
+  state.playlists = normalizePlaylists(playlistResponse.Items);
+  state.favoriteTracks = mergeUniqueItems(normalizeItems(favoriteResponse.Items), state.tracks.filter(isFavorite));
+  state.totalArtists = artistResponse.TotalRecordCount ?? state.artists.length;
+  state.totalPlaylists = playlistResponse.TotalRecordCount ?? state.playlists.length;
+  state.totalFavorites = favoriteResponse.TotalRecordCount ?? state.favoriteTracks.length;
+  applyFilters();
+  renderLibrary();
+  setLibraryStatus("");
 }
 
 async function loadExternalMusicLibrary(session) {
@@ -6447,12 +6660,16 @@ function renderHomeStartArtwork(track) {
     return;
   }
 
-  homeStartCover.replaceChildren();
   homeStartCover.className = `home-start-cover ${coverClass(state.currentTrackIndex >= 0 ? state.currentTrackIndex : 0)}`;
+  homeStartCover.classList.toggle("is-empty", !track);
 
-  if (track) {
-    appendImage(homeStartCover, getTrackImageUrl(track, 240), track.Name);
+  if (!track) {
+    invalidatePlayerCoverRequest(homeStartCover);
+    homeStartCover.replaceChildren();
+    return;
   }
+
+  replacePlayerCoverImageAtomically(homeStartCover, getTrackImageUrls(track, 240), track.Name);
 }
 
 function formatHomeStartTimelineTime(seconds) {
@@ -6989,7 +7206,7 @@ function renderTrackList(container, tracks, options = {}) {
 
     const cover = document.createElement("span");
     cover.className = `track-cover ${coverClass(index)}`;
-    appendImage(cover, getTrackImageUrl(track, 160), track.Name);
+    appendImage(cover, getTrackImageUrls(track, 160), track.Name);
     const playCue = document.createElement("span");
     playCue.className = "track-cover-cue";
     playCue.setAttribute("aria-hidden", "true");
@@ -7117,7 +7334,7 @@ function createHomeTrackRow(track, index, tracks, playQueue, options = {}) {
 
   const cover = document.createElement("span");
   cover.className = `track-cover home-track-cover ${coverClass(index)}`;
-  appendImage(cover, getTrackImageUrl(track, 160), track.Name);
+  appendImage(cover, getTrackImageUrls(track, 160), track.Name);
 
   const titleBlock = document.createElement("span");
   titleBlock.className = "track-title-block home-track-copy";
@@ -8200,14 +8417,32 @@ function openImmersiveMoreActions() {
   state.trackActionSheetTrack = null;
 }
 
+function getRestorableSavedAccountProfiles() {
+  return storage.loadAccountProfiles().filter((profile) => {
+    const session = profile?.session || {};
+
+    return Boolean(
+      session.serverUrl
+      && session.userId
+      && (session.accessToken || isExternalSourceSession(session))
+    );
+  });
+}
+
 function renderSavedAccounts() {
   if (!savedAccountsSection || !savedAccountList) {
     return;
   }
 
-  const profiles = storage.loadAccountProfiles();
-  savedAccountsSection.hidden = !profiles.length;
+  const profiles = getRestorableSavedAccountProfiles();
   savedAccountList.replaceChildren();
+
+  if (!profiles.length) {
+    savedAccountsSection.hidden = true;
+    return;
+  }
+
+  savedAccountsSection.hidden = false;
 
   profiles.forEach((profile) => {
     const item = document.createElement("div");
@@ -8306,7 +8541,9 @@ function renderAccountMenuSavedAccounts() {
 
 function getSavedAccountSubtitle(profile) {
   const session = profile.session || {};
-  const server = session.serverName || session.serverUrl || (isExternalSourceSession(session) ? "音源桥" : "Emby Server");
+  const serverName = String(session.serverName || "").trim();
+  const safeServerName = serverName && !/[/:@]/.test(serverName) ? serverName : "Emby 服务器";
+  const server = isExternalSourceSession(session) ? "音源桥" : safeServerName;
   const savedTime = profile.savedAt ? formatSavedAccountTime(profile.savedAt) : "";
 
   return savedTime ? `${server} · ${savedTime}` : server;
@@ -8736,7 +8973,7 @@ function renderQueueOverview() {
   queueOverviewCover.replaceChildren();
 
   if (currentTrack) {
-    appendImage(queueOverviewCover, getTrackImageUrl(currentTrack, 220), currentTrack.Name);
+    appendImage(queueOverviewCover, getTrackImageUrls(currentTrack, 220), currentTrack.Name);
   }
 
   queueOverviewTitle.textContent = currentTrack?.Name || (queueLength ? "队列已准备" : "等待选择音乐");
@@ -8831,7 +9068,7 @@ function renderQuickQueue() {
 
     const cover = document.createElement("span");
     cover.className = `quick-queue-cover ${coverClass(queueIndex)}`;
-    appendImage(cover, getTrackImageUrl(track, 120), track.Name);
+    appendImage(cover, getTrackImageUrls(track, 120), track.Name);
     const coverCue = document.createElement("span");
     coverCue.className = "quick-queue-cover-cue";
     coverCue.append(createActionIcon(isActive ? "nowPlaying" : "play"));
@@ -9598,7 +9835,7 @@ function getSettingsPlaybackPreloadLabel() {
   }
 
   const status = state.preloadCacheStatus ? ` · ${state.preloadCacheStatus}` : "";
-  const lossless = state.playbackLosslessPrecacheEnabled ? " · 允许无损下载" : "";
+  const lossless = state.playbackLosslessPrecacheEnabled ? " · 允许无损预加载" : "";
   return `下一首：${nextTrack.Name || "未命名歌曲"}${status}${lossless}`;
 }
 
@@ -9765,12 +10002,13 @@ function shortenIdentifier(value) {
 function renderNowPlaying() {
   const track = state.currentTrack;
 
-  nowPlayingCover.replaceChildren();
   nowPlayingCover.className = "now-playing-cover cover-a";
   nowPlayingCover.classList.toggle("is-empty", !track);
   renderNowPlayingEmptyActions(Boolean(track));
 
   if (!track) {
+    invalidatePlayerCoverRequest(nowPlayingCover);
+    nowPlayingCover.replaceChildren();
     nowPlayingCover.classList.remove("media-video-host");
     nowPlayingTitle.textContent = "等待选择音乐";
     nowPlayingArtist.textContent = "Aurora Music";
@@ -9793,12 +10031,16 @@ function renderNowPlaying() {
   nowPlayingAlbum.disabled = !track.AlbumId && !track.Album;
   renderNowPlayingPlaybackMeta(track);
   if (isVideoTrack(track)) {
+    invalidatePlayerCoverRequest(nowPlayingCover);
+    nowPlayingCover.replaceChildren();
     nowPlayingCover.classList.add("media-video-host");
     renderVideoTrackFrame(track);
     mountVideoElementForActiveView();
   } else {
     nowPlayingCover.classList.remove("media-video-host");
-    appendImage(nowPlayingCover, getTrackImageUrl(track, 900), track.Name);
+    replacePlayerCoverImageAtomically(nowPlayingCover, [], track.Name, {
+      sourcePromise: getTrackCoverResolution(track),
+    });
   }
   renderPlaybackFavoriteButton(nowFavoriteButton, track);
   renderLyrics(track);
@@ -10091,29 +10333,34 @@ function handleImmersiveMobileTitleKeydown(event) {
   returnMobileImmersiveLyricsToCover(event);
 }
 
-function syncImmersiveMobileCover(imageUrl, track) {
+function syncImmersiveMobileCover(coverResolution, track) {
   if (!immersiveMobileCoverProxy) {
     return;
   }
 
-  immersiveMobileCoverProxy.replaceChildren();
   immersiveMobileCoverProxy.className = "immersive-mobile-cover-proxy cover-a";
   if (track) {
-    appendImage(immersiveMobileCoverProxy, imageUrl, track.Name);
+    replacePlayerCoverImageAtomically(immersiveMobileCoverProxy, [], track.Name, {
+      sourcePromise: coverResolution,
+    });
     return;
   }
 
+  invalidatePlayerCoverRequest(immersiveMobileCoverProxy);
+  immersiveMobileCoverProxy.replaceChildren();
   immersiveMobileCoverProxy.classList.add("is-empty");
 }
 
 function renderImmersivePlayer(track = state.currentTrack) {
-  immersiveCover.replaceChildren();
-  immersiveBackdrop.replaceChildren();
+  invalidatePlayerCoverRequest(immersiveCover);
+  invalidatePlayerCoverRequest(immersiveBackdrop);
   immersiveCover.className = "immersive-cover cover-a";
   immersiveBackdrop.className = "immersive-backdrop cover-a";
   renderImmersiveEmptyActions(Boolean(track));
 
   if (!track) {
+    immersiveCover.replaceChildren();
+    immersiveBackdrop.replaceChildren();
     immersiveCover.classList.remove("media-video-host");
     immersiveTitle.textContent = "等待选择音乐";
     if (immersiveMobileTitle) {
@@ -10133,7 +10380,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
     immersiveAlbum.textContent = "-";
     immersiveArtist.disabled = true;
     immersiveAlbum.disabled = true;
-    syncImmersiveMobileCover("", null);
+    syncImmersiveMobileCover([], null);
     renderImmersivePlaybackMeta(null);
     renderPlaybackFavoriteButton(immersiveFavoriteButton, null);
     renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, null);
@@ -10142,7 +10389,7 @@ function renderImmersivePlayer(track = state.currentTrack) {
     return;
   }
 
-  const imageUrl = getTrackImageUrl(track, 1100);
+  const coverResolution = getTrackCoverResolution(track);
   immersiveTitle.textContent = track.Name || "未命名歌曲";
   if (immersiveMobileTitle) {
     immersiveMobileTitle.textContent = track.Name || "未命名歌曲";
@@ -10170,10 +10417,14 @@ function renderImmersivePlayer(track = state.currentTrack) {
     mountVideoElementForActiveView();
   } else {
     immersiveCover.classList.remove("media-video-host");
-    appendImage(immersiveCover, imageUrl, track.Name);
+    replacePlayerCoverImageAtomically(immersiveCover, [], track.Name, {
+      sourcePromise: coverResolution,
+    });
   }
-  appendImage(immersiveBackdrop, imageUrl, "");
-  syncImmersiveMobileCover(imageUrl, track);
+  replacePlayerCoverImageAtomically(immersiveBackdrop, [], track.Name, {
+    sourcePromise: coverResolution,
+  });
+  syncImmersiveMobileCover(coverResolution, track);
   renderImmersivePlaybackMeta(track);
   renderPlaybackFavoriteButton(immersiveFavoriteButton, track);
   renderPlaybackFavoriteButton(immersiveMobileFavoriteButton, track);
@@ -10233,12 +10484,16 @@ function renderLyrics(track) {
     renderLyricsEmptyState("播放歌曲后显示歌词。", []);
     renderNowLyricFocus();
     renderImmersiveLyricFocus();
+    renderLyricTranslationRequestAction();
     return;
   }
 
   if (state.lyricsTrackId !== track.Id) {
-    applyLyricsText(track, extractLyricsText(track), "");
-    if (!state.lyricLines.length) {
+    applyLyricsText(track, getInitialLyricsText(track), "");
+    const shouldLoadRemoteLyrics = !isManualLyricsTrack(track)
+      && (!state.lyricLines.length
+        || (!isExternalSourceTrack(track) && !hasEmbyOwnedLyrics(track)));
+    if (shouldLoadRemoteLyrics) {
       loadLyricsFromServer(track);
     }
   }
@@ -10249,6 +10504,7 @@ function renderLyrics(track) {
     renderLyricsEmptyState(state.lyricsStatus || "没有读取到歌词。");
     renderNowLyricFocus();
     renderImmersiveLyricFocus();
+    renderLyricTranslationRequestAction();
     return;
   }
 
@@ -10283,6 +10539,7 @@ function renderLyrics(track) {
   renderImmersiveLyricFocus();
   updateLyricsHighlight(getVisibleLyricSyncTimeSeconds(), true);
   renderNowLyricFocus();
+  renderLyricTranslationRequestAction();
 }
 
 function appendLyricLineContent(container, line, options = {}) {
@@ -10521,19 +10778,20 @@ function applyLyricsText(track, text, status = "") {
 }
 
 async function loadLyricsFromServer(track) {
-  if (!state.session || !track?.Id) {
+  if (!state.session || !track?.Id || isManualLyricsTrack(track)) {
     return;
   }
 
   const requestId = ++state.lyricsLoadRequestId;
   state.lyricsAbortController?.abort();
   lyricsPrefetchAbortController?.abort();
+  const cachedLyricsText = getInitialLyricsText(track);
   const controller = new AbortController();
   state.lyricsAbortController = controller;
   state.lyricsSourceDiagnostics = null;
   state.lyricsStatus = isExternalSourceTrack(track)
     ? "正在从音源桥尝试读取歌词..."
-    : "正在搜索歌词...";
+    : "正在读取 Emby 歌词...";
   invalidateLyricRenderState();
   renderLyricsEmptyState(state.lyricsStatus, []);
   renderNowLyricFocus();
@@ -10547,6 +10805,14 @@ async function loadLyricsFromServer(track) {
     }
 
     if (!text.trim()) {
+      if (hasUsableLyricsText(cachedLyricsText)) {
+        state.lyricsStatus = "Emby 未返回可用歌词，已使用缓存歌词。";
+        applyLyricsText(track, cachedLyricsText, state.lyricsStatus);
+        renderLyrics(track);
+        renderSettings();
+        return;
+      }
+
       state.lyricsStatus = getLyricsNotFoundStatus(track);
       invalidateLyricRenderState();
       renderLyricsEmptyState(state.lyricsStatus);
@@ -10555,7 +10821,7 @@ async function loadLyricsFromServer(track) {
       return;
     }
 
-    mergeLyricsIntoTrack(track, text);
+    mergeLyricsIntoTrack(track, text, getLyricsCacheSource());
     applyLyricsText(track, text, "");
     renderLyrics(track);
     renderSettings();
@@ -10572,6 +10838,7 @@ async function loadLyricsFromServer(track) {
     renderSettings();
   } finally {
     if (state.lyricsAbortController === controller) state.lyricsAbortController = null;
+    renderLyricTranslationRequestAction();
   }
 }
 
@@ -10615,10 +10882,184 @@ async function fetchLyricsText(track, options = {}) {
     return text;
   }
 
-  const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge(track, options);
-  if (sidecarText.trim()) return sidecarText;
+  const embyText = await fetchEmbyLyricsFromServer(track, options);
+  const embyHasText = Boolean(embyText.trim());
+  const embyHasBilingualText = hasLikelyBilingualText(embyText);
+  if (embyHasBilingualText) return embyText;
   if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  return fetchMatchedLyricsFromSourceBridge(track, options);
+
+  const sidecarText = await fetchEmbySidecarLyricsFromSourceBridge(track, options);
+  const sidecarHasText = Boolean(sidecarText.trim());
+  if (hasLikelyBilingualText(sidecarText)) return sidecarText;
+  if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const matchedText = await fetchMatchedLyricsFromSourceBridge(track, options);
+  if (hasLikelyBilingualText(matchedText)) return matchedText;
+
+  // Keep a usable original-language lyric as the final fallback, but never let
+  // it win over a bilingual candidate from another Emby-backed source.
+  return embyHasText ? embyText : (sidecarHasText ? sidecarText : matchedText);
+}
+
+async function fetchEmbyLyricsFromServer(track, options = {}) {
+  if (!state.session || isExternalSourceTrack(track) || !track?.Id) {
+    return "";
+  }
+
+  try {
+    const payload = await embyFetch(state.session, `/Items/${encodeURIComponent(track.Id)}/Lyrics`, {
+      signal: options.signal,
+    });
+    const text = extractLyricsTextFromResponse(payload);
+    const usableText = hasUsableLyricsText(text) ? text : "";
+    if (options.updateDiagnostics !== false) {
+      setLyricsSourceDiagnostics({
+        source: "emby",
+        endpoint: "Items/{id}/Lyrics",
+        hasText: Boolean(usableText.trim()),
+        hasCjk: hasLikelyChineseText(usableText),
+        hasBilingual: hasLikelyBilingualText(usableText),
+        lineCount: countLyricLikeLines(usableText),
+        error: "",
+      });
+    }
+    return usableText;
+  } catch (error) {
+    if (error?.name === "AbortError" && options.signal?.aborted) {
+      throw error;
+    }
+
+    if (options.updateDiagnostics !== false) {
+      setLyricsSourceDiagnostics({
+        source: "emby",
+        endpoint: "Items/{id}/Lyrics",
+        hasText: false,
+        error: readableError(error),
+      });
+    }
+    return "";
+  }
+}
+
+function getInitialLyricsText(track) {
+  const embeddedText = getTrackEmbeddedLyricsText(track);
+
+  return embeddedText || extractLyricsText(track);
+}
+
+function getTrackEmbeddedLyricsText(track) {
+  const structuredText = [
+    track?.Lyrics,
+    track?.Lyric,
+    track?.LyricsLines,
+    track?.UserData?.Lyrics,
+  ].map((value) => extractLyricsTextFromResponse(value)).find((value) => value.trim());
+  if (structuredText) {
+    return structuredText;
+  }
+
+  if (!track) {
+    return "";
+  }
+
+  const trackWithoutCachedLyrics = track.LyricsText
+    ? { ...track, LyricsText: "" }
+    : track;
+  return extractLyricsText(trackWithoutCachedLyrics);
+}
+
+function getLyricsSourceKey(track) {
+  return String(track?.LyricsSource || track?.LyricSource || "").trim().toLowerCase();
+}
+
+function isManualLyricsTrack(track) {
+  return /^(?:manual|user|custom)$/.test(getLyricsSourceKey(track));
+}
+
+function hasEmbyOwnedLyrics(track) {
+  const source = getLyricsSourceKey(track);
+  const embySources = ["emby", "emby-api", "emby-items-lyrics", "emby-native"];
+  if (source && !embySources.includes(source)) {
+    return false;
+  }
+
+  return hasBilingualLyricsText(getInitialLyricsText(track));
+}
+
+function hasBilingualLyricsText(text) {
+  return parseLyrics(String(text || "")).lines.some((line) => {
+    return Boolean(String(line?.originalText || "").trim() && String(line?.text || "").trim());
+  });
+}
+
+function hasDisplayedBilingualLyrics() {
+  return state.lyricLines.some((line) => {
+    return Boolean(String(line?.originalText || "").trim() && String(line?.text || "").trim());
+  });
+}
+
+function renderLyricTranslationRequestAction() {
+  const track = state.currentTrack;
+  const hasTrack = Boolean(track?.Id);
+  const isExternal = hasTrack && isExternalSourceTrack(track);
+  const hasTranslation = hasDisplayedBilingualLyrics();
+  const isLoading = Boolean(state.lyricsAbortController);
+  const available = Boolean(state.session && hasTrack && !isExternal);
+  const disabled = !available || isLoading || hasTranslation;
+  const label = hasTranslation
+    ? "翻译已显示"
+    : isLoading
+      ? "正在读取翻译"
+      : isExternal
+        ? "外部音源不支持 Emby 翻译"
+        : hasTrack && state.session
+          ? "显示翻译"
+          : "连接 Emby 后显示翻译";
+
+  if (lyricTranslationRequestButton) {
+    lyricTranslationRequestButton.disabled = disabled;
+    lyricTranslationRequestButton.setAttribute("aria-label", label);
+    lyricTranslationRequestButton.title = label;
+  }
+  if (lyricTranslationActionState) {
+    lyricTranslationActionState.textContent = hasTranslation
+      ? "当前歌曲已显示翻译。"
+      : isLoading
+        ? "正在读取当前歌曲的翻译..."
+        : state.lyricSettings.autoTranslateMissingLyrics
+          ? "翻译请求已开启，可再次读取。"
+          : "没有中文译文时可手动读取。";
+  }
+}
+
+function requestLyricTranslation() {
+  const track = state.currentTrack;
+  if (!state.session || !track?.Id || isExternalSourceTrack(track) || state.lyricsAbortController) {
+    renderLyricTranslationRequestAction();
+    return;
+  }
+
+  if (hasDisplayedBilingualLyrics()) {
+    showNotice("当前歌词已显示翻译。", { type: "success" });
+    return;
+  }
+
+  showNotice("正在读取翻译...", { type: "info", autoDismissMs: 2200 });
+  if (state.lyricSettings.autoTranslateMissingLyrics) {
+    loadLyricsFromServer(track);
+  } else {
+    updateLyricSetting("autoTranslateMissingLyrics", true);
+  }
+  renderLyricTranslationRequestAction();
+}
+
+function getLyricsCacheSource() {
+  const source = String(state.lyricsSourceDiagnostics?.source || "").trim();
+  return source || (isExternalSourceSession() ? "external-source" : "source-bridge");
+}
+
+function hasUsableLyricsText(text) {
+  return parseLyrics(String(text || "")).lines.some((line) => String(line?.text || line?.originalText || "").trim());
 }
 
 function getLyricsBridgeMetadata(track) {
@@ -10680,12 +11121,14 @@ function scheduleNextLyricsPrefetch(currentTrack) {
     lyricsPrefetchHandle = 0;
     if (state.currentTrack?.Id !== currentTrack.Id) return;
     const nextTrack = getNextPreviewTrack();
-    const apiUrl = getLyricsSourceBridgeApiUrl();
-    if (!nextTrack?.Id || nextTrack.Id === currentTrack.Id || !apiUrl) return;
+    if (!nextTrack?.Id || nextTrack.Id === currentTrack.Id) return;
     const controller = new AbortController();
     lyricsPrefetchAbortController = controller;
     try {
-      await fetchLyricsBridgeJson(apiUrl, "lyric-by-metadata", nextTrack, { signal: controller.signal });
+      await fetchEmbyLyricsFromServer(nextTrack, {
+        signal: controller.signal,
+        updateDiagnostics: false,
+      });
     } catch {
       // Background prefetch never changes playback or lyric UI state.
     } finally {
@@ -10969,61 +11412,259 @@ function extractLyricsTextFromResponse(response) {
     return "";
   }
 
-  const direct = [
-    response.lrc,
-    response.lyric,
-    response.lyrics,
-    response.rawLrc,
-    response.Lyrics,
-    response.Lyric,
-    response.Text,
-    response.LyricsText,
-    response.Value,
-    response.Data,
-  ].find((value) => typeof value === "string" && value.trim());
-
-  if (direct) {
-    return direct;
+  if (Array.isArray(response)) {
+    return formatLyricsResponseLineArray(response);
   }
 
-  const arrays = [
-    response.Items,
-    response.Lyrics,
-    response.LyricsLines,
-    response.Lines,
-  ].filter(Array.isArray);
+  const containers = getLyricsResponseContainers(response);
+  const originalText = findLyricsResponseDirectText(containers, false)
+    || findLyricsResponseLineText(containers, false);
+  const translatedText = findLyricsResponseDirectText(containers, true)
+    || findLyricsResponseLineText(containers, true);
 
-  for (const array of arrays) {
-    const text = array.map((item) => {
-      if (typeof item === "string") {
-        return item;
+  return mergeLyricsResponseTexts(originalText, translatedText);
+}
+
+function getLyricsResponseContainers(response) {
+  const containers = [];
+  const queue = [response];
+  const seen = new Set();
+
+  while (queue.length && containers.length < 32) {
+    const candidate = queue.shift();
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) || seen.has(candidate)) {
+      continue;
+    }
+
+    seen.add(candidate);
+    containers.push(candidate);
+    [
+      candidate.Data,
+      candidate.Result,
+      candidate.Payload,
+      candidate.Response,
+      candidate.Lyrics,
+      candidate.Lyric,
+      candidate.MediaSource,
+    ].forEach((nested) => {
+      if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+        queue.push(nested);
       }
+    });
 
-      if (!item || typeof item !== "object") {
-        return "";
-      }
+    [candidate.MediaSources, candidate.Sources].filter(Array.isArray).forEach((sources) => {
+      sources.forEach((source) => queue.push(source));
+    });
+  }
 
-      const lineText = item.Text || item.Line || item.Value || "";
-      const ticks = Number(item.Start || item.StartPositionTicks || item.StartTicks);
-      const seconds = Number(item.Time || item.StartSeconds);
+  return containers;
+}
 
-      if (Number.isFinite(ticks) && ticks > 0) {
-        return `[${formatLrcTimestamp(ticks / 10000000)}]${lineText}`;
-      }
+function findLyricsResponseDirectText(containers, translated = false) {
+  const fields = translated
+    ? [
+      "TranslatedLyrics", "translatedLyrics", "TranslatedLyric", "translatedLyric",
+      "Translation", "translation", "TranslationText", "translationText",
+      "TranslatedText", "translatedText", "TransLyrics", "transLyrics",
+      "TransLyric", "transLyric", "Tlyric", "tlyric", "TLrc", "tlrc",
+      "TranslatedLrc", "translatedLrc",
+    ]
+    : [
+      "lrc", "Lrc", "LRC", "lyric", "lyrics", "rawLrc", "Lyrics", "Lyric",
+      "OriginalLyrics", "originalLyrics", "OriginalLyric", "originalLyric",
+      "OriginalLrc", "originalLrc", "Text", "LyricsText", "LyricText", "Value", "Data",
+    ];
 
-      if (Number.isFinite(seconds) && seconds >= 0) {
-        return `[${formatLrcTimestamp(seconds)}]${lineText}`;
-      }
-
-      return lineText;
-    }).filter(Boolean).join("\n");
-
-    if (text.trim()) {
+  for (const container of containers) {
+    const text = findLyricsResponseString(fields.map((field) => container?.[field]));
+    if (text) {
       return text;
     }
   }
 
   return "";
+}
+
+function findLyricsResponseLineText(containers, translated = false) {
+  const fields = translated
+    ? [
+      "TranslatedLyrics", "translatedLyrics", "TranslatedLines", "translatedLines",
+      "TranslationLines", "translationLines", "Translations", "translations",
+      "TransLyrics", "transLyrics", "TransLyric", "transLyric", "Tlyric", "tlyric", "TLrc", "tlrc",
+    ]
+    : ["Items", "Lyrics", "LyricsLines", "lyricsLines", "Lines", "lines", "LyricLines", "lyricLines", "Sentences", "sentences"];
+
+  for (const container of containers) {
+    for (const field of fields) {
+      const text = formatLyricsResponseLineArray(container?.[field], { translated });
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return "";
+}
+
+function formatLyricsResponseLineArray(lines, options = {}) {
+  if (!Array.isArray(lines)) {
+    return "";
+  }
+
+  return lines.map((item) => {
+    if (typeof item === "string") {
+      return item.trim();
+    }
+
+    if (!item || typeof item !== "object") {
+      return "";
+    }
+
+    const lineTexts = getLyricsResponseLineTexts(item, options);
+    if (!lineTexts.length) {
+      return "";
+    }
+
+    const seconds = getLyricResponseLineTimeSeconds(item);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return lineTexts.map((lineText) => `[${formatLrcTimestamp(seconds)}]${lineText}`).join("\n");
+    }
+
+    return lineTexts.join("\n");
+  }).filter(Boolean).join("\n");
+}
+
+function getLyricsResponseLineTexts(item, options = {}) {
+  if (options.translated) {
+    const translatedText = findLyricsResponseString([
+      item.TranslatedText, item.translatedText, item.Translation, item.translation,
+      item.TranslationText, item.translationText, item.TranslatedLyric, item.translatedLyric,
+      item.TranslatedLyrics, item.translatedLyrics, item.TransLyric, item.transLyric,
+      item.Tlyric, item.tlyric, item.TLrc, item.tlrc,
+      item.Text, item.text, item.Line, item.line, item.Value, item.value, item.Lyric, item.lyric,
+    ]);
+    return translatedText ? [translatedText] : [];
+  }
+
+  let originalText = findLyricsResponseString([
+    item.Text, item.text, item.Line, item.line, item.Value, item.value,
+    item.OriginalText, item.originalText, item.Lyric, item.lyric,
+  ]);
+  let translatedText = findLyricsResponseString([
+    item.TranslatedText, item.translatedText, item.Translation, item.translation,
+    item.TranslationText, item.translationText, item.TranslatedLyric, item.translatedLyric,
+    item.TranslatedLyrics, item.translatedLyrics, item.TransLyric, item.transLyric,
+    item.Tlyric, item.tlyric, item.TLrc, item.tlrc,
+  ]);
+
+  if (originalText && !translatedText) {
+    const inlineBilingual = splitLyricsResponseInlineBilingualText(originalText);
+    originalText = inlineBilingual.originalText;
+    translatedText = inlineBilingual.translatedText;
+  }
+
+  return [...new Set([originalText, translatedText].filter(Boolean))];
+}
+
+function findLyricsResponseString(values) {
+  return values.find((value) => typeof value === "string" && value.trim())?.trim() || "";
+}
+
+function splitLyricsResponseInlineBilingualText(value) {
+  const parts = String(value || "").split(/\r?\n/).map((part) => part.trim()).filter(Boolean);
+  const translatedText = parts.filter(isLikelyChineseLyricsResponseText).at(-1) || "";
+
+  if (!translatedText) {
+    return { originalText: String(value || "").trim(), translatedText: "" };
+  }
+
+  const originalParts = parts.filter((part) => part !== translatedText);
+  if (!originalParts.length) {
+    return { originalText: String(value || "").trim(), translatedText: "" };
+  }
+
+  return { originalText: originalParts.join(" / "), translatedText };
+}
+
+function isLikelyChineseLyricsResponseText(value) {
+  const text = String(value || "");
+  return /[\u3400-\u9fff\uf900-\ufaff]/.test(text)
+    && !/[\u3040-\u30ff]/.test(text)
+    && !/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/.test(text);
+}
+
+function mergeLyricsResponseTexts(originalText, translatedText) {
+  return [...new Set([originalText, translatedText]
+    .map((text) => String(text || "").trim())
+    .filter(Boolean))].join("\n");
+}
+
+function getLyricResponseLineTimeSeconds(item) {
+  if (!item || typeof item !== "object") {
+    return NaN;
+  }
+
+  const ticks = [item.StartPositionTicks, item.StartTicks, item.startPositionTicks, item.startTicks]
+    .map(Number)
+    .find((value) => Number.isFinite(value));
+  if (Number.isFinite(ticks)) {
+    return ticks / 10000000;
+  }
+
+  const milliseconds = [item.StartMilliseconds, item.startMilliseconds]
+    .map(Number)
+    .find((value) => Number.isFinite(value));
+  if (Number.isFinite(milliseconds)) {
+    return milliseconds / 1000;
+  }
+
+  for (const value of [item.Start, item.start, item.Time, item.time, item.StartSeconds, item.startSeconds]) {
+    const seconds = parseLyricResponseTimeValue(value);
+    if (Number.isFinite(seconds)) {
+      return seconds;
+    }
+  }
+
+  return NaN;
+}
+
+function parseLyricResponseTimeValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return NaN;
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return NaN;
+    }
+
+    return Math.abs(value) >= 100000 ? value / 10000000 : value;
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return NaN;
+  }
+
+  if (/^[+-]?\d+(?:\.\d+)?$/.test(text)) {
+    const numeric = Number(text);
+    return Math.abs(numeric) >= 100000 ? numeric / 10000000 : numeric;
+  }
+
+  const parts = text.split(":").map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) {
+    return NaN;
+  }
+
+  if (parts.length === 3) {
+    return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+  }
+
+  if (parts.length === 2) {
+    return (parts[0] * 60) + parts[1];
+  }
+
+  return NaN;
 }
 
 function formatLrcTimestamp(totalSeconds) {
@@ -11035,7 +11676,7 @@ function formatLrcTimestamp(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(wholeSeconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
 }
 
-function mergeLyricsIntoTrack(track, text) {
+function mergeLyricsIntoTrack(track, text, source = "") {
   const collections = [
     state.tracks,
     state.favoriteTracks,
@@ -11048,14 +11689,16 @@ function mergeLyricsIntoTrack(track, text) {
 
   collections.forEach((collection) => {
     collection.forEach((item) => {
-      if (item.Id === track.Id) {
+      if (item.Id === track.Id && !isManualLyricsTrack(item)) {
         item.LyricsText = text;
+        if (source) item.LyricsSource = source;
       }
     });
   });
 
-  if (state.currentTrack?.Id === track.Id) {
+  if (state.currentTrack?.Id === track.Id && !isManualLyricsTrack(state.currentTrack)) {
     state.currentTrack.LyricsText = text;
+    if (source) state.currentTrack.LyricsSource = source;
   }
 
   saveQueueState();
@@ -11261,6 +11904,7 @@ function renderLyricSettingsControls() {
   if (lyricAutoTranslateState) {
     lyricAutoTranslateState.textContent = state.lyricSettings.autoTranslateMissingLyrics ? "开启" : "关闭";
   }
+  renderLyricTranslationRequestAction();
 }
 
 function updateLyricSetting(key, value) {
@@ -14477,7 +15121,7 @@ function renderImmersiveQueue() {
 
     const cover = document.createElement("span");
     cover.className = `immersive-queue-cover ${coverClass(index)}`;
-    appendImage(cover, getTrackImageUrl(track, 120), track.Name);
+    appendImage(cover, getTrackImageUrls(track, 120), track.Name);
 
     const copy = document.createElement("span");
     copy.className = "immersive-queue-copy";
@@ -15329,7 +15973,7 @@ function createTrackSuggestionItem(track) {
 
   const cover = document.createElement("span");
   cover.className = "search-suggest-cover";
-  appendImage(cover, getTrackImageUrl(track, 120), track.Name);
+  appendImage(cover, getTrackImageUrls(track, 120), track.Name);
 
   const copy = document.createElement("span");
   copy.className = "search-suggest-copy";
@@ -17058,6 +17702,7 @@ async function loadMoreAlbums() {
     const response = await fetchPagedItems("MusicAlbum", state.albums.length, PAGE_SIZE.albums, {
       SortBy: "DateCreated",
       SortOrder: "Descending",
+      Fields: COLLECTION_ITEM_FIELDS,
     });
 
     state.albums = mergeUniqueItems(state.albums, normalizeItems(response.Items));
@@ -17089,6 +17734,7 @@ async function loadMoreArtists() {
     const response = await fetchPagedItems("MusicArtist", state.artists.length, PAGE_SIZE.artists, {
       SortBy: "SortName",
       SortOrder: "Ascending",
+      Fields: COLLECTION_ITEM_FIELDS,
     });
 
     state.artists = mergeUniqueItems(state.artists, normalizeItems(response.Items));
@@ -17120,6 +17766,7 @@ async function loadMorePlaylists() {
     const response = await fetchPagedItems("Playlist", state.playlists.length, PAGE_SIZE.playlists, {
       SortBy: "SortName",
       SortOrder: "Ascending",
+      Fields: COLLECTION_ITEM_FIELDS,
     });
 
     state.playlists = mergeUniqueItems(state.playlists, normalizePlaylists(response.Items));
@@ -17777,7 +18424,7 @@ async function fetchArtistAlbums(artist) {
     IncludeItemTypes: "MusicAlbum",
     AlbumArtistIds: artist.Id,
     Limit: 240,
-    Fields: itemFields,
+    Fields: COLLECTION_ITEM_FIELDS,
     EnableUserData: true,
   }));
 
@@ -17869,6 +18516,8 @@ async function openPlaylistDetail(playlist) {
   state.playlistTracks = [];
   state.totalPlaylistTracks = getPlaylistKnownTrackCount(playlist);
   state.hasMorePlaylistTracks = false;
+  state.playlistTrackSource = "";
+  state.playlistTrackNextStartIndex = 0;
   state.isLoadingMorePlaylistTracks = false;
   renderPlaylistDetail(playlist, [], true);
   switchView("playlistDetail", { resetScroll: true });
@@ -17880,6 +18529,8 @@ async function openPlaylistDetail(playlist) {
     state.playlistTracks = [];
     state.totalPlaylistTracks = 0;
     state.hasMorePlaylistTracks = false;
+    state.playlistTrackSource = "";
+    state.playlistTrackNextStartIndex = 0;
     setLibraryStatus(`歌单歌曲加载失败：${readableError(error)}`);
     renderPlaylistDetail(playlist, [], false);
   }
@@ -17914,6 +18565,7 @@ async function getPlayablePlaylistTracks(playlist) {
     state.playlistTracks = tracks;
     state.totalPlaylistTracks = tracks.length;
     state.hasMorePlaylistTracks = false;
+    state.playlistTrackNextStartIndex = tracks.length;
     renderPlaylistDetail(playlist, state.playlistTracks, false);
   }
   applyFilters();
@@ -17938,12 +18590,9 @@ async function loadMoreSelectedPlaylistTracks() {
     return;
   }
 
-  if (state.totalPlaylistTracks && state.playlistTracks.length >= state.totalPlaylistTracks) {
-    updatePlaylistTrackLoadMoreButton();
-    return;
-  }
-
-  if (!state.totalPlaylistTracks && !state.hasMorePlaylistTracks && state.playlistTracks.length) {
+  // A server may report a stale ChildCount. Only continue when the last raw page
+  // explicitly confirmed that another page is available, otherwise avoid retry loops.
+  if (!state.hasMorePlaylistTracks) {
     updatePlaylistTrackLoadMoreButton();
     return;
   }
@@ -17964,18 +18613,21 @@ async function loadPlaylistTrackPage(playlist, options = {}) {
   }
 
   const reset = Boolean(options.reset);
-  const startIndex = reset ? 0 : state.playlistTracks.length;
+  const startIndex = reset ? 0 : state.playlistTrackNextStartIndex;
+  const source = reset ? "" : state.playlistTrackSource;
 
   state.isLoadingMorePlaylistTracks = true;
   updatePlaylistTrackLoadMoreButton();
 
   try {
-    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE);
+    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE, { source });
     const nextTracks = reset ? page.tracks : [...state.playlistTracks, ...page.tracks];
 
     state.playlistTracks = nextTracks;
-    state.totalPlaylistTracks = page.total || getPlaylistKnownTrackCount(playlist) || 0;
+    state.totalPlaylistTracks = (page.total ?? getPlaylistKnownTrackCount(playlist)) || 0;
     state.hasMorePlaylistTracks = page.hasMore;
+    state.playlistTrackSource = page.source;
+    state.playlistTrackNextStartIndex = page.nextStartIndex;
     state.tracks = mergeUniqueItems(state.tracks, page.tracks);
     state.favoriteTracks = mergeUniqueItems(state.favoriteTracks, page.tracks.filter(isFavorite));
     applyFilters();
@@ -17989,8 +18641,57 @@ async function loadPlaylistTrackPage(playlist, options = {}) {
   }
 }
 
-async function fetchPlaylistTrackPage(playlist, startIndex, limit) {
-  const response = await embyFetch(state.session, userItemsPath(state.session, {
+async function fetchPlaylistTrackPage(playlist, startIndex, limit, options = {}) {
+  const source = options.source === "parent" || options.source === "playlist" ? options.source : "";
+
+  if (source === "playlist") {
+    return fetchPlaylistTrackPageFromPlaylistEndpoint(playlist, startIndex, limit);
+  }
+
+  if (source === "parent") {
+    return fetchPlaylistTrackPageFromParent(playlist, startIndex, limit);
+  }
+
+  let playlistPage;
+  try {
+    playlistPage = await fetchPlaylistTrackPageFromPlaylistEndpoint(playlist, startIndex, limit);
+  } catch (playlistError) {
+    // Some older servers/proxies reject the dedicated endpoint but still expose
+    // playlist members through the regular user-items ParentId query.
+    return fetchPlaylistTrackPageFromParent(playlist, startIndex, limit);
+  }
+
+  // A successful empty first page can be either a truly empty playlist or an
+  // endpoint compatibility problem. Probe ParentId once; preserve the valid
+  // empty result if that fallback also fails or returns nothing.
+  if (startIndex === 0 && !playlistPage.itemCount) {
+    try {
+      const parentPage = await fetchPlaylistTrackPageFromParent(playlist, startIndex, limit);
+      if (parentPage.itemCount) {
+        return parentPage;
+      }
+    } catch {
+      // The standard endpoint's empty response remains a valid empty playlist.
+    }
+  }
+
+  return playlistPage;
+}
+
+async function fetchPlaylistTrackPageFromPlaylistEndpoint(playlist, startIndex, limit) {
+  const path = `/Playlists/${encodeURIComponent(playlist.Id)}/Items?${toQueryString({
+    UserId: state.session.userId,
+    StartIndex: startIndex,
+    Limit: limit,
+    Fields: itemFields,
+    EnableUserData: true,
+  })}`;
+
+  return fetchPlaylistTrackPageFromPath(path, "playlist", startIndex, limit);
+}
+
+async function fetchPlaylistTrackPageFromParent(playlist, startIndex, limit) {
+  const path = userItemsPath(state.session, {
     ParentId: playlist.Id,
     Recursive: true,
     IncludeItemTypes: "Audio",
@@ -17998,31 +18699,46 @@ async function fetchPlaylistTrackPage(playlist, startIndex, limit) {
     Limit: limit,
     Fields: itemFields,
     EnableUserData: true,
-  }));
-  const items = normalizeItems(response.Items);
-  const tracks = items.filter(isAudioItem);
-  const total = Number.isFinite(response.TotalRecordCount) && response.TotalRecordCount > 0
-    ? response.TotalRecordCount
-    : 0;
+  });
 
-  return { tracks, total, hasMore: total ? startIndex + items.length < total : items.length >= limit };
+  return fetchPlaylistTrackPageFromPath(path, "parent", startIndex, limit);
+}
+
+async function fetchPlaylistTrackPageFromPath(path, source, startIndex, limit) {
+  const response = await embyFetch(state.session, path);
+  const items = normalizeItems(response?.Items);
+  const tracks = items.filter(isAudioItem);
+  const rawTotal = response?.TotalRecordCount;
+  const numericTotal = rawTotal === null || rawTotal === undefined || rawTotal === ""
+    ? null
+    : Number(rawTotal);
+  const total = Number.isFinite(numericTotal) && numericTotal >= 0 ? numericTotal : null;
+  const itemCount = items.length;
+  const nextStartIndex = startIndex + itemCount;
+  const hasMore = itemCount > 0 && (total !== null
+    ? nextStartIndex < total
+    : itemCount >= limit);
+
+  return { tracks, total, hasMore, itemCount, nextStartIndex, source };
 }
 
 async function fetchAllPlaylistTracks(playlist) {
   const allTracks = [];
   let total = getPlaylistKnownTrackCount(playlist);
   let startIndex = 0;
+  let source = state.selectedPlaylist?.Id === playlist?.Id ? state.playlistTrackSource : "";
 
   while (true) {
-    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE);
+    const page = await fetchPlaylistTrackPage(playlist, startIndex, PLAYLIST_TRACK_PAGE_SIZE, { source });
     allTracks.push(...page.tracks);
-    total = page.total || total;
+    total = page.total ?? total;
+    source = page.source;
 
-    if (!page.tracks.length || (total && allTracks.length >= total) || (!total && !page.hasMore)) {
+    if (!page.itemCount || !page.hasMore || (total && page.nextStartIndex >= total)) {
       break;
     }
 
-    startIndex += page.tracks.length;
+    startIndex = page.nextStartIndex;
   }
 
   return mergeUniqueItems([], allTracks);
@@ -18041,7 +18757,7 @@ function updatePlaylistTrackLoadMoreButton() {
 
   const loaded = state.playlistTracks.length;
   const total = state.totalPlaylistTracks || loaded;
-  const hasMore = state.isLoadingMorePlaylistTracks || total > loaded || state.hasMorePlaylistTracks;
+  const hasMore = state.isLoadingMorePlaylistTracks || state.hasMorePlaylistTracks;
   const totalLabel = state.totalPlaylistTracks ? formatCount(total) : "更多";
 
   loadMorePlaylistTracksButton.hidden = !state.selectedPlaylist?.Id || !hasMore;
@@ -19939,6 +20655,7 @@ async function playTrack(track, queue, options = {}) {
   }
 
   activePlaybackLoadProfile = null;
+  activePlaybackQuality = null;
   audioPlayer.pause();
 
   syncShufflePlaybackStateForTrackChange(previousTrack, track, nextQueue, options);
@@ -19954,6 +20671,9 @@ async function playTrack(track, queue, options = {}) {
   }
   state.fallbackAttempted = mode !== "direct";
   state.qualityFallbackAttempted = Boolean(options.qualityFallbackAttempted);
+  state.hlsNetworkRecoveryAttempts = 0;
+  state.hlsMediaRecoveryAttempts = 0;
+  state.lastPlaybackProbe = "";
   state.savedPlaybackPositionSeconds = 0;
 
   updatePlayerMeta(track);
@@ -19977,6 +20697,8 @@ async function playTrack(track, queue, options = {}) {
   applyReplayGain(playbackSession.replayGainDb);
   const source = playbackSession.streamUrl;
   activePlaybackLoadProfile = playbackSession.loadProfile || null;
+  activePlaybackQuality = playbackSession.quality || null;
+  renderPlayerPlaybackMeta(track);
 
   await unlockPromise.catch(() => {});
 
@@ -20345,6 +21067,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
       syncExternalTrackReference(track);
       updateMediaElementPresentation(track);
       state.lastPlaybackInfoError = "";
+      const quality = getTrackQualitySummary(track);
 
       return {
         mediaSourceId: media.mediaSourceId || track.Id,
@@ -20352,6 +21075,12 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
         streamUrl: media.streamUrl,
         loadProfile: buildExternalPlaybackLoadProfile(track, media.streamUrl, media),
         replayGainDb: playerOps.getReplayGainDb(track.MediaSources, media.mediaSourceId),
+        quality: quality
+          ? {
+            label: normalizeMiniPlayerQualityBadgeLabel(quality.shortLabel, track),
+            title: quality.detailLabel || quality.shortLabel,
+          }
+          : null,
       };
     } catch (error) {
       if (requestId !== state.playRequestId) {
@@ -20385,6 +21114,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
     const mediaSource = selectPlaybackMediaSource(playbackInfo, track, mode, fallbackMediaSourceId);
     const mediaSourceId = mediaSource?.Id || fallbackMediaSourceId;
     const playSessionId = ensurePlaybackSessionId(track, playbackInfo?.PlaySessionId || mediaSource?.PlaySessionId || fallbackPlaySessionId);
+    const quality = getPlaybackSourceQualityInfo(mediaSource, track, mode);
 
     state.lastPlaybackInfoError = "";
 
@@ -20393,6 +21123,7 @@ async function preparePlaybackSession(track, mode, requestId, options = {}) {
       playSessionId,
       streamUrl: getAudioStreamUrl(track, mode, playSessionId, mediaSourceId),
       replayGainDb: playerOps.getReplayGainDb(playbackInfo?.MediaSources, mediaSourceId),
+      quality,
     };
   } catch (error) {
     if (requestId !== state.playRequestId) {
@@ -20411,10 +21142,14 @@ function selectPlaybackMediaSource(playbackInfo, track, mode, fallbackMediaSourc
     ? playbackInfo.MediaSources.filter((source) => source?.Id)
     : [];
 
-  return mediaSources.find((source) => source.Id === fallbackMediaSourceId)
-    || mediaSources.find((source) => mode === "universal"
-      ? source.SupportsTranscoding || source.TranscodingUrl
-      : source.SupportsDirectStream || source.SupportsDirectPlay || source.DirectStreamUrl)
+  const preferredSource = mediaSources.find((source) => source.Id === fallbackMediaSourceId) || null;
+  const isCompatible = (source) => mode === "universal"
+    ? Boolean(source?.SupportsTranscoding || source?.TranscodingUrl)
+    : Boolean(source?.SupportsDirectStream || source?.SupportsDirectPlay || source?.DirectStreamUrl);
+
+  return (preferredSource && isCompatible(preferredSource) ? preferredSource : null)
+    || mediaSources.find(isCompatible)
+    || preferredSource
     || mediaSources[0]
     || null;
 }
@@ -20569,13 +21304,21 @@ function handleHlsPlayerError(event, data = {}) {
   state.lastPlaybackError = data.details || data.type || "HLS 播放失败";
   renderPlaybackRecoveryPanel();
 
-  if (data.type === window.Hls?.ErrorTypes?.NETWORK_ERROR) {
+  if (
+    data.type === window.Hls?.ErrorTypes?.NETWORK_ERROR
+    && state.hlsNetworkRecoveryAttempts < 1
+  ) {
+    state.hlsNetworkRecoveryAttempts += 1;
     hlsPlayer?.startLoad();
     renderSettings();
     return;
   }
 
-  if (data.type === window.Hls?.ErrorTypes?.MEDIA_ERROR) {
+  if (
+    data.type === window.Hls?.ErrorTypes?.MEDIA_ERROR
+    && state.hlsMediaRecoveryAttempts < 1
+  ) {
+    state.hlsMediaRecoveryAttempts += 1;
     hlsPlayer?.recoverMediaError();
     renderSettings();
     return;
@@ -21489,7 +22232,7 @@ function updateMediaSessionMetadata(track) {
   const artwork = [96, 128, 192, 256, 384, 512]
     .map((size) => {
       const src = getTrackImageUrl(track, size);
-      return src ? { src, sizes: `${size}x${size}`, type: "image/jpeg" } : null;
+      return src ? { src, sizes: `${size}x${size}`, type: getArtworkMimeType(src) } : null;
     })
     .filter(Boolean);
 
@@ -21998,6 +22741,10 @@ function getDiagnosticsGuidance() {
     return "compatible fallback also failed; run playback chain test and check server transcoding logs";
   }
 
+  if (state.lastPlaybackProbe.startsWith("自动失败检查 /")) {
+    return "audio element rejected the stream; use the compatible fallback and keep this redacted response summary";
+  }
+
   if (state.lastPlaybackProbe) {
     return "playback chain test succeeded; retry playback or switch track if the browser is still blocked";
   }
@@ -22261,6 +23008,24 @@ function preloadNextTrack(options = {}) {
   }
 
   const mode = resolvePlaybackMode();
+
+  // A universal/HLS preload starts another server-side transcode while the
+  // current track is playing. That competes for CPU and bandwidth and makes
+  // lower-quality playback slower rather than faster.
+  if (mode === "universal") {
+    clearPreload();
+    state.preloadCacheStatus = "转码模式不预加载";
+    renderSettings();
+    return;
+  }
+
+  if (!state.playbackLosslessPrecacheEnabled && getTrackQualitySummary(nextTrack)?.isLossless) {
+    clearPreload();
+    state.preloadCacheStatus = "无损预加载未开启";
+    renderSettings();
+    return;
+  }
+
   const mediaSourceId = getTrackDefaultMediaSourceId(nextTrack);
   const playSessionId = createPlaybackSessionId(nextTrack);
   const source = getAudioStreamUrl(nextTrack, mode, playSessionId, mediaSourceId);
@@ -22276,11 +23041,8 @@ function preloadNextTrack(options = {}) {
   state.preloadPlaySessionId = playSessionId;
   state.preloadQualityProfileId = state.audioQualityProfileId;
   state.preloadSession = null;
-  state.preloadCacheStatus = "预加载中";
-  preloadAudio.src = source;
-  preloadAudio.load();
-  preparePreloadedPlaybackSession(nextTrack, mode, playSessionId, mediaSourceId, source);
-  precachePlaybackSource(source, nextTrack);
+  state.preloadCacheStatus = "正在准备";
+  void preparePreloadedPlaybackSession(nextTrack, mode, playSessionId, mediaSourceId, source);
   renderSettings();
 }
 
@@ -22290,9 +23052,15 @@ function getPreloadCandidateTrack() {
 
 async function preparePreloadedPlaybackSession(track, mode, playSessionId, mediaSourceId, source) {
   const requestId = ++state.preloadRequestId;
+  state.preloadPlaybackInfoController?.abort();
+  const controller = window.AbortController ? new window.AbortController() : null;
+  state.preloadPlaybackInfoController = controller;
 
   try {
-    const playbackInfo = await fetchPlaybackInfo(track, mode, mediaSourceId);
+    const playbackInfo = await fetchPlaybackInfo(track, mode, mediaSourceId, {
+      autoOpenLiveStream: false,
+      signal: controller?.signal,
+    });
 
     if (requestId !== state.preloadRequestId || state.preloadTrackId !== track.Id) {
       return;
@@ -22311,16 +23079,15 @@ async function preparePreloadedPlaybackSession(track, mode, playSessionId, media
       playSessionId: resolvedPlaySessionId,
       streamUrl: state.preloadSource,
       replayGainDb: playerOps.getReplayGainDb(playbackInfo?.MediaSources, resolvedMediaSourceId),
+      quality: getPlaybackSourceQualityInfo(mediaSource, track, mode),
     };
 
-    if (state.preloadSource !== source) {
-      preloadAudio.src = state.preloadSource;
-      preloadAudio.load();
-      precachePlaybackSource(state.preloadSource, track);
+    commitBrowserPlaybackPreload(track, state.preloadSource);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return;
     }
 
-    renderSettings();
-  } catch {
     if (requestId === state.preloadRequestId && state.preloadTrackId === track.Id) {
       state.preloadSession = {
         mediaSourceId,
@@ -22328,9 +23095,27 @@ async function preparePreloadedPlaybackSession(track, mode, playSessionId, media
         streamUrl: source,
         replayGainDb: playerOps.getReplayGainDb(track.MediaSources, mediaSourceId),
       };
-      renderSettings();
+      commitBrowserPlaybackPreload(track, source);
+    }
+  } finally {
+    if (state.preloadPlaybackInfoController === controller) {
+      state.preloadPlaybackInfoController = null;
     }
   }
+}
+
+function commitBrowserPlaybackPreload(track, source) {
+  if (!source || state.preloadTrackId !== track?.Id) {
+    return;
+  }
+
+  if (preloadAudio.src !== source) {
+    preloadAudio.src = source;
+    preloadAudio.load();
+  }
+
+  state.preloadCacheStatus = "浏览器已预加载";
+  renderSettings();
 }
 
 function takePreloadedPlaybackSession(track, mode, options = {}) {
@@ -22342,105 +23127,20 @@ function takePreloadedPlaybackSession(track, mode, options = {}) {
   }
 
   if (!track?.Id || track.Id !== state.preloadTrackId || mode !== state.preloadMode) {
+    if (state.preloadTrackId) {
+      clearPreload();
+    }
     return null;
   }
 
   if (state.preloadQualityProfileId !== state.audioQualityProfileId || !state.preloadSession?.streamUrl) {
+    clearPreload();
     return null;
   }
 
   const session = { ...state.preloadSession };
   clearPreload({ keepAudioElement: true });
   return session;
-}
-
-async function precachePlaybackSource(source, track) {
-  if (!source || !("caches" in window) || !window.AbortController) {
-    state.preloadCacheStatus = source ? "浏览器仅预加载" : "";
-    renderSettings();
-    return;
-  }
-
-  const requestKey = `${track.Id}:${source}`;
-
-  if (state.preloadCacheRequestKey === requestKey) {
-    return;
-  }
-
-  state.preloadCacheController?.abort();
-  const controller = new AbortController();
-  state.preloadCacheController = controller;
-  state.preloadCacheRequestKey = requestKey;
-
-  try {
-    const headResponse = await fetch(source, {
-      cache: "no-store",
-      credentials: "include",
-      method: "HEAD",
-      signal: controller.signal,
-    }).catch(() => null);
-    const contentLength = Number(headResponse?.headers?.get("content-length") || 0);
-
-    if (!shouldPrecachePlaybackResponse(track, contentLength)) {
-      state.preloadCacheStatus = getPrecacheSkippedLabel(track, contentLength);
-      return;
-    }
-
-    const response = await fetch(source, {
-      cache: "force-cache",
-      credentials: "include",
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const responseLength = Number(response.headers.get("content-length") || contentLength || 0);
-    if (!shouldPrecachePlaybackResponse(track, responseLength)) {
-      state.preloadCacheStatus = getPrecacheSkippedLabel(track, responseLength);
-      return;
-    }
-
-    if (controller.signal.aborted || state.preloadCacheRequestKey !== requestKey) {
-      return;
-    }
-
-    const cache = await caches.open(PLAYBACK_PRELOAD_CACHE_NAME);
-    await cache.put(source, response.clone());
-    state.preloadCacheStatus = "已预缓存";
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return;
-    }
-
-    state.preloadCacheStatus = "浏览器已预加载";
-  } finally {
-    if (state.preloadCacheRequestKey === requestKey) {
-      state.preloadCacheController = null;
-      renderSettings();
-    }
-  }
-}
-
-function shouldPrecachePlaybackResponse(track, contentLength) {
-  if (state.playbackLosslessPrecacheEnabled) {
-    return true;
-  }
-
-  if (getAudioQualityProfile().mode === "direct" && getTrackQualitySummary(track)?.isLossless) {
-    return false;
-  }
-
-  return !contentLength || contentLength <= MAX_PLAYBACK_PRECACHE_BYTES;
-}
-
-function getPrecacheSkippedLabel(track, contentLength) {
-  if (getAudioQualityProfile().mode === "direct" && getTrackQualitySummary(track)?.isLossless && !state.playbackLosslessPrecacheEnabled) {
-    return "无损下载未开启";
-  }
-
-  return contentLength > MAX_PLAYBACK_PRECACHE_BYTES ? "文件较大，仅预加载" : "浏览器已预加载";
 }
 
 function clearPreload(options = {}) {
@@ -22452,10 +23152,9 @@ function clearPreload(options = {}) {
   state.preloadQualityProfileId = "";
   state.preloadSession = null;
   state.preloadRequestId += 1;
+  state.preloadPlaybackInfoController?.abort();
+  state.preloadPlaybackInfoController = null;
   state.preloadCacheStatus = "";
-  state.preloadCacheRequestKey = "";
-  state.preloadCacheController?.abort();
-  state.preloadCacheController = null;
   if (!options.keepAudioElement) {
     preloadAudio.removeAttribute("src");
     preloadAudio.load();
@@ -22465,6 +23164,7 @@ function clearPreload(options = {}) {
 
 function unloadAudioSource() {
   activePlaybackLoadProfile = null;
+  activePlaybackQuality = null;
   releaseImmersiveVisualizerAnalyser();
   destroyHlsPlayer();
   audioPlayer.removeAttribute("crossorigin");
@@ -22683,6 +23383,70 @@ function getTranscodeBitrateLabel(value = state.transcodeBitrate) {
   return profile.bitrateLabel || bitrate?.label || `${Math.round((Number(value) || 0) / 1000)} kbps`;
 }
 
+function isUnsupportedAudioSourceError(errorText = state.lastPlaybackError) {
+  return audioPlayer.error?.code === 4
+    || /no supported sources|not supported|MEDIA_ERR_SRC_NOT_SUPPORTED/i.test(String(errorText || ""));
+}
+
+function getCurrentAudioStreamProbeUrl() {
+  const streamUrl = String(audioPlayer.currentSrc || audioPlayer.src || "").trim();
+  return /^https?:\/\//i.test(streamUrl) ? streamUrl : "";
+}
+
+function getAudioStreamProbeFailureDetail(error) {
+  if (error?.probeResponse) {
+    return formatAudioStreamProbe(error.probeResponse);
+  }
+
+  const message = redact.redactText(String(error?.message || "请求失败"));
+  return "请求失败：" + message;
+}
+
+function diagnoseUnsupportedAudioSource(track) {
+  if (!track || !isUnsupportedAudioSourceError()) {
+    return;
+  }
+
+  const streamUrl = getCurrentAudioStreamProbeUrl();
+
+  // HLS.js uses a blob URL for MSE playback; its own error handler already
+  // performs recovery and a blob URL cannot be probed with fetch.
+  if (!streamUrl) {
+    return;
+  }
+
+  const requestId = state.playRequestId;
+
+  if (state.lastUnsupportedSourceProbeRequestId === requestId) {
+    return;
+  }
+
+  state.lastUnsupportedSourceProbeRequestId = requestId;
+
+  void (async () => {
+    let detail;
+
+    try {
+      const response = await probeAudioStream(streamUrl);
+      assertPlayableAudioStreamResponse(response);
+      detail = formatAudioStreamProbe(response);
+    } catch (error) {
+      detail = getAudioStreamProbeFailureDetail(error);
+    }
+
+    // A direct failure can immediately fall back to transcode. Do not replace
+    // the next request's UI state with an older request's diagnostic result.
+    if (state.playRequestId !== requestId || state.currentTrack?.Id !== track.Id) {
+      return;
+    }
+
+    state.lastPlaybackProbe = "自动失败检查 / " + detail;
+    state.lastPlaybackError = getAudioErrorText() + "（自动失败检查：" + detail + "）";
+    renderPlaybackRecoveryPanel();
+    renderSettings();
+  })();
+}
+
 function getAudioErrorText() {
   const error = audioPlayer.error;
   const mediaLabel = isVideoTrack(state.currentTrack) ? "视频" : "音频";
@@ -22820,6 +23584,7 @@ function handleAudioElementError() {
   }
 
   state.lastPlaybackError = getAudioErrorText();
+  diagnoseUnsupportedAudioSource(state.currentTrack);
   renderPlaybackRecoveryPanel();
 
   if (shouldFallbackToTranscode()) {
@@ -23039,18 +23804,69 @@ function renderMiniPlayerCover(track) {
   }
 
   playerCover.className = "mini-cover mini-player-cover";
+  const requestId = ++miniPlayerCoverRequestId;
+  const trackName = track?.Name || "音乐";
   if (playerCover instanceof HTMLImageElement) {
-    const transparentCoverPixel = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E";
-    const imageUrl = track ? getTrackImageUrl(track, 180) : "";
     playerCover.alt = track?.Name || "封面";
-    playerCover.src = imageUrl || transparentCoverPixel;
-    playerCover.classList.remove("is-image-loading");
+
+    const commitInitialFallback = () => {
+      if (requestId !== miniPlayerCoverRequestId) {
+        return;
+      }
+
+      playerCover.onload = null;
+      playerCover.onerror = null;
+      playerCover.src = createInitialCoverSvgUrl(trackName);
+      playerCover.dataset.coverFallback = "initial";
+      playerCover.classList.remove("is-image-loading", "is-loading");
+      playerCover.classList.add("is-loaded");
+    };
+
+    if (!track) {
+      commitInitialFallback();
+      return;
+    }
+
+    playerCover.classList.add("is-image-loading", "is-loading");
+    const stagingImage = document.createElement("img");
+    stagingImage.alt = playerCover.alt;
+    stagingImage.decoding = "async";
+    stagingImage.loading = "eager";
+    void getTrackCoverResolution(track).then((source) => {
+      if (requestId !== miniPlayerCoverRequestId) {
+        return;
+      }
+
+      setImageElementSources(stagingImage, source, trackName, {
+        onLoad: () => {
+          if (requestId !== miniPlayerCoverRequestId) {
+            return;
+          }
+
+          playerCover.src = stagingImage.currentSrc || stagingImage.src;
+          if (stagingImage.dataset.coverFallback === "initial") {
+            playerCover.dataset.coverFallback = "initial";
+          } else {
+            delete playerCover.dataset.coverFallback;
+          }
+          playerCover.classList.remove("is-image-loading", "is-loading");
+          playerCover.classList.add("is-loaded");
+        },
+        onError: commitInitialFallback,
+      });
+    }).catch(commitInitialFallback);
     return;
   }
 
   playerCover.replaceChildren();
   if (track) {
-    appendImage(playerCover, getTrackImageUrl(track, 180), track.Name);
+    void getTrackCoverResolution(track).then((source) => {
+      if (requestId !== miniPlayerCoverRequestId) {
+        return;
+      }
+
+      appendImage(playerCover, source, trackName);
+    });
   }
 }
 
@@ -23562,6 +24378,16 @@ function getMiniPlayerQualityBadgeInfo(track) {
     };
   }
 
+  if (
+    activePlaybackQuality?.label
+    && (track === state.currentTrack || track.Id === state.currentTrack?.Id)
+  ) {
+    return {
+      label: activePlaybackQuality.label,
+      title: activePlaybackQuality.title || activePlaybackQuality.label,
+    };
+  }
+
   const quality = getTrackQualitySummary(track);
   if (quality?.shortLabel) {
     return {
@@ -23581,6 +24407,43 @@ function getMiniPlayerQualityBadgeInfo(track) {
   return {
     label: "NA",
     title: "未获取到音源信息",
+  };
+}
+
+function getPlaybackSourceQualityInfo(mediaSource, track, mode = "direct") {
+  if (!mediaSource) {
+    return null;
+  }
+
+  const streams = Array.isArray(mediaSource.MediaStreams) ? mediaSource.MediaStreams : [];
+  const audioStream = streams.find((stream) => stream?.Type === "Audio") || streams[0] || {};
+  const isTranscoded = mode === "universal" || Boolean(
+    mediaSource.TranscodingContainer
+      || mediaSource.TranscodingAudioCodec
+      || mediaSource.TranscodingUrl,
+  );
+  const codec = normalizeCodecLabel(
+    isTranscoded
+      ? (mediaSource.TranscodingAudioCodec || mediaSource.TranscodingContainer || mediaSource.Container || audioStream.Codec)
+      : (audioStream.Codec || mediaSource.AudioCodec || mediaSource.Container),
+  );
+  const bitrate = Number(
+    isTranscoded
+      ? (mediaSource.TranscodingBitrate || mediaSource.Bitrate || mediaSource.BitRate)
+      : (audioStream.BitRate || mediaSource.BitRate || mediaSource.Bitrate),
+  ) || 0;
+  const label = normalizeMiniPlayerQualityBadgeLabel(
+    buildShortQualityLabel(codec, bitrate, 0, isLosslessCodec(codec)) || codec,
+    track,
+  );
+
+  if (!label) {
+    return null;
+  }
+
+  return {
+    label,
+    title: [codec, formatBitrate(bitrate)].filter(Boolean).join(" · ") || label,
   };
 }
 
@@ -23627,6 +24490,16 @@ function normalizeMiniPlayerQualityBadgeLabel(label, track) {
     .replace(/\s+/g, "")
     .replace(/^MV(\d+P)$/i, "MV$1")
     .replace(/^Hi-?Res$/i, "Hi-Res");
+
+  const compact = normalized.replace(/[._-]/g, "");
+  if (/^FLAC(?:\d+)?(?:BIT)?$/i.test(compact)) {
+    return "FLAC";
+  }
+
+  const containerMatch = compact.match(/^(MP3|AAC|M4A|MP4|OGG|OPUS|WAV|ALAC|WMA|APE|AIFF)/i);
+  if (containerMatch) {
+    return containerMatch[1].toUpperCase();
+  }
 
   return normalized || (isVideoTrack(track) ? "MV" : "NA");
 }
@@ -23683,6 +24556,7 @@ function setPlayerEnabled(isEnabled) {
   immersiveQueueClearPlayedButton.disabled = !isEnabled || getCurrentQueueIndex() <= 0;
   immersiveQueueClearButton.disabled = !isEnabled || !state.queue.length;
   updatePlayButtonLabels();
+  renderLyricTranslationRequestAction();
 }
 
 function updatePlaybackState() {
@@ -24731,7 +25605,7 @@ async function authenticate(serverUrl, username, password, deviceName) {
   return embyApi.authenticate(serverUrl, username, password, deviceName);
 }
 
-async function fetchPlaybackInfo(track, mode, mediaSourceId) {
+async function fetchPlaybackInfo(track, mode, mediaSourceId, options = {}) {
   if (isExternalSourceTrack(track)) {
     throw new Error("外部音源使用直链播放，不请求 Emby PlaybackInfo。");
   }
@@ -24743,6 +25617,8 @@ async function fetchPlaybackInfo(track, mode, mediaSourceId) {
     mediaSourceId,
     qualityProfile: mode === "universal" ? profile : null,
     transcodeBitrate: profile.bitrate > 0 ? profile.bitrate : undefined,
+    autoOpenLiveStream: options.autoOpenLiveStream,
+    signal: options.signal,
   });
 }
 
@@ -25265,12 +26141,93 @@ function getImageUrl(item, maxWidth) {
   return embyApi.getImageUrl(state.session, item, maxWidth);
 }
 
-function getTrackImageUrl(track, maxWidth) {
+function getTrackImageUrls(track, maxWidth) {
   if (isExternalSourceTrack(track)) {
-    return track?.ExternalSource?.artwork || "";
+    const artwork = String(track?.ExternalSource?.artwork || "").trim();
+    return artwork ? [artwork] : [];
   }
 
-  return embyApi.getTrackImageUrl(state.session, track, maxWidth);
+  return embyApi.getTrackImageUrls(state.session, track, maxWidth);
+}
+
+function getTrackImageUrl(track, maxWidth) {
+  return getTrackImageUrls(track, maxWidth)[0]
+    || createInitialCoverSvgUrl(track?.Name || track?.Album || "音乐");
+}
+
+function getTrackCoverResolutionKey(track, sources, fallbackSource) {
+  return JSON.stringify([
+    isExternalSourceTrack(track) ? "external" : "emby",
+    String(track?.Id || ""),
+    sources,
+    sources.length ? "" : fallbackSource,
+  ]);
+}
+
+function rememberPlayerCoverResolution(key, source) {
+  playerCoverResolutionCache.delete(key);
+  playerCoverResolutionCache.set(key, source);
+  while (playerCoverResolutionCache.size > PLAYER_COVER_RESOLUTION_CACHE_LIMIT) {
+    playerCoverResolutionCache.delete(playerCoverResolutionCache.keys().next().value);
+  }
+}
+
+function resolvePlayerCoverSource(sources, alt) {
+  const image = document.createElement("img");
+  image.alt = alt;
+  image.decoding = "async";
+  image.loading = "eager";
+
+  return new Promise((resolve) => {
+    setImageElementSources(image, sources, alt, {
+      onLoad: () => resolve(String(image.currentSrc || image.src || "")),
+      onError: () => resolve(""),
+    });
+  });
+}
+
+function getTrackCoverResolution(track) {
+  const trackName = track?.Name || track?.Album || "音乐";
+  const fallbackSource = createInitialCoverSvgUrl(trackName);
+  const sources = normalizeImageSources(getTrackImageUrls(track, PLAYER_COVER_IMAGE_MAX_WIDTH));
+
+  if (!sources.length) {
+    return Promise.resolve(fallbackSource);
+  }
+
+  const key = getTrackCoverResolutionKey(track, sources, fallbackSource);
+  const cachedSource = playerCoverResolutionCache.get(key);
+  if (cachedSource) {
+    playerCoverResolutionCache.delete(key);
+    playerCoverResolutionCache.set(key, cachedSource);
+    return Promise.resolve(cachedSource);
+  }
+
+  const pending = playerCoverResolutionPending.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const resolution = resolvePlayerCoverSource(sources, trackName)
+    .then((source) => {
+      if (source && source !== fallbackSource && sources.includes(source)) {
+        rememberPlayerCoverResolution(key, source);
+        return source;
+      }
+
+      return fallbackSource;
+    })
+    .catch(() => fallbackSource)
+    .finally(() => {
+      playerCoverResolutionPending.delete(key);
+    });
+
+  playerCoverResolutionPending.set(key, resolution);
+  return resolution;
+}
+
+function getArtworkMimeType(src) {
+  return /^data:image\/svg\+xml(?:;|,)/i.test(String(src || "")) ? "image/svg+xml" : "image/jpeg";
 }
 
 function getAudioStreamUrl(track, mode = "direct", playSessionId = state.currentPlaySessionId, mediaSourceId = state.currentMediaSourceId) {
@@ -25285,8 +26242,150 @@ function hasPrimaryImage(item) {
   return embyApi.hasPrimaryImage(item);
 }
 
-function appendImage(container, src, alt) {
-  if (!src) {
+function normalizeImageSources(sources) {
+  const values = Array.isArray(sources) ? sources : [sources];
+  return [...new Set(values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))];
+}
+
+function getCoverInitial(label) {
+  const value = String(label || "").trim();
+  return Array.from(value)[0] || "♪";
+}
+
+function escapeSvgText(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function getInitialCoverPalette(label) {
+  const palettes = [
+    ["#101326", "#3e256c", "#f6bb58", "#fff0c4"],
+    ["#0b1920", "#075b59", "#ff9068", "#ffe4d4"],
+    ["#17131f", "#9d2154", "#ffbf5f", "#fff1d2"],
+    ["#101827", "#174d8d", "#63d8ff", "#d8f7ff"],
+    ["#1b1429", "#6728a4", "#f2ce65", "#fff5cb"],
+    ["#0d1925", "#126a78", "#9cf1df", "#e4fffa"],
+    ["#21170f", "#8a4613", "#f5c949", "#fff6d6"],
+  ];
+  let hash = 5381;
+
+  for (const character of String(label || "音乐")) {
+    hash = ((hash * 33) ^ character.codePointAt(0)) >>> 0;
+  }
+
+  return palettes[hash % palettes.length];
+}
+
+function createInitialCoverSvgUrl(label) {
+  const [from, to, accent, highlight] = getInitialCoverPalette(label);
+  const initial = escapeSvgText(getCoverInitial(label));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-label="${initial}"><title>${initial}</title><defs><linearGradient id="initial-cover-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="${from}"/><stop offset=".56" stop-color="${to}"/><stop offset="1" stop-color="#07090f"/></linearGradient><radialGradient id="initial-cover-ambient" cx="14%" cy="10%" r="94%"><stop stop-color="${highlight}" stop-opacity=".30"/><stop offset=".38" stop-color="${accent}" stop-opacity=".15"/><stop offset="1" stop-color="#000000" stop-opacity="0"/></radialGradient><linearGradient id="initial-cover-card" x1="0%" y1="0%" x2="100%" y2="100%"><stop stop-color="#ffffff" stop-opacity=".20"/><stop offset=".42" stop-color="#ffffff" stop-opacity=".07"/><stop offset="1" stop-color="#080b12" stop-opacity=".30"/></linearGradient><radialGradient id="initial-cover-vinyl-sheen" cx="30%" cy="20%" r="76%"><stop stop-color="#ffffff" stop-opacity=".20"/><stop offset=".44" stop-color="#8ba2c7" stop-opacity=".05"/><stop offset="1" stop-color="#000000" stop-opacity=".34"/></radialGradient><radialGradient id="initial-cover-label" cx="34%" cy="28%" r="72%"><stop stop-color="${highlight}" stop-opacity=".96"/><stop offset=".52" stop-color="${accent}"/><stop offset="1" stop-color="${to}"/></radialGradient></defs><rect width="600" height="600" fill="#080b12"/><rect width="600" height="600" fill="url(#initial-cover-bg)"/><rect width="600" height="600" fill="url(#initial-cover-ambient)"/><path d="M-72 504C72 420 155 506 274 441S486 366 674 444V672H-72Z" fill="#000000" fill-opacity=".18"/><path d="M-44 108L528 -42M40 632L644 430" stroke="${highlight}" stroke-opacity=".10" stroke-width="2"/><g id="initial-cover-vinyl"><circle cx="408" cy="310" r="244" fill="#010205" fill-opacity=".34"/><circle cx="408" cy="310" r="220" fill="#05070c"/><circle cx="408" cy="310" r="216" fill="url(#initial-cover-vinyl-sheen)"/><circle cx="408" cy="310" r="216" fill="none" stroke="#ffffff" stroke-opacity=".16" stroke-width="2"/><g id="initial-cover-grooves" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="2"><circle cx="408" cy="310" r="194"/><circle cx="408" cy="310" r="178"/><circle cx="408" cy="310" r="160"/><circle cx="408" cy="310" r="142"/><circle cx="408" cy="310" r="124"/><circle cx="408" cy="310" r="106"/><circle cx="408" cy="310" r="88"/></g><path d="M247 160A220 220 0 0 1 550 111" fill="none" stroke="#ffffff" stroke-opacity=".18" stroke-width="8" stroke-linecap="round"/><circle cx="408" cy="310" r="72" fill="#111827" stroke="#ffffff" stroke-opacity=".16" stroke-width="3"/><circle cx="408" cy="310" r="63" fill="url(#initial-cover-label)"/><circle cx="408" cy="310" r="22" fill="#090c13" fill-opacity=".92"/><circle cx="408" cy="310" r="8" fill="#ffffff" fill-opacity=".72"/></g><g id="initial-cover-letter-card"><rect x="40" y="48" width="322" height="504" rx="42" fill="#070a12" fill-opacity=".38"/><rect x="40" y="48" width="322" height="504" rx="42" fill="url(#initial-cover-card)"/><rect x="40.75" y="48.75" width="320.5" height="502.5" rx="41.25" fill="none" stroke="#ffffff" stroke-opacity=".23" stroke-width="1.5"/><rect x="72" y="91" width="62" height="8" rx="4" fill="${accent}"/><text x="72" y="135" fill="#ffffff" fill-opacity=".72" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif" font-size="14" font-weight="700" letter-spacing="4">MUSIC</text><text x="68" y="351" fill="#ffffff" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif" font-size="224" font-weight="750">${initial}</text><path id="initial-cover-wave" d="M74 437v-14m16 25v-38m16 20v-24m16 36v-48m16 30v-28m16 48v-67m16 49v-30m16 20v-19m16 32v-43m16 28v-24m16 35v-46m16 28v-22" fill="none" stroke="${highlight}" stroke-opacity=".82" stroke-width="7" stroke-linecap="round"/><path d="M72 491H298" stroke="#ffffff" stroke-opacity=".20"/><circle cx="83" cy="518" r="6" fill="${accent}"/><text x="101" y="523" fill="#ffffff" fill-opacity=".60" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif" font-size="13" font-weight="700" letter-spacing="2">LOCAL ART</text></g><g id="initial-cover-sparkles" fill="${highlight}"><circle cx="506" cy="82" r="4" fill-opacity=".80"/><circle cx="550" cy="133" r="2.5" fill-opacity=".58"/><circle cx="348" cy="74" r="2" fill-opacity=".65"/><circle cx="553" cy="480" r="3" fill-opacity=".46"/></g></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+function setImageElementSources(image, sources, alt, options = {}) {
+  const candidates = normalizeImageSources(sources);
+  const fallbackSource = createInitialCoverSvgUrl(alt || "音乐");
+  if (fallbackSource && !candidates.includes(fallbackSource)) {
+    candidates.push(fallbackSource);
+  }
+
+  let sourceIndex = 0;
+  let settled = false;
+  let sourceTimeoutId = 0;
+  const remoteDeadlineAt = Date.now() + IMAGE_SOURCE_CHAIN_TIMEOUT_MS;
+  const fallbackIndex = candidates.indexOf(fallbackSource);
+  const clearSourceTimeout = () => {
+    if (sourceTimeoutId) {
+      clearTimeout(sourceTimeoutId);
+      sourceTimeoutId = 0;
+    }
+  };
+  const settle = (handler) => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    clearSourceTimeout();
+    image.onload = null;
+    image.onerror = null;
+    handler?.();
+  };
+  const loadFallback = () => {
+    if (settled || fallbackIndex < 0 || sourceIndex > fallbackIndex) {
+      settle(options.onError);
+      return;
+    }
+
+    sourceIndex = fallbackIndex;
+    loadNext();
+  };
+  const loadNext = () => {
+    clearSourceTimeout();
+    if (settled) {
+      return;
+    }
+
+    const nextSource = candidates[sourceIndex];
+    sourceIndex += 1;
+
+    if (!nextSource) {
+      settle(options.onError);
+      return;
+    }
+
+    if (nextSource === fallbackSource) {
+      image.dataset.coverFallback = "initial";
+    } else {
+      delete image.dataset.coverFallback;
+    }
+
+    image.src = nextSource;
+    if (image.complete && image.naturalWidth > 0) {
+      settle(options.onLoad);
+      return;
+    }
+
+    if (!/^data:image\//i.test(nextSource)) {
+      const remainingMs = Math.max(0, remoteDeadlineAt - Date.now());
+      if (!remainingMs) {
+        loadFallback();
+        return;
+      }
+
+      sourceTimeoutId = setTimeout(() => {
+        sourceTimeoutId = 0;
+        if (Date.now() >= remoteDeadlineAt) {
+          loadFallback();
+        } else if (sourceIndex < candidates.length) {
+          loadNext();
+        } else {
+          settle(options.onError);
+        }
+      }, Math.min(IMAGE_SOURCE_TIMEOUT_MS, remainingMs));
+    }
+  };
+
+  image.onload = () => settle(options.onLoad);
+  image.onerror = () => {
+    if (sourceIndex < candidates.length) {
+      loadNext();
+      return;
+    }
+
+    settle(options.onError);
+  };
+  loadNext();
+}
+
+function appendImage(container, sources, alt) {
+  if (!container) {
     return;
   }
 
@@ -25295,26 +26394,109 @@ function appendImage(container, src, alt) {
   image.loading = "lazy";
   image.decoding = "async";
   image.classList.add("is-loading");
+  // Keep a local cover visible while a remote Emby image is slow or stalled.
+  // The image remains lazy; the background is only the immediate placeholder.
+  image.style.backgroundImage = `url("${createInitialCoverSvgUrl(alt || "音乐")}")`;
+  image.style.backgroundSize = "cover";
+  image.style.backgroundPosition = "center";
+  image.style.opacity = "1";
   container.classList.add("is-image-loading");
 
   const markLoaded = () => {
+    image.style.backgroundImage = "";
+    image.style.backgroundSize = "";
+    image.style.backgroundPosition = "";
+    image.style.opacity = "";
     image.classList.remove("is-loading");
     image.classList.add("is-loaded");
     container.classList.remove("is-image-loading");
   };
 
-  image.addEventListener("load", markLoaded, { once: true });
-  image.addEventListener("error", () => {
-    container.classList.remove("is-image-loading");
-    image.remove();
-  }, { once: true });
-  image.src = src;
+  container.append(image);
+  setImageElementSources(image, sources, alt, {
+    onLoad: markLoaded,
+    onError: () => {
+      container.classList.remove("is-image-loading");
+      image.remove();
+    },
+  });
+}
 
-  if (image.complete && image.naturalWidth > 0) {
-    markLoaded();
+function invalidatePlayerCoverRequest(container) {
+  if (!container) {
+    return;
   }
 
-  container.append(image);
+  const current = Number(container.dataset.coverRequestId || 0);
+  container.dataset.coverRequestId = String(current + 1);
+}
+
+function replacePlayerCoverImageAtomically(container, sources, alt, options = {}) {
+  if (!container) {
+    return;
+  }
+
+  const requestId = Number(container.dataset.coverRequestId || 0) + 1;
+  container.dataset.coverRequestId = String(requestId);
+
+  if (!container.querySelector("img")) {
+    const fallbackImage = document.createElement("img");
+    fallbackImage.alt = alt || "";
+    fallbackImage.loading = "eager";
+    fallbackImage.decoding = "sync";
+    fallbackImage.src = createInitialCoverSvgUrl(alt || "音乐");
+    fallbackImage.dataset.coverFallback = "initial";
+    fallbackImage.classList.add("is-loaded");
+    container.replaceChildren(fallbackImage);
+  }
+
+  const image = document.createElement("img");
+  image.alt = alt || "";
+  image.loading = "eager";
+  image.decoding = "async";
+  image.classList.add("is-loading");
+  container.classList.add("is-image-loading");
+
+  const commitFallback = () => {
+    if (container.dataset.coverRequestId !== String(requestId)) {
+      return;
+    }
+
+    image.src = createInitialCoverSvgUrl(alt || "音乐");
+    image.dataset.coverFallback = "initial";
+    image.classList.remove("is-loading");
+    image.classList.add("is-loaded");
+    container.replaceChildren(image);
+    container.classList.remove("is-image-loading");
+  };
+  const loadResolvedSources = (resolvedSources) => {
+    if (container.dataset.coverRequestId !== String(requestId)) {
+      return;
+    }
+
+    setImageElementSources(image, resolvedSources, alt, {
+      onLoad: () => {
+        if (container.dataset.coverRequestId !== String(requestId)) {
+          return;
+        }
+
+        image.classList.remove("is-loading");
+        image.classList.add("is-loaded");
+        container.replaceChildren(image);
+        container.classList.remove("is-image-loading");
+      },
+      onError: commitFallback,
+    });
+  };
+
+  if (options.sourcePromise) {
+    void Promise.resolve(options.sourcePromise)
+      .then(loadResolvedSources)
+      .catch(commitFallback);
+    return;
+  }
+
+  loadResolvedSources(sources);
 }
 
 function getTrackQualitySummary(track) {
@@ -26188,6 +27370,8 @@ function sanitizeQueueTrack(track) {
     RunTimeTicks: track.RunTimeTicks,
     SortName: track.SortName,
     UserData: track.UserData,
+    LyricsText: track.LyricsText,
+    LyricsSource: track.LyricsSource,
     ExternalSource: sanitizeExternalSourceForPersistence(track.ExternalSource, track),
   };
 }
@@ -26603,6 +27787,8 @@ function clearSession() {
   state.playlistTracks = [];
   state.totalPlaylistTracks = 0;
   state.hasMorePlaylistTracks = false;
+  state.playlistTrackSource = "";
+  state.playlistTrackNextStartIndex = 0;
   resetPlayerMeta();
   renderQueue();
   setPlayerEnabled(false);

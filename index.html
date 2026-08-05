@@ -10,9 +10,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Aurora Music" />
     <title>Aurora Music</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=0.94.9" />
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.94.9" />
-    <link rel="stylesheet" href="./styles.css?v=0.94.9" />
+    <link rel="manifest" href="./manifest.webmanifest?v=0.94.33" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=0.94.33" />
+    <link rel="stylesheet" href="./styles.css?v=0.94.33" />
   </head>
   <body>
     <section id="loginView" class="login-view">
@@ -112,7 +112,7 @@
             </button>
           </div>
 
-          <p class="login-entry-version" aria-hidden="true">v0.94.9</p>
+          <p class="login-entry-version" aria-hidden="true">v0.94.33</p>
         </section>
 
         <div class="login-sheet-backdrop" data-close-login-sheet hidden></div>
@@ -200,7 +200,7 @@
           </div>
 
           <div class="login-tools" aria-label="登录诊断">
-            <span id="loginVersion">v0.94.9</span>
+            <span id="loginVersion">v0.94.33</span>
             <button id="copyLoginDiagnosticsButton" type="button">复制诊断</button>
             <button id="clearLoginCacheButton" type="button">清缓存重载</button>
           </div>
@@ -1808,7 +1808,7 @@
                     </svg>
                     <span class="sr-only">开启纯享无干扰模式</span>
                   </button>
-                  <button id="immersiveMobileQualityButton" class="immersive-mobile-tool-button" type="button" aria-label="音质" title="音质">
+                   <button id="immersiveMobileQualityButton" class="immersive-mobile-tool-button" type="button" aria-label="音质" title="音质">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4 14v-4"></path>
                       <path d="M8 18V6"></path>
@@ -1816,9 +1816,9 @@
                       <path d="M16 18V6"></path>
                       <path d="M20 14v-4"></path>
                     </svg>
-                    <span class="sr-only">音质</span>
-                  </button>
-                  <button id="immersiveMobileDownloadButton" class="immersive-mobile-tool-button" type="button" disabled aria-label="下载当前音乐" title="下载当前音乐">
+                     <span class="sr-only">音质</span>
+                   </button>
+                   <button id="immersiveMobileDownloadButton" class="immersive-mobile-tool-button" type="button" disabled aria-label="下载当前音乐" title="下载当前音乐">
                     <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M12 3v12"></path>
                       <path d="m7 10 5 5 5-5"></path>
@@ -2448,6 +2448,23 @@
                     <input id="lyricAutoTranslateToggle" type="checkbox" role="switch" aria-labelledby="lyricAutoTranslateLabel" aria-describedby="lyricAutoTranslateHint" aria-checked="false" />
                   </span>
                 </label>
+                <div class="lyric-settings-row lyric-translation-action-row">
+                  <span>
+                    <strong>当前歌曲翻译</strong>
+                    <small id="lyricTranslationActionState">没有中文译文时可手动读取。</small>
+                  </span>
+                  <button id="lyricTranslationRequestButton" class="lyric-translation-action-button" type="button" aria-label="显示翻译" title="显示翻译">
+                    <svg class="line-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 5h8"></path>
+                      <path d="M8 3v2c0 4-1.4 7-4 9"></path>
+                      <path d="M4 9c1.3 1.4 2.9 2.3 4.8 2.9"></path>
+                      <path d="M14 14h6"></path>
+                      <path d="m17 11 3 8"></path>
+                      <path d="M15 17h5"></path>
+                    </svg>
+                    <span>显示翻译</span>
+                  </button>
+                </div>
               </div>
             </section>
           </div>
@@ -3010,19 +3027,19 @@
       <button id="mobileMoreNavButton" class="mobile-nav-item mobile-more-nav-compat" type="button" aria-hidden="true" tabindex="-1" hidden></button>
     </section>
 
-    <script src="./src/redact.js?v=0.94.9" defer></script>
-    <script src="./src/login-fallback.js?v=0.94.9" defer></script>
+    <script src="./src/redact.js?v=0.94.33" defer></script>
+    <script src="./src/login-fallback.js?v=0.94.33" defer></script>
     <script src="./runtime-config.js?v=1" defer></script>
-    <script src="./src/config.js?v=0.94.9" defer></script>
-    <script src="./src/dom-helpers.js?v=0.94.9" defer></script>
-    <script src="./src/format.js?v=0.94.9" defer></script>
-    <script src="./src/lyrics.js?v=0.94.9" defer></script>
-    <script src="./src/emby-api.js?v=0.94.9" defer></script>
-    <script src="./src/external-source-api.js?v=0.94.9" defer></script>
-    <script src="./src/idb-queue.js?v=0.94.9" defer></script>
-    <script src="./src/storage.js?v=0.94.9" defer></script>
-    <script type="module" src="./main.js?v=0.94.9"></script>
+    <script src="./src/config.js?v=0.94.33" defer></script>
+    <script src="./src/dom-helpers.js?v=0.94.33" defer></script>
+    <script src="./src/format.js?v=0.94.33" defer></script>
+    <script src="./src/lyrics.js?v=0.94.33" defer></script>
+    <script src="./src/emby-api.js?v=0.94.33" defer></script>
+    <script src="./src/external-source-api.js?v=0.94.33" defer></script>
+    <script src="./src/idb-queue.js?v=0.94.33" defer></script>
+    <script src="./src/storage.js?v=0.94.33" defer></script>
+    <script type="module" src="./main.js?v=0.94.33"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.2/dist/hls.min.js" integrity="sha384-QHoMEQEjeievZsHu5ejPFm+o1o93XoWIEziW/+oc9LLMGsPNAbp1pN4PHhI/KIzW" crossorigin="anonymous" referrerpolicy="no-referrer" async></script>
-    <script src="./src/hls-ready.js?v=0.94.9" defer></script>
+    <script src="./src/hls-ready.js?v=0.94.33" defer></script>
   </body>
 </html>

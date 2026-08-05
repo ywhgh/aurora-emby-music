@@ -40,6 +40,35 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
     });
   }
 
+  async function fetchLyrics(session, track, options = {}) {
+    if (!session || !track?.Id) {
+      return null;
+    }
+
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json, text/plain;q=0.9");
+
+    try {
+      const raw = await fetchText(session, `/Items/${encodeURIComponent(track.Id)}/Lyrics`, {
+        ...options,
+        headers,
+      });
+      const text = String(raw || "").trim();
+      if (!text) return null;
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return raw;
+      }
+    } catch (error) {
+      if (/服务器返回\s+404\b/.test(String(error?.message || ""))) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   function post(path, body) {
     const session = getSession();
 
@@ -107,11 +136,12 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
     const maxStreamingBitrate = Number(options.transcodeBitrate);
     const mediaSourceId = options.mediaSourceId || track.MediaSources?.[0]?.Id || track.Id;
     const profileParams = getPlaybackProfileParams(profile);
+    const autoOpenLiveStream = options.autoOpenLiveStream !== false;
     const params = {
       UserId: session.userId,
       StartTimeTicks: 0,
       IsPlayback: true,
-      AutoOpenLiveStream: true,
+      AutoOpenLiveStream: autoOpenLiveStream,
       MediaSourceId: mediaSourceId,
       ...profileParams,
     };
@@ -123,7 +153,7 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
       UserId: session.userId,
       StartTimeTicks: 0,
       IsPlayback: true,
-      AutoOpenLiveStream: true,
+      AutoOpenLiveStream: autoOpenLiveStream,
       MediaSourceId: mediaSourceId,
       ...profileParams,
     };
@@ -137,10 +167,18 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
+        signal: options.signal,
       });
     } catch (error) {
+      // Older Emby builds may not accept POST for PlaybackInfo. Only retry the
+      // compatibility GET for an explicit method/route rejection; retrying on
+      // timeouts or 5xx responses doubles the wait on slow public links.
+      if (!/服务器返回\s+(?:404|405)\b/.test(String(error?.message || ""))) {
+        throw error;
+      }
+
       try {
-        return await fetchJson(session, path);
+        return await fetchJson(session, path, { signal: options.signal });
       } catch {
         throw error;
       }
@@ -183,36 +221,53 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
     }
   }
 
-  function getImageUrl(session, item, maxWidth) {
-    if (!session || !item?.Id || !hasPrimaryImage(item)) {
+  function getPrimaryImageUrl(session, itemId, maxWidth) {
+    if (!session || !itemId) {
       return "";
     }
 
-    return buildServerUrl(session.serverUrl, `/emby/Items/${encodeURIComponent(item.Id)}/Images/Primary?${toQueryString({
+    // Keep the source format chosen by Emby. Forcing WebP regressed covers on
+    // older Emby image pipelines and some reverse-proxy/transcoder setups.
+    return buildServerUrl(session.serverUrl, `/emby/Items/${encodeURIComponent(itemId)}/Images/Primary?${toQueryString({
       maxWidth,
-      quality: 82,
-      format: "webp",
+      quality: 90,
       api_key: session.accessToken,
     })}`);
   }
 
-  function getTrackImageUrl(session, track, maxWidth) {
+  function getImageUrl(session, item, maxWidth) {
+    if (!item?.Id || !hasPrimaryImage(item)) {
+      return "";
+    }
+
+    return getPrimaryImageUrl(session, item.Id, maxWidth);
+  }
+
+  function getTrackImageUrls(session, track, maxWidth) {
     if (!session || !track?.Id) {
-      return "";
+      return [];
     }
 
-    const imageItemId = hasPrimaryImage(track) ? track.Id : track.AlbumId;
+    // Only probe inherited ids when Emby supplied an explicit image item id or
+    // a matching image tag. Blind AlbumId/ParentId probes can each wait for the
+    // image timeout even though the item has no artwork.
+    const albumImageItemId = track.AlbumPrimaryImageItemId
+      || (track.AlbumPrimaryImageTag ? track.AlbumId : "");
+    const parentImageItemId = track.ParentPrimaryImageItemId
+      || (track.ParentPrimaryImageTag ? track.ParentId : "");
+    const imageItemIds = [
+      hasPrimaryImage(track) ? track.Id : "",
+      albumImageItemId,
+      parentImageItemId,
+    ];
 
-    if (!imageItemId) {
-      return "";
-    }
+    return [...new Set(imageItemIds.filter(Boolean))]
+      .map((itemId) => getPrimaryImageUrl(session, itemId, maxWidth))
+      .filter(Boolean);
+  }
 
-    return buildServerUrl(session.serverUrl, `/emby/Items/${encodeURIComponent(imageItemId)}/Images/Primary?${toQueryString({
-      maxWidth,
-      quality: 82,
-      format: "webp",
-      api_key: session.accessToken,
-    })}`);
+  function getTrackImageUrl(session, track, maxWidth) {
+    return getTrackImageUrls(session, track, maxWidth)[0] || "";
   }
 
   function getAudioStreamUrl(session, track, mode = "direct", qualityProfile = {}, playSessionId = "", mediaSourceId = "") {
@@ -317,6 +372,7 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
 
   return {
     authenticate,
+    fetchLyrics,
     fetchPlaybackInfo,
     fetchJson,
     fetchText,
@@ -324,6 +380,7 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
     getAudioStreamUrl,
     getImageUrl,
     getTrackImageUrl,
+    getTrackImageUrls,
     hasPrimaryImage,
     normalizeServerUrl,
     post,
@@ -336,14 +393,28 @@ function createEmbyApi({ authorizationHeader, getDeviceId, getSession }) {
 }
 
 function buildServerUrl(serverUrl, path) {
-  const baseUrl = serverUrl.replace(/\/+$/, "");
+  const originalBaseUrl = String(serverUrl || "").replace(/\/+$/, "");
+  const baseUrl = getBrowserProxyServerUrl(originalBaseUrl).replace(/\/+$/, "");
   let nextPath = path.startsWith("/") ? path : `/${path}`;
 
-  if (hasEmbyBasePath(baseUrl) && /^\/emby(?=\/|$|\?)/i.test(nextPath)) {
+  if (hasEmbyBasePath(originalBaseUrl) && /^\/emby(?=\/|$|\?)/i.test(nextPath)) {
     nextPath = nextPath.replace(/^\/emby(?=\/|$|\?)/i, "");
   }
 
   return `${baseUrl}${nextPath}`;
+}
+
+function getBrowserProxyServerUrl(serverUrl) {
+  if (!serverUrl || typeof window === "undefined" || window.location?.protocol !== "https:") {
+    return serverUrl;
+  }
+
+  if (!/^http:\/\//i.test(serverUrl)) {
+    return serverUrl;
+  }
+
+  const origin = String(window.location?.origin || "").replace(/\/+$/, "");
+  return origin ? `${origin}/__emby-proxy` : serverUrl;
 }
 
 function hasEmbyBasePath(serverUrl) {

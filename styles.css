@@ -8249,6 +8249,56 @@ body.action-sheet-open .content {
   height: 1rem;
 }
 
+.lyric-translation-action-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.lyric-translation-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-width: 7.25rem;
+  min-height: 2.35rem;
+  padding: 0 0.76rem;
+  border: 1px solid rgba(185, 28, 28, 0.22);
+  border-radius: 10px;
+  background: rgb(255, 255, 254);
+  color: #b91c1c;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 780;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.lyric-translation-action-button .line-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.lyric-translation-action-button:not(:disabled):hover,
+.lyric-translation-action-button:not(:disabled):focus-visible {
+  border-color: rgba(185, 28, 28, 0.42);
+  background: rgba(254, 242, 242, 0.96);
+  color: #991b1b;
+}
+
+.lyric-translation-action-button:focus-visible {
+  outline: 3px solid rgba(236, 65, 65, 0.2);
+  outline-offset: 2px;
+}
+
+.lyric-translation-action-button:disabled {
+  border-color: rgba(17, 24, 39, 0.08);
+  background: rgba(229, 231, 235, 0.66);
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
 .lyric-settings-choice-popover {
   position: absolute;
   inset: 0;
@@ -8612,6 +8662,10 @@ body.action-sheet-open .content {
   .lyric-settings-row,
   .lyric-settings-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .lyric-translation-action-button {
+    width: 100%;
   }
 
   .player-style-choice-grid {
@@ -9108,6 +9162,25 @@ body.immersive-player-open .lyric-settings-select-button {
   border-color: rgba(255, 244, 229, 0.12);
   background: rgba(255, 244, 229, 0.075);
   color: rgba(255, 246, 235, 0.94);
+}
+
+body.immersive-player-open .lyric-translation-action-button {
+  border-color: rgba(255, 244, 229, 0.18);
+  background: rgba(255, 244, 229, 0.075);
+  color: rgba(255, 246, 235, 0.9);
+}
+
+body.immersive-player-open .lyric-translation-action-button:not(:disabled):hover,
+body.immersive-player-open .lyric-translation-action-button:not(:disabled):focus-visible {
+  border-color: rgba(255, 246, 235, 0.32);
+  background: rgba(255, 244, 229, 0.13);
+  color: rgba(255, 250, 244, 0.98);
+}
+
+body.immersive-player-open .lyric-translation-action-button:disabled {
+  border-color: rgba(255, 244, 229, 0.08);
+  background: rgba(255, 244, 229, 0.035);
+  color: rgba(255, 244, 229, 0.36);
 }
 
 body.immersive-player-open .lyric-settings-choice-popover {
@@ -24286,7 +24359,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   }
 }
 
-/* Touch layout corrections v0.94.9
+/* Touch layout corrections v0.94.14
    Two mobile layout defects measured at 390x844 and 360x780:
    1. `.track-list.unified-track-list .track-actions` reserves 10.9rem for a
       three-button cluster, but touch layouts hide all of them except the
@@ -24409,4 +24482,577 @@ input[type="range"]:focus-visible::-moz-range-thumb {
    through the ellipsis it already has. */
 .enhanced-select-trigger .select-prefix {
   white-space: nowrap;
+}
+
+/* Shared mobile mini-player: restore next-track control and keep the artwork
+   and playback glyphs aligned at 390px and 360px widths. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-cover-wrapper::after {
+    inset: 2px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-cover {
+    display: block;
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+    border-radius: 50%;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    gap: 6px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #nextButton {
+    display: grid !important;
+    width: 32px;
+    min-width: 32px;
+    height: 34px;
+    min-height: 34px;
+    flex: 0 0 32px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #nextButton .line-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2.15;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #nextButton:disabled {
+    color: #b5b7bd;
+    opacity: 0.36;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #nextButton:not(:disabled) {
+    color: var(--mobile-theme);
+    opacity: 1;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls .play-button::before {
+    display: block;
+    width: 15px;
+    height: 18px;
+    border: 0;
+    border-radius: 2px;
+    background: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.15 3.6c-.93-.57-2.15.1-2.15 1.19v14.42c0 1.09 1.22 1.76 2.15 1.19l11.77-7.21a1.4 1.4 0 0 0 0-2.38L6.15 3.6Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.15 3.6c-.93-.57-2.15.1-2.15 1.19v14.42c0 1.09 1.22 1.76 2.15 1.19l11.77-7.21a1.4 1.4 0 0 0 0-2.38L6.15 3.6Z'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: translateX(1px);
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls .play-button.playing::before {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 5px;
+    background: linear-gradient(90deg, currentColor 0 28%, transparent 28% 72%, currentColor 72% 100%);
+    -webkit-mask: none;
+    mask: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 374px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    gap: 4px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls #nextButton {
+    width: 30px;
+    min-width: 30px;
+    flex-basis: 30px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .quality-badge {
+    max-width: 3rem;
+  }
+}
+
+/* Mobile main-view scroll safety v0.94.14
+   The minimal mobile rebuild made `.content` auto-size to all of its children
+   while `.app-window`/`.workspace` kept `overflow: hidden`. That left the body
+   with only the fixed-control padding to scroll, so a touch swipe moved the
+   page a short distance and the real content remained clipped. Keep exactly
+   one scroll owner (`.content`) and reserve the complete fixed control stack. */
+@media (max-width: 768px) {
+  :root {
+    --mobile-player-gap: 8px;
+    --mobile-content-top-inset: calc(var(--header-height) + 12px);
+    --mobile-content-bottom-inset: calc(
+      var(--mobile-nav-h) + var(--mobile-player-gap) + var(--mobile-player-h) + 16px
+    );
+  }
+
+  body:not(.immersive-player-open):has(#mainView:not([hidden])) {
+    overflow: hidden;
+    padding-bottom: 0 !important;
+  }
+
+  body:not(.immersive-player-open) .app-window,
+  body:not(.immersive-player-open) .workspace {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+
+  body:not(.immersive-player-open) .content {
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    padding-top: var(--mobile-content-top-inset) !important;
+    padding-bottom: var(--mobile-content-bottom-inset) !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-top: var(--mobile-content-top-inset);
+    scroll-padding-bottom: var(--mobile-content-bottom-inset);
+  }
+}
+
+/* Final mobile mini-player glyph normalization: keep the three visible
+   controls on one centre line while equalizing their perceived weight. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    align-items: center;
+    gap: 6px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    display: grid !important;
+    width: 32px;
+    min-width: 32px;
+    height: 34px;
+    min-height: 34px;
+    flex: 0 0 32px;
+    place-items: center;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: scale(0.94);
+    transform-origin: center;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon path {
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton .line-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: scale(1.35);
+    transform-origin: center;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton::before {
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 3px;
+    background: currentColor;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.8 1.9C3.1 0.9 1 2.1 1 4v16c0 1.9 2.1 3.1 3.8 2.1l17-8c1.7-.8 1.7-3.2 0-4L4.8 1.9Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.8 1.9C3.1 0.9 1 2.1 1 4v16c0 1.9 2.1 3.1 3.8 2.1l17-8c1.7-.8 1.7-3.2 0-4L4.8 1.9Z'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: translateX(1px);
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    width: 20px;
+    height: 18px;
+    border: 0;
+    border-radius: 5px;
+    background: linear-gradient(90deg, currentColor 0 28%, transparent 28% 72%, currentColor 72% 100%);
+    -webkit-mask: none;
+    mask: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 374px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    gap: 4px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    width: 30px;
+    min-width: 30px;
+    flex-basis: 30px;
+  }
+}
+
+/* Final pause/play glyph override: use small, independent rounded shapes so
+   the previous 20px gradient and pseudo-element shadow cannot bleed through. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    align-items: center;
+    gap: 6px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    display: grid !important;
+    width: 32px;
+    min-width: 32px;
+    height: 34px;
+    min-height: 34px;
+    flex: 0 0 32px;
+    place-items: center;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon path {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: none;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton .line-icon {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: scale(1.08);
+    transform-origin: center;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton::before {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 0 !important;
+    border-radius: 0;
+    background: currentColor;
+    box-shadow: none !important;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M4 2.6C2.5 1.7 1 2.8 1 4.5v9c0 1.7 1.5 2.8 3 1.9l11.3-5.7c1.5-.8 1.5-2.2 0-3L4 2.6Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M4 2.6C2.5 1.7 1 2.8 1 4.5v9c0 1.7 1.5 2.8 3 1.9l11.3-5.7c1.5-.8 1.5-2.2 0-3L4 2.6Z'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: translateX(1px) !important;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 0 !important;
+    border-radius: 0;
+    background: currentColor;
+    box-shadow: none !important;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 374px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    gap: 4px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    width: 30px;
+    min-width: 30px;
+    flex-basis: 30px;
+  }
+}
+
+/* Final mobile mini-player glyph override. Keep the hit areas generous, but
+   make the visible artwork light and compact instead of filling the buttons. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    align-items: center;
+    gap: 6px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    display: grid !important;
+    width: 32px;
+    min-width: 32px;
+    height: 34px;
+    min-height: 34px;
+    flex: 0 0 32px;
+    place-items: center;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: none;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton .favorite-line-icon path {
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton .line-icon {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: scale(1.12);
+    transform-origin: center;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton::before {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 3px;
+    background: currentColor;
+    box-shadow: none;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5.2 3.1C3.7 2.2 2 3.3 2 5v14c0 1.7 1.7 2.8 3.2 1.9l13.8-7c1.4-.7 1.4-2.1 0-2.8l-13.8-8Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5.2 3.1C3.7 2.2 2 3.3 2 5v14c0 1.7 1.7 2.8 3.2 1.9l13.8-7c1.4-.7 1.4-2.1 0-2.8l-13.8-8Z'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: translateX(1px);
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 4px;
+    background: linear-gradient(90deg, currentColor 0 30%, transparent 30% 70%, currentColor 70% 100%);
+    box-shadow: none;
+    -webkit-mask: none;
+    mask: none;
+    transform: none;
+  }
+}
+
+@media (max-width: 374px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls {
+    gap: 4px;
+  }
+
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playerFavoriteButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #playButton,
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-controls > #nextButton {
+    width: 30px;
+    min-width: 30px;
+    flex-basis: 30px;
+  }
+}
+
+/* FINAL pause glyph override: small rounded bars, no inherited block/gradient. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton::before {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 0 !important;
+    border-radius: 0;
+    background: currentColor !important;
+    box-shadow: none !important;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M4 2.6C2.5 1.7 1 2.8 1 4.5v9c0 1.7 1.5 2.8 3 1.9l11.3-5.7c1.5-.8 1.5-2.2 0-3L4 2.6Z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M4 2.6C2.5 1.7 1 2.8 1 4.5v9c0 1.7 1.5 2.8 3 1.9l11.3-5.7c1.5-.8 1.5-2.2 0-3L4 2.6Z'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: translateX(1px) !important;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering) .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 0 !important;
+    border-radius: 0;
+    background: currentColor !important;
+    box-shadow: none !important;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E");
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    transform: none !important;
+  }
+}
+
+/* Emergency final override: keep the mobile play/pause artwork compact and
+   independent from the legacy border/gradient glyph rules. Hit areas and the
+   neighbouring favourite/next buttons remain unchanged. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open):not(.is-playback-buffering)
+    .mini-player-mobile .mini-player-controls > #playButton::before {
+    content: "" !important;
+    display: block !important;
+    width: 18px !important;
+    height: 18px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: currentColor !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    -webkit-mask-position: center !important;
+    mask-position: center !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-repeat: no-repeat !important;
+    -webkit-mask-size: 18px 18px !important;
+    mask-size: 18px 18px !important;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering)
+    .mini-player-mobile .mini-player-controls > #playButton:not(.playing)::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5.1 2.9C3.7 2.1 2 3.1 2 4.7v8.6c0 1.6 1.7 2.6 3.1 1.8l9.2-4.3c1.4-.7 1.4-2.7 0-3.4L5.1 2.9Z'/%3E%3C/svg%3E") !important;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5.1 2.9C3.7 2.1 2 3.1 2 4.7v8.6c0 1.6 1.7 2.6 3.1 1.8l9.2-4.3c1.4-.7 1.4-2.7 0-3.4L5.1 2.9Z'/%3E%3C/svg%3E") !important;
+  }
+
+  body:not(.immersive-player-open):not(.is-playback-buffering)
+    .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E") !important;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect x='1' y='0' width='4' height='18' rx='2'/%3E%3Crect x='13' y='0' width='4' height='18' rx='2'/%3E%3C/svg%3E") !important;
+  }
+}
+
+/* FINAL mini-player pause-height override: keep the hit box, compress only the glyph. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open):not(.is-playback-buffering)
+    .mini-player-mobile .mini-player-controls > #playButton.playing::before {
+    content: "" !important;
+    display: block !important;
+    width: 18px !important;
+    height: 16px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: currentColor !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 16'%3E%3Crect x='1' y='0' width='4' height='16' rx='2'/%3E%3Crect x='13' y='0' width='4' height='16' rx='2'/%3E%3C/svg%3E") !important;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 16'%3E%3Crect x='1' y='0' width='4' height='16' rx='2'/%3E%3Crect x='13' y='0' width='4' height='16' rx='2'/%3E%3C/svg%3E") !important;
+    -webkit-mask-position: center !important;
+    mask-position: center !important;
+    -webkit-mask-repeat: no-repeat !important;
+    mask-repeat: no-repeat !important;
+    -webkit-mask-size: 18px 16px !important;
+    mask-size: 18px 16px !important;
+  }
+}
+
+/* Mobile mini-player: show the initial-letter SVG fallback as circular cover art. */
+@media (max-width: 768px) {
+  body:not(.immersive-player-open) .mini-player-mobile .mini-player-cover[src^="data:image/svg+xml"] {
+    opacity: 1 !important;
+    border-radius: 50%;
+  }
+}
+
+/* Mobile login: keep saved accounts visible and remove the low-value device block. */
+@media (max-width: 620px) {
+  #loginView .login-device-options {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  #loginView .login-device-options > * {
+    display: none !important;
+  }
+
+  #savedAccountsSection[hidden] {
+    display: none !important;
+  }
+
+  #loginView .saved-accounts:not([hidden]) {
+    display: grid;
+    min-width: 0;
+    max-height: none;
+    margin-top: 0.55rem;
+    padding: 0.55rem;
+    overflow: visible;
+  }
+
+  #loginView .saved-account-list {
+    min-width: 0;
+    max-height: min(9rem, 24dvh);
+    overflow-y: auto;
+  }
+
+  #loginView .saved-account-item {
+    min-width: 0;
+  }
+
+  #loginView .saved-account-main {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.55rem;
+  }
+
+  #loginView .saved-account-copy {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #loginView .saved-account-remove {
+    flex: 0 0 auto;
+  }
 }

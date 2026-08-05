@@ -18,12 +18,15 @@
 
 const fs = require("node:fs");
 const http = require("node:http");
+const https = require("node:https");
 const path = require("node:path");
 const url = require("node:url");
 
 const ROOT = path.resolve(process.env.ROOT || path.join(__dirname, ".."));
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.argv[2] || process.env.PORT || 5173);
+const EMBY_PROXY_PREFIX = "/__emby-proxy";
+const EMBY_PROXY_TARGET = parseProxyTarget(process.env.EMBY_PROXY_TARGET);
 
 // ESM imports and the service worker are rejected by the browser when the
 // Content-Type is wrong, so the JS/JSON/manifest entries are load-bearing
@@ -83,7 +86,80 @@ function resolveTarget(requestPath) {
   return resolved;
 }
 
+function parseProxyTarget(value) {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const target = new URL(trimmed);
+    if (!["http:", "https:"].includes(target.protocol) || target.username || target.password || target.search || target.hash) {
+      return null;
+    }
+
+    target.pathname = target.pathname.replace(/\/+$/, "");
+    return target;
+  } catch {
+    return null;
+  }
+}
+
+function isEmbyProxyPath(pathname) {
+  return pathname === EMBY_PROXY_PREFIX || pathname.startsWith(`${EMBY_PROXY_PREFIX}/`);
+}
+
+function proxyEmbyRequest(request, response, requestUrl) {
+  if (!EMBY_PROXY_TARGET) {
+    send(response, 503, "Emby proxy is not configured");
+    return;
+  }
+
+  const suffix = requestUrl.pathname.slice(EMBY_PROXY_PREFIX.length) || "/";
+  const basePath = EMBY_PROXY_TARGET.pathname.replace(/\/+$/, "");
+  const targetPath = `${basePath}${suffix.startsWith("/") ? suffix : `/${suffix}`}` || "/";
+  const targetUrl = new URL(`${EMBY_PROXY_TARGET.origin}${targetPath}${requestUrl.search}`);
+  const transport = targetUrl.protocol === "https:" ? https : http;
+  const headers = { ...request.headers };
+  delete headers.host;
+  delete headers.connection;
+  headers.host = targetUrl.host;
+
+  const upstream = transport.request(targetUrl, {
+    method: request.method,
+    headers,
+  }, (upstreamResponse) => {
+    const responseHeaders = {};
+    Object.entries(upstreamResponse.headers).forEach(([key, value]) => {
+      if (!["connection", "keep-alive", "transfer-encoding"].includes(key.toLowerCase())) {
+        responseHeaders[key] = value;
+      }
+    });
+    response.writeHead(upstreamResponse.statusCode || 502, responseHeaders);
+    upstreamResponse.pipe(response);
+  });
+
+  upstream.setTimeout(30_000, () => upstream.destroy(new Error("Emby proxy timeout")));
+  upstream.on("error", () => {
+    if (!response.headersSent) {
+      send(response, 502, "Emby proxy unavailable");
+    } else {
+      response.destroy();
+    }
+  });
+  request.on("aborted", () => upstream.destroy());
+  request.pipe(upstream);
+}
+
 const server = http.createServer((request, response) => {
+  const requestUrl = new URL(request.url || "/", `http://${request.headers.host || `${HOST}:${PORT}`}`);
+
+  if (isEmbyProxyPath(requestUrl.pathname)) {
+    proxyEmbyRequest(request, response, requestUrl);
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     send(response, 405, "Method Not Allowed", { Allow: "GET, HEAD" });
     return;
