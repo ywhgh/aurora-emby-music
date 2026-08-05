@@ -412,6 +412,29 @@ function createCoverFallbackSmokeScript() {
     }
   })()`;
 }
+function createDeferredCoverLoadSmokeScript() {
+  return [
+    "(async () => {",
+    "  const hooks = window.EmbyMusicBrowserSmoke;",
+    "  if (!hooks || typeof hooks.runDeferredCoverLoadScenario !== \"function\") {",
+    "    return { hasHook: false };",
+    "  }",
+    "",
+    "  try {",
+    "    return {",
+    "      hasHook: true,",
+    "      ...(await hooks.runDeferredCoverLoadScenario()),",
+    "    };",
+    "  } catch (error) {",
+    "    return {",
+    "      hasHook: true,",
+    "      error: String(error?.stack || error?.message || error),",
+    "    };",
+    "  }",
+    "})()",
+  ].join("\n");
+}
+
 function createImmersiveVisualizerSmokeScript() {
   return `(() => {
     const hooks = window.EmbyMusicBrowserSmoke;
@@ -904,6 +927,7 @@ async function runBrowserCheck(cdp, check) {
           mobileScrollLayout: await ${createMobileScrollLayoutSmokeScript()},
           mobileMiniPlayer: await ${createMobileMiniPlayerSmokeScript()},
           coverFallback: await ${createCoverFallbackSmokeScript()},
+         deferredCoverLoad: await ${createDeferredCoverLoadSmokeScript()},
           playlistRead: ${RUN_PLAYLIST_SMOKE ? `await ${createPlaylistReadSmokeScript()}` : "null"},
           lyricProgress: ${createLyricProgressSmokeScript()},
           immersiveVisualizer: ${createImmersiveVisualizerSmokeScript()},
@@ -936,6 +960,7 @@ function checkPageState(check, page) {
   const isMobileImmersiveLayoutCheck = isPhoneCheck;
   const lyricOffset = page.lyricOffset || {};
   const coverFallback = page.coverFallback || {};
+ const deferredCoverLoad = page.deferredCoverLoad || {};
   const playlistRead = page.playlistRead || {};
   const lyricProgress = page.lyricProgress || {};
   const lyricProgressBeforeOffset = lyricProgress.beforeOffset || {};
@@ -1394,6 +1419,14 @@ function checkPageState(check, page) {
   assert(coverFallback.hasGrooves === true, `${label} cover fallback is missing vinyl grooves: ${JSON.stringify(coverFallback)}`);
   assert(coverFallback.hasLetterCard === true, `${label} cover fallback is missing the letter card: ${JSON.stringify(coverFallback)}`);
   assert(coverFallback.usesFallback === true, `${label} cover fallback should be tagged as the initial artwork: ${JSON.stringify(coverFallback)}`);
+ assert(deferredCoverLoad.hasHook === true, `${label} deferred cover smoke hook is unavailable`);
+  assert(!deferredCoverLoad.error, `${label} deferred cover smoke failed: ${deferredCoverLoad.error || "-"}`);
+  assert(deferredCoverLoad.ready === true, `${label} deferred cover smoke did not initialize: ${JSON.stringify(deferredCoverLoad)}`);
+  assert(deferredCoverLoad.observerSupported === true, `${label} deferred cover smoke requires IntersectionObserver: ${JSON.stringify(deferredCoverLoad)}`);
+  assert(deferredCoverLoad.deferredWhileHidden === true, `${label} hidden cover should not start its remote timeout chain: ${JSON.stringify(deferredCoverLoad)}`);
+  assert(deferredCoverLoad.startedWhenVisible === true, `${label} deferred cover did not load the Emby-style source after becoming visible: ${JSON.stringify(deferredCoverLoad)}`);
+  assert(deferredCoverLoad.rendered === true, `${label} deferred cover did not render after becoming visible: ${JSON.stringify(deferredCoverLoad)}`);
+  assert(deferredCoverLoad.removedTaskCleared === true, `${label} removed deferred cover task was retained: ${JSON.stringify(deferredCoverLoad)}`);
 
   if (RUN_PLAYLIST_SMOKE) {
     assert(playlistRead.hasHook, `${label} playlist compatibility smoke hook is unavailable`);

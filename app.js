@@ -1280,6 +1280,7 @@ const MINI_PLAYER_LYRIC_REVEAL_DELAY_MS = 30000;
 const MINI_PLAYER_PROGRESS_LYRIC_TAIL_GUARD_SECONDS = 0.85;
 const IMAGE_SOURCE_TIMEOUT_MS = 3500;
 const IMAGE_SOURCE_CHAIN_TIMEOUT_MS = 6000;
+const IMAGE_LOAD_ROOT_MARGIN = "360px 0px";
 const PLAYER_COVER_IMAGE_MAX_WIDTH = 1100;
 const PLAYER_COVER_RESOLUTION_CACHE_LIMIT = 32;
 let miniPlayerLyricRevealTimer = 0;
@@ -1293,6 +1294,10 @@ let miniPlayerCoverRequestId = 0;
 let libraryLoadRequestId = 0;
 const playerCoverResolutionCache = new Map();
 const playerCoverResolutionPending = new Map();
+const imageLoadTasks = new Map();
+let imageLoadObserver = null;
+let imageLoadCleanupObserver = null;
+let imageLoadCleanupScheduled = false;
 
 safeInit();
 
@@ -1836,6 +1841,7 @@ function installBrowserSmokeHooks() {
     runSearchAbortScenario,
     runPlaylistReadScenario,
     runCoverFallbackScenario,
+    runDeferredCoverLoadScenario,
   };
 }
 
@@ -1912,6 +1918,62 @@ async function runCoverFallbackScenario() {
       hasGrooves: svg.includes('id="initial-cover-grooves"'),
       hasLetterCard: svg.includes('id="initial-cover-letter-card"'),
       usesFallback: image?.dataset.coverFallback === "initial",
+    };
+  } finally {
+    host.remove();
+  }
+}
+
+async function runDeferredCoverLoadScenario() {
+  if (!document.body) {
+    return {
+      ready: false,
+      observerSupported: false,
+      deferredWhileHidden: false,
+      startedWhenVisible: false,
+      rendered: false,
+      removedTaskCleared: false,
+    };
+  }
+
+  const source = new URL("icon.svg?cover-load-smoke=" + Date.now(), window.location.href).toString();
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  host.style.cssText = "position:fixed;left:1px;top:1px;width:24px;height:24px;display:none;overflow:hidden;pointer-events:none;";
+  document.body.append(host);
+
+  try {
+    appendImage(host, [source], "封面延迟测试");
+    const image = host.querySelector("img");
+    if (image) {
+      image.loading = "eager";
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const deferredWhileHidden = Boolean(image) && !image.getAttribute("src");
+    host.style.display = "block";
+
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline && !(image?.complete && image.naturalWidth > 0)) {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+
+    const currentSource = String(image?.currentSrc || image?.src || "");
+    const orphanHost = document.createElement("div");
+    orphanHost.style.cssText = "position:fixed;left:1px;top:1px;width:24px;height:24px;display:none;overflow:hidden;pointer-events:none;";
+    document.body.append(orphanHost);
+    appendImage(orphanHost, [source + "&orphan=1"], "封面清理测试");
+    const orphanImage = orphanHost.querySelector("img");
+    orphanHost.remove();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    return {
+      ready: true,
+      observerSupported: typeof IntersectionObserver === "function",
+      deferredWhileHidden,
+      startedWhenVisible: currentSource.includes("icon.svg?cover-load-smoke="),
+      rendered: Boolean(image?.isConnected && image.complete && image.naturalWidth > 0),
+      removedTaskCleared: Boolean(orphanImage) && !imageLoadTasks.has(orphanImage) && !orphanImage.getAttribute("src"),
     };
   } finally {
     host.remove();
@@ -26305,6 +26367,134 @@ function normalizeImageSources(sources) {
     .filter(Boolean))];
 }
 
+function hasRemoteImageSources(sources) {
+  return normalizeImageSources(sources)
+    .some((source) => !/^(?:data:image\/|blob:)/i.test(source));
+}
+
+function stopImageLoadObserversIfIdle() {
+  if (imageLoadTasks.size) {
+    return;
+  }
+
+  imageLoadObserver?.disconnect();
+  imageLoadObserver = null;
+  imageLoadCleanupObserver?.disconnect();
+  imageLoadCleanupObserver = null;
+  imageLoadCleanupScheduled = false;
+}
+
+function releaseImageLoadTask(image, { cancel = false } = {}) {
+  const task = imageLoadTasks.get(image);
+  if (!task) {
+    return;
+  }
+
+  imageLoadTasks.delete(image);
+  imageLoadObserver?.unobserve(image);
+  if (cancel) {
+    task.cancel?.();
+  }
+  stopImageLoadObserversIfIdle();
+}
+
+function scheduleImageLoadTaskCleanup() {
+  if (imageLoadCleanupScheduled) {
+    return;
+  }
+
+  imageLoadCleanupScheduled = true;
+  Promise.resolve().then(() => {
+    imageLoadCleanupScheduled = false;
+    [...imageLoadTasks.keys()].forEach((image) => {
+      if (!image.isConnected) {
+        releaseImageLoadTask(image, { cancel: true });
+      }
+    });
+  });
+}
+
+function ensureImageLoadCleanupObserver() {
+  if (imageLoadCleanupObserver || !document.body || typeof MutationObserver !== "function") {
+    return;
+  }
+
+  imageLoadCleanupObserver = new MutationObserver(scheduleImageLoadTaskCleanup);
+  imageLoadCleanupObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+function getImageLoadObserver() {
+  if (imageLoadObserver || typeof IntersectionObserver !== "function") {
+    return imageLoadObserver;
+  }
+
+  imageLoadObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) {
+        return;
+      }
+
+      imageLoadTasks.get(entry.target)?.start();
+    });
+  }, {
+    rootMargin: IMAGE_LOAD_ROOT_MARGIN,
+    threshold: 0.01,
+  });
+
+  return imageLoadObserver;
+}
+
+function queueImageSourceLoad(image, sources, alt, handlers) {
+  const task = {
+    started: false,
+    cancel: null,
+    start: null,
+  };
+  const start = () => {
+    if (task.started || imageLoadTasks.get(image) !== task) {
+      return;
+    }
+
+    if (!image.isConnected) {
+      releaseImageLoadTask(image, { cancel: true });
+      return;
+    }
+
+    task.started = true;
+    imageLoadObserver?.unobserve(image);
+    // IntersectionObserver controls the lazy boundary. Once eligible, use an
+    // eager source so the retry budget measures a real network request.
+    image.loading = "eager";
+    const cancel = setImageElementSources(image, sources, alt, {
+      onLoad: () => {
+        releaseImageLoadTask(image);
+        handlers.onLoad?.();
+      },
+      onError: () => {
+        releaseImageLoadTask(image);
+        handlers.onError?.();
+      },
+    });
+    task.cancel = cancel;
+
+    if (imageLoadTasks.get(image) !== task) {
+      cancel();
+    }
+  };
+
+  task.start = start;
+  imageLoadTasks.set(image, task);
+  ensureImageLoadCleanupObserver();
+
+  const observer = hasRemoteImageSources(sources) ? getImageLoadObserver() : null;
+  if (observer) {
+    observer.observe(image);
+    return;
+  }
+
+  start();
+}
+
 function getCoverInitial(label) {
   const value = String(label || "").trim();
   return Array.from(value)[0] || "♪";
@@ -26438,6 +26628,7 @@ function setImageElementSources(image, sources, alt, options = {}) {
     settle(options.onError);
   };
   loadNext();
+  return () => settle();
 }
 
 function appendImage(container, sources, alt) {
@@ -26469,9 +26660,17 @@ function appendImage(container, sources, alt) {
   };
 
   container.append(image);
-  setImageElementSources(image, sources, alt, {
-    onLoad: markLoaded,
+  queueImageSourceLoad(image, sources, alt, {
+    onLoad: () => {
+      if (image.parentElement === container) {
+        markLoaded();
+      }
+    },
     onError: () => {
+      if (image.parentElement !== container) {
+        return;
+      }
+
       container.classList.remove("is-image-loading");
       image.remove();
     },
