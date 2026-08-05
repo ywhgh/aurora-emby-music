@@ -148,6 +148,7 @@ function checkVersions() {
   const cacheVersion = extract(/CACHE_NAME\s*=\s*"emby-music-web-v([^"]+)"/, sw, "service worker cache version");
   const assetVersion = extract(/ASSET_VERSION\s*=\s*"([^"]+)"/, sw, "service worker asset version");
   const browserSmoke = read("scripts/browser-smoke.js");
+  const app = read("app.js");
   const gitignore = read(".gitignore");
   const sourceBridge = read("scripts/source-bridge.js");
   const runtimeConfigExample = read("runtime-config.example.js");
@@ -159,6 +160,7 @@ function checkVersions() {
   assert(sourceBridge.includes('`Aurora-Music/${APP_VERSION} (source-bridge)`'), "Source bridge User-Agent should use the shared package version");
   assert(config.includes('DEFAULT_EXTERNAL_SOURCE_API_URL: ""'), "Default source bridge URL should stay empty");
   assert(config.includes('DEFAULT_EMBY_LYRICS_SOURCE_BRIDGE_API_URL: ""'), "Default Emby lyrics bridge URL should stay empty");
+  assert(/function loadSourceMode\(\)[\s\S]*?localStorage\.getItem\(SOURCE_MODE_KEY\) \|\| "emby"/.test(app), "New sessions should default to Emby source mode");
   assert(config.includes('LYRICS_SOURCE_BRIDGE_API_KEY: "emby-music-web/lyrics-source-bridge-api-url"'), "Emby lyrics bridge should use a dedicated localStorage key");
   assert(!/DEFAULT_(?:EXTERNAL_SOURCE|EMBY_LYRICS_SOURCE_BRIDGE)_API_URL:\s*"https?:\/\//.test(config), "Bridge URL defaults must not contain a concrete host");
   assert(gitignore.includes("/runtime-config.js"), "Deployment runtime config should stay outside Git tracking");

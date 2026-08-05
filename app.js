@@ -25883,8 +25883,8 @@ function normalizeSourceMode(mode) {
 }
 
 function loadSourceMode() {
-  // 没有历史选择的新用户默认进入「音源桥」模式
-  return normalizeSourceMode(localStorage.getItem(SOURCE_MODE_KEY) || "external");
+  // 没有历史选择的新用户默认连接 Emby；音源桥保持为可选来源。
+  return normalizeSourceMode(localStorage.getItem(SOURCE_MODE_KEY) || "emby");
 }
 
 function saveSourceMode(mode) {
